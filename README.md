@@ -1,4 +1,4 @@
-# The Hockey Lab — Cloudflare Pages
+# The Hockey Lab — Cloudflare Pages 
 
 The Hockey Lab as a deployable Cloudflare Pages site: a static editorial SPA
 (landing + app) served from `public/`, with live NHL data proxied through Pages
