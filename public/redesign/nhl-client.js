@@ -10,10 +10,36 @@
   const BASE = '/api/nhl';
   const dflt = (v) => (v && v.default !== undefined ? v.default : v);
 
+  // Request layer: in-flight de-dup (concurrent identical GETs share one fetch),
+  // a short TTL cache for non-live endpoints (instant revisits, less proxy load),
+  // and a hard timeout so a hung request falls back to mock instead of spinning.
+  const _inflight = new Map();
+  const _cache = new Map();
+  const TTL = 12000;
+  const ALWAYS_FRESH = /scoreboard|^score\b|\/now|gamecenter\/.*\/(boxscore|play-by-play)/;
+  async function rawGet(path) {
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 9000);
+    try {
+      const r = await fetch(`${BASE}/${path}`, { headers: { accept: 'application/json' }, signal: ac.signal });
+      if (!r.ok) throw new Error(`nhl ${path} -> ${r.status}`);
+      return await r.json();
+    } finally { clearTimeout(to); }
+  }
   async function get(path) {
-    const r = await fetch(`${BASE}/${path}`, { headers: { accept: 'application/json' } });
-    if (!r.ok) throw new Error(`nhl ${path} -> ${r.status}`);
-    return r.json();
+    const fresh = ALWAYS_FRESH.test(path);
+    if (!fresh) {
+      const c = _cache.get(path);
+      if (c && Date.now() - c.t < TTL) return c.data;
+    }
+    const existing = _inflight.get(path);
+    if (existing) return existing;            // join a concurrent identical request
+    const p = rawGet(path);
+    _inflight.set(path, p);
+    p.then((d) => { if (!fresh) _cache.set(path, { t: Date.now(), data: d }); })
+      .catch(() => {})
+      .finally(() => { _inflight.delete(path); });
+    return p;
   }
 
   // ---- standings -> BC.STANDINGS row shape ----
@@ -198,15 +224,22 @@
     }));
   }
   function mapGoalieLeaders(payload) {
-    return (payload?.data ?? []).map((g) => ({
-      id: String(g.playerId ?? g.id),
-      name: g.goalieFullName ?? g.playerName ?? '',
-      team: curTeam(g.teamAbbrevs ?? g.teamAbbrev),
-      gp: g.gamesPlayed ?? 0, w: g.wins ?? 0, l: g.losses ?? 0,
-      svp: (g.savePctg != null ? g.savePctg.toFixed(3).slice(1) : '900'),
-      gaa: (g.goalsAgainstAverage != null ? g.goalsAgainstAverage.toFixed(2) : '0.00'),
-      so: g.shutouts ?? 0,
-    }));
+    return (payload?.data ?? []).map((g) => {
+      // stats-REST goalie/summary uses `savePct`; web API uses `savePctg`. Compute
+      // from saves/shots if neither is present so we never show a bogus default.
+      const sa = g.shotsAgainst, sv = g.saves ?? (sa != null && g.goalsAgainst != null ? sa - g.goalsAgainst : null);
+      const svRaw = g.savePct ?? g.savePctg ?? (sa ? (sv != null ? sv / sa : null) : null);
+      const gaaRaw = g.goalsAgainstAverage ?? g.goalsAgainstAvg;
+      return {
+        id: String(g.playerId ?? g.id),
+        name: g.goalieFullName ?? g.playerName ?? '',
+        team: curTeam(g.teamAbbrevs ?? g.teamAbbrev),
+        gp: g.gamesPlayed ?? 0, w: g.wins ?? 0, l: g.losses ?? 0,
+        svp: (svRaw != null ? (+svRaw).toFixed(3).slice(1) : '—'),
+        gaa: (gaaRaw != null ? (+gaaRaw).toFixed(2) : '—'),
+        so: g.shutouts ?? 0,
+      };
+    });
   }
 
   // ---- player landing -> playerExtras overlay (real career/history/awards) ----
@@ -222,7 +255,7 @@
       const team = s.teamAbbrev ? dflt(s.teamAbbrev) : (dflt(s.teamCommonName) || dflt(s.teamName) || ab);
       return isG
         ? { s: fmtSeason(s.season), team, gp: s.gamesPlayed ?? 0, w: s.wins ?? 0, l: s.losses ?? 0,
-            svp: (s.savePctg != null ? s.savePctg.toFixed(3).slice(1) : '—'), gaa: (s.goalsAgainstAvg != null ? s.goalsAgainstAvg.toFixed(2) : '—') }
+            svp: ((s.savePctg ?? s.savePct) != null ? (+(s.savePctg ?? s.savePct)).toFixed(3).slice(1) : '—'), gaa: ((s.goalsAgainstAvg ?? s.goalsAgainstAverage) != null ? (+(s.goalsAgainstAvg ?? s.goalsAgainstAverage)).toFixed(2) : '—') }
         : { s: fmtSeason(s.season), team, gp: s.gamesPlayed ?? 0, g: s.goals ?? 0, a: s.assists ?? 0, p: s.points ?? 0, pm: s.plusMinus ?? 0 };
     });
     const c = (d.careerTotals && d.careerTotals.regularSeason) || {};
@@ -265,11 +298,17 @@
     const sideSkaters = (grp) => grp ? [...(grp.forwards || []), ...(grp.defense || [])].map((p) => ({
       name: dflt(p.name), pos: p.position || '', num: p.sweaterNumber ?? '', g: p.goals ?? 0, a: p.assists ?? 0, p: p.points ?? 0,
       sog: p.shots ?? p.sog ?? 0, pm: p.plusMinus ?? 0, hits: p.hits ?? 0, blk: p.blockedShots ?? 0, toi: p.toi || '' })) : null;
-    const sideGoalie = (grp) => { const gg = grp && grp.goalies && grp.goalies[0]; if (!gg) return null;
+    const toiSec = (v) => { if (!v) return 0; const p = String(v).split(':'); return p.length === 2 ? (+p[0] * 60 + (+p[1] || 0)) : 0; };
+    // Pick the goalie who actually played: prefer a W/L/O decision, else most shots faced, else most TOI.
+    const pickStarter = (gs) => { if (!gs || !gs.length) return null;
+      const dec = gs.find((x) => x.decision && /^[WLO]/i.test(String(x.decision)));
+      if (dec) return dec;
+      return gs.slice().sort((a, b) => ((b.shotsAgainst || 0) - (a.shotsAgainst || 0)) || (toiSec(b.toi) - toiSec(a.toi)))[0]; };
+    const sideGoalie = (grp) => { const gg = pickStarter(grp && grp.goalies); if (!gg) return null;
       const parts = gg.saveShotsAgainst ? String(gg.saveShotsAgainst).split('/') : null;
       const saves = parts ? (+parts[0] || 0) : Math.max(0, (gg.shotsAgainst ?? 0) - (gg.goalsAgainst ?? 0));
       const sa = parts ? (+parts[1] || 0) : (gg.shotsAgainst ?? 0);
-      return { name: dflt(gg.name), sa, saves, ga: gg.goalsAgainst ?? (sa - saves), svp: (gg.savePctg != null ? gg.savePctg.toFixed(3).slice(1) : '—'), toi: gg.toi || '', dec: gg.decision || '—' }; };
+      return { name: dflt(gg.name), sa, saves, ga: gg.goalsAgainst ?? (sa - saves), svp: ((gg.savePctg ?? gg.savePct) != null ? (+(gg.savePctg ?? gg.savePct)).toFixed(3).slice(1) : (sa ? (saves / sa).toFixed(3).slice(1) : '—')), toi: gg.toi || '', dec: gg.decision || '—' }; };
     const sk = bs ? { [a]: sideSkaters(bs.awayTeam), [h]: sideSkaters(bs.homeTeam) } : null;
     const gb = bs ? { [a]: sideGoalie(bs.awayTeam), [h]: sideGoalie(bs.homeTeam) } : null;
     const box2 = { periods: line.periods, line, team: boxTeam, scratches: { [a]: [], [h]: [] },

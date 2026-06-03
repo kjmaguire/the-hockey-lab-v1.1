@@ -42,11 +42,16 @@
   // merge season stat lines from the pool so the Team page is complete.
   const liveRosters = {};
   const inflightRoster = {};
+  const rosterWaiters = {};
   let mockTeamRoster = BC.teamRoster;
   BC.teamRoster = (ab) => (liveRosters[ab] && liveRosters[ab].length) ? liveRosters[ab] : mockTeamRoster(ab);
   BC.ensureRoster = (ab, cb) => {
-    if (!BC.LIVE || liveRosters[ab] || inflightRoster[ab]) return;
+    if (!BC.LIVE) return;
+    if (liveRosters[ab]) { cb && cb(); return; }           // already fetched → resolve now
+    if (inflightRoster[ab]) { if (cb) (rosterWaiters[ab] = rosterWaiters[ab] || []).push(cb); return; } // join in-flight
     inflightRoster[ab] = true;
+    if (cb) (rosterWaiters[ab] = rosterWaiters[ab] || []).push(cb);
+    const done = () => { inflightRoster[ab] = false; (rosterWaiters[ab] || []).forEach((f) => { try { f(); } catch (_) {} }); rosterWaiters[ab] = []; };
     Promise.resolve().then(() => NHL.roster(ab)).then((rows) => {
       if (rows && rows.length) {
         const skBy = {}; (BC.allPlayers || []).forEach((p) => { skBy[p.id] = p; });
@@ -61,9 +66,8 @@
       } else {
         liveRosters[ab] = []; // fetched-but-empty → keep mock via the guard above
       }
-      inflightRoster[ab] = false;
-      cb && cb();
-    }).catch(() => { inflightRoster[ab] = false; });
+      done();
+    }).catch(() => { done(); });
   };
 
   // patch team meta lookups so live abbrevs resolve even if not in the mock map

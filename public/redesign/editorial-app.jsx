@@ -202,7 +202,25 @@ function GameDetail({g,onBack,onTeam}){
   const shifts=useMemo(()=>g.st!=='pre'?BC.shiftChart(g):{away:[],home:[]},[g.id]);
   const shotData=useMemo(()=>g.st!=='pre'&&BC.shotMap?BC.shotMap(g):[],[g.id]);
   const boxMock=useMemo(()=>g.st!=='pre'&&BC.boxStats?BC.boxStats(g):null,[g.id]);
-  const box=(gl&&gl.box)?{...(boxMock||{}),...gl.box,skaters:gl.box.skaters||(boxMock&&boxMock.skaters),goalies:gl.box.goalies||(boxMock&&boxMock.goalies)}:boxMock;
+  const box=(()=>{
+    const base=boxMock||null;
+    if(!(gl&&gl.box))return base;
+    const lb=gl.box;
+    const teamOk=lb.team&&lb.team[g.a]&&lb.team[g.h];           // live team keyed to match this game's abbrevs
+    const lineOk=lb.line&&lb.line.away&&lb.line.home;
+    return {
+      ...(base||{}),
+      ...lb,
+      team: teamOk?lb.team:((base&&base.team)||lb.team),
+      line: lineOk?lb.line:((base&&base.line)||lb.line),
+      periods: (lb.periods&&lb.periods.length)?lb.periods:((base&&base.periods)||lb.periods),
+      skaters: lb.skaters||(base&&base.skaters),
+      goalies: lb.goalies||(base&&base.goalies),
+      scratches: lb.scratches||(base&&base.scratches)||{[g.a]:[],[g.h]:[]},
+    };
+  })();
+  // safe team-stat accessor — never throws if a side is missing from the box
+  const bt=ab=>(box&&box.team&&box.team[ab])||null;
   const [ev,setEv]=useState('All');
   const feed=pbp.filter(e=>ev==='All'||e.type===ev);
   const final=g.st.startsWith('final');
@@ -238,7 +256,7 @@ function GameDetail({g,onBack,onTeam}){
     <div style={{display:'flex',alignItems:'baseline',gap:4,marginTop:7}}><span style={{fontSize:33,fontWeight:600,letterSpacing:'-.03em',color:team?col(team):T.ink,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{value}</span>{unit&&<span style={{fontFamily:MONO,fontSize:12.5,color:T.mut}}>{unit}</span>}</div>
     {sub&&<div style={{fontFamily:MONO,fontSize:10.5,color:T.faint,marginTop:7,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>}
   </div>);
-  const Lines=({side,ab})=>{const rows=(box&&box.skaters[ab])||d[side].lines;const gb=box&&box.goalies[ab];return (<div style={{...card,overflow:'hidden'}}>
+  const Lines=({side,ab})=>{const rows=(box&&box.skaters&&box.skaters[ab])||d[side].lines;const gb=box&&box.goalies&&box.goalies[ab];return (<div style={{...card,overflow:'hidden'}}>
     <div style={{display:'flex',alignItems:'center',gap:9,padding:'12px 16px',borderBottom:`1px solid ${T.line}`}}><Badge ab={ab} size={24}/><span style={{fontWeight:600}}>{city(ab)} {nick(ab)}</span></div>
     <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:360,borderCollapse:'collapse',fontSize:13}}><thead><tr style={ML}>{['Skater','G','A','P','SOG','+/-','HIT','BLK','TOI'].map((h,i)=><th key={h} style={{padding:'8px 11px',textAlign:i?'center':'left',fontWeight:600,...ML,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
     <tbody>{rows.slice(0,8).map((p,i)=>(<tr key={i} style={{borderTop:`1px solid ${T.line}`}}>
@@ -368,21 +386,33 @@ function GameDetail({g,onBack,onTeam}){
         <span style={{fontFamily:MONO,fontSize:11,color:T.mut,whiteSpace:'nowrap'}}>{e.desc.replace(/^.*?—\s*/,'')}</span>
       </div>):<div style={{padding:'14px 16px',fontFamily:MONO,fontSize:12,color:T.mut}}>No penalties yet.</div>}
     </div>;})()}
-    {box&&(box.scratches[g.a].length>0||box.scratches[g.h].length>0)&&<div style={{...card,overflow:'hidden'}}>
+    {box&&box.scratches&&((box.scratches[g.a]||[]).length>0||(box.scratches[g.h]||[]).length>0)&&<div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'12px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Healthy scratches</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}} className="g2">
         {[g.a,g.h].map((ab,ci)=><div key={ab} style={{padding:'12px 16px',borderRight:ci===0?`1px solid ${T.line}`:'none'}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}><Badge ab={ab} size={18}/><span style={{fontSize:12.5,fontWeight:600,color:T.ink}}>{city(ab)}</span></div>
-          {box.scratches[ab].length?box.scratches[ab].map((n,i)=><div key={i} style={{fontFamily:MONO,fontSize:12,color:T.mut,padding:'2px 0'}}>{n}</div>):<div style={{fontFamily:MONO,fontSize:11.5,color:T.faint}}>none</div>}
+          {(box.scratches[ab]||[]).length?(box.scratches[ab]||[]).map((n,i)=><div key={i} style={{fontFamily:MONO,fontSize:12,color:T.mut,padding:'2px 0'}}>{n}</div>):<div style={{fontFamily:MONO,fontSize:11.5,color:T.faint}}>none</div>}
         </div>)}
       </div>
     </div>}
   </div>):<div style={{...card,padding:'40px 0',textAlign:'center',fontFamily:MONO,fontSize:12,color:T.mut}}>Lineups available at puck drop.</div>;
+  const preView=(<div style={{display:'grid',gap:16}}>
+    <div style={{...card,padding:'40px 18px',textAlign:'center'}}>
+      <div style={{fontFamily:SERIF,fontSize:22,color:T.ink,marginBottom:6}}>Game hasn't started</div>
+      <div style={{fontSize:13,color:T.mut,maxWidth:440,margin:'0 auto'}}>Faceoff {g.start||'TBD'}{(g._venue||d.venue)?` · ${g._venue||d.venue}`:''}. Box score, scoring and play-by-play appear once the puck drops.</div>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}} className="g2">
+      {[g.a,g.h].map(ab=>{const st=BC.standBy&&BC.standBy(ab);return(<div key={ab} style={{...card,padding:'16px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:st?10:0}}><Badge ab={ab} size={28}/><div><div style={{fontWeight:700,color:T.ink}}>{city(ab)} {nick(ab)}</div>{st&&<div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{st.w}-{st.l}-{st.otl}{BC.rankOf&&BC.rankOf[ab]?` · #${BC.rankOf[ab]}`:''}</div>}</div></div>
+        {st&&<div style={{display:'flex',gap:16,fontFamily:MONO,fontSize:11.5,color:T.mut,flexWrap:'wrap'}}><span>L10 <b style={{color:T.ink}}>{st.last10||'—'}</b></span><span>STRK <b style={{color:T.ink}}>{st.strk||'—'}</b></span><span>PTS <b style={{color:T.ink}}>{st.pts}</b></span></div>}
+      </div>);})}
+    </div>
+  </div>);
   const boxScore=(<div>
     {d.stars.length>0&&<div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:16}} className="g3">
       {d.stars.map(st=><div key={st.n} style={{...card,padding:'13px 15px',display:'flex',alignItems:'center',gap:11}}><span style={{fontFamily:SERIF,fontStyle:'italic',fontSize:26,color:T.faint}}>{st.n}</span><Badge ab={st.team} size={28}/><div><div style={{fontWeight:600,fontSize:13.5}}>{st.name}</div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{st.line}</div></div></div>)}
     </div>}
-    {box&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
+    {box&&box.line&&box.line.away&&box.periods&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'12px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Scoring by period</div>
       <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:360,borderCollapse:'collapse',fontSize:13}}>
         <thead><tr style={ML}>{['Team',...box.periods,'Total'].map((h,i)=><th key={i} style={{padding:'9px 14px',textAlign:i?'center':'left',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
@@ -394,7 +424,7 @@ function GameDetail({g,onBack,onTeam}){
       </table></div>
     </div>}
     <div style={{...card,padding:'6px 18px',marginBottom:16}}>
-      {(()=>{const rows=[['Shots on goal',g.sa,g.sh],['Faceoff %',d.away.team.fo,d.home.team.fo],['Power play',box?box.team[g.a].pp:d.away.team.pp,box?box.team[g.h].pp:d.home.team.pp],['Penalty kill',box&&box.team[g.a].pk,box&&box.team[g.h].pk],['Hits',d.away.team.hits,d.home.team.hits],['Blocked',d.away.team.blk,d.home.team.blk],['Giveaways',box&&box.team[g.a].give,box&&box.team[g.h].give],['Takeaways',box&&box.team[g.a].take,box&&box.team[g.h].take],['PIM',d.away.team.pim,d.home.team.pim]].filter(rw=>rw[1]!=null&&rw[1]!==false);
+      {(()=>{const rows=[['Shots on goal',g.sa,g.sh],['Faceoff %',d.away.team.fo,d.home.team.fo],['Power play',bt(g.a)?bt(g.a).pp:d.away.team.pp,bt(g.h)?bt(g.h).pp:d.home.team.pp],['Penalty kill',bt(g.a)&&bt(g.a).pk,bt(g.h)&&bt(g.h).pk],['Hits',d.away.team.hits,d.home.team.hits],['Blocked',d.away.team.blk,d.home.team.blk],['Giveaways',bt(g.a)&&bt(g.a).give,bt(g.h)&&bt(g.h).give],['Takeaways',bt(g.a)&&bt(g.a).take,bt(g.h)&&bt(g.h).take],['PIM',d.away.team.pim,d.home.team.pim]].filter(rw=>rw[1]!=null&&rw[1]!==false);
         return rows.map(([lab,av,hv],idx)=>(<div key={lab} style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:14,padding:'9px 0',borderTop:idx?`1px solid ${T.line}`:'none'}}>
           <span style={{textAlign:'right',fontWeight:700}}>{av}</span><span style={{width:130,textAlign:'center',...ML}}>{lab}</span><span style={{fontWeight:700}}>{hv}</span></div>));})()}
     </div>
@@ -459,7 +489,7 @@ function GameDetail({g,onBack,onTeam}){
     {tabs.length>1&&<div style={{display:'inline-flex',gap:4,padding:4,background:T.bg,border:`1px solid ${T.line}`,borderRadius:12,marginBottom:18}}>
       {tabs.map(t=><button key={t} onClick={()=>setTab(t)} style={{fontFamily:MONO,fontSize:11.5,letterSpacing:'.04em',textTransform:'uppercase',padding:'7px 16px',borderRadius:9,border:'none',cursor:'pointer',background:tab===t?T.invBg:'transparent',color:tab===t?T.invFg:T.mut,display:'inline-flex',alignItems:'center',gap:7,transition:'background .15s'}}>{t===tabs[0]&&live&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:tab===t?T.invFg:T.red,display:'inline-block'}}/>}{t}</button>)}
     </div>}
-    {(!pre&&tab===tabs[0])?liveView:tab==='Lineups'?lineupsView:boxScore}
+    {pre?preView:(tab===tabs[0]?liveView:tab==='Lineups'?lineupsView:boxScore)}
     <style>{`@media(max-width:680px){.g2,.g3{grid-template-columns:1fr!important}}@media(max-width:680px){.g4{grid-template-columns:1fr 1fr!important}}`}</style>
   </div>);
 }
