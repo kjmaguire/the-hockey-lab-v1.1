@@ -23,8 +23,8 @@ window.E_useLive = function(mock, fetchLive, deps){
   return depsChanged ? mock : val;
 };
 const c2=D.col, nk=D.nick, ct=D.city;
-const LIGHT={mode:'light',ink:'#15161b',mut:'#62636a',faint:'#9b9ca3',line:'#e6e4de',line2:'#dad8d0',red:'#e5341f',paper:'#fff',bg:'#f5f4f0',glass:'rgba(245,244,240,.85)',invBg:'#15161b',invFg:'#fff'};
-const DARK={mode:'dark',ink:'#ecedf0',mut:'#a2a4ad',faint:'#6d6f78',line:'#2a2c33',line2:'#3b3d46',red:'#ff5a45',paper:'#1c1d23',bg:'#141519',glass:'rgba(18,19,23,.82)',invBg:'#33343d',invFg:'#f3f3f5'};
+const LIGHT={mode:'light',ink:'#15161b',mut:'#62636a',faint:'#9b9ca3',line:'#e6e4de',line2:'#dad8d0',red:'#e5341f',paper:'#fff',bg:'#f5f4f0',glass:'rgba(245,244,240,.85)',invBg:'#15161b',invFg:'#fff',posBg:'#e7f5ec',posFg:'#1a8a4f',negBg:'#fdecea',negFg:'#c0392b',goldBg:'#fdf6e6',goldFg:'#9a6b1a',goldLine:'#f0e2c0'};
+const DARK={mode:'dark',ink:'#ecedf0',mut:'#a2a4ad',faint:'#6d6f78',line:'#2a2c33',line2:'#3b3d46',red:'#ff5a45',paper:'#1c1d23',bg:'#141519',glass:'rgba(18,19,23,.82)',invBg:'#33343d',invFg:'#f3f3f5',posBg:'rgba(34,170,95,.18)',posFg:'#54d98c',negBg:'rgba(255,90,69,.16)',negFg:'#ff7d6d',goldBg:'rgba(202,150,70,.18)',goldFg:'#d8af68',goldLine:'rgba(202,150,70,.34)'};
 const T={...LIGHT};
 try{if(localStorage.getItem('e_theme')==='dark')Object.assign(T,DARK);}catch(e){}
 window.E_applyTheme=m=>{Object.assign(T,m==='dark'?DARK:LIGHT);};
@@ -44,7 +44,7 @@ function PlayerAvatar({pos,team,size=42,name}){const cc=c2(team);const isG=pos==
   const glyph=parts.length>=2?(parts[0][0]+parts[parts.length-1][0]):parts.length===1?parts[0].slice(0,2):(pos||'·');
   return(<span style={{position:'relative',display:'inline-flex',width:size,height:size,flexShrink:0}}>
     <span style={{width:size,height:size,borderRadius:isG?'50%':Math.round(size*0.28),background:cc,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',color:'#fff',fontWeight:700,fontSize:Math.round(size*0.4),letterSpacing:'-.02em',lineHeight:1}}>{(glyph||'').toUpperCase()}</span>
-    <span style={{position:'absolute',right:-4,bottom:-4,fontFamily:MONO,fontSize:Math.max(7,Math.round(size*0.2)),fontWeight:700,background:'#fff',color:cc,border:`1px solid ${cc}44`,borderRadius:5,padding:'0 3px',lineHeight:1.5}}>{pos||'·'}</span>
+    <span style={{position:'absolute',right:-4,bottom:-4,fontFamily:MONO,fontSize:Math.max(7,Math.round(size*0.2)),fontWeight:700,background:T.paper,color:cc,border:`1px solid ${cc}44`,borderRadius:5,padding:'0 3px',lineHeight:1.5}}>{pos||'·'}</span>
   </span>);}
 function Spark({data,color,w=54,h=16}){if(!data||!data.length)return null;const mx=Math.max(...data),mn=Math.min(...data);const p=data.map((v,i)=>`${(i/(data.length-1)*w).toFixed(1)},${(h-(v-mn)/Math.max(1,mx-mn)*h).toFixed(1)}`).join(' ');return <svg width={w} height={h}><polyline points={p} fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>;}
 function Pill({on,children,...p}){return <button {...p} style={{fontFamily:'inherit',padding:'6px 13px',borderRadius:999,border:`1px solid ${on?T.invBg:T.line2}`,background:on?T.invBg:T.paper,color:on?T.invFg:T.ink,fontWeight:600,fontSize:12.5,cursor:'pointer'}}>{children}</button>;}
@@ -69,8 +69,8 @@ function StandingsPage({onTeam}){
   // playoff status per team: 'clinch' = division top 3, 'wc' = one of two wild-card spots
   const pstatus=uM(()=>{const s={};['East','West'].forEach(conf=>{const{byDiv,wc}=wildCard(conf);byDiv.forEach(x=>x.teams.forEach(t=>{s[t.ab]='clinch';}));wc.slice(0,2).forEach(t=>{s[t.ab]='wc';});});return s;},[]);
   const Mark=({ab})=>{const st=pstatus[ab];if(!st)return null;
-    if(st==='clinch')return <span title="Clinched playoff position — division top 3" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:17,height:17,borderRadius:5,background:'#e7f5ec',flexShrink:0}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1a8a4f" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>;
-    return <span title="Wild card spot" style={{fontFamily:MONO,fontSize:9,fontWeight:700,letterSpacing:'.04em',color:'#9a6b1a',background:'#fdf6e6',border:'1px solid #f0e2c0',borderRadius:5,padding:'1px 4px',flexShrink:0}}>WC</span>;};
+    if(st==='clinch')return <span title="Clinched playoff position — division top 3" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:17,height:17,borderRadius:5,background:T.posBg,flexShrink:0}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.posFg} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>;
+    return <span title="Wild card spot" style={{fontFamily:MONO,fontSize:9,fontWeight:700,letterSpacing:'.04em',color:T.goldFg,background:T.goldBg,border:`1px solid ${T.goldLine}`,borderRadius:5,padding:'1px 4px',flexShrink:0}}>WC</span>;};
   const WCRow=({t,seed,playoff})=>(<div onClick={()=>onTeam(t.ab)} className="er" style={{display:'grid',gridTemplateColumns:'30px 1fr auto auto',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${T.line}`,cursor:'pointer'}}>
     <span style={{fontFamily:MONO,fontSize:11.5,color:playoff?'#1a8a4f':T.faint,fontWeight:playoff?700:400}}>{seed}</span>
     <span style={{display:'inline-flex',alignItems:'center',gap:9,minWidth:0}}><Badge ab={t.ab} size={22}/><span style={{color:T.ink,fontWeight:600,fontSize:13.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct(t.ab)} {nk(t.ab)}</span>{playoff&&<Mark ab={t.ab}/>}</span>
@@ -114,7 +114,7 @@ function StandingsPage({onTeam}){
     </div>
     {v==='League'&&<div style={{display:'flex',gap:18,marginTop:12,fontFamily:MONO,fontSize:11,color:T.mut,flexWrap:'wrap'}}>
       <span style={{display:'inline-flex',alignItems:'center',gap:7}}><Mark ab={D.STANDINGS[0].ab}/>clinched playoff spot (division top 3)</span>
-      <span style={{display:'inline-flex',alignItems:'center',gap:7}}><span style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:'#9a6b1a',background:'#fdf6e6',border:'1px solid #f0e2c0',borderRadius:5,padding:'1px 4px'}}>WC</span>wild card</span>
+      <span style={{display:'inline-flex',alignItems:'center',gap:7}}><span style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:T.goldFg,background:T.goldBg,border:`1px solid ${T.goldLine}`,borderRadius:5,padding:'1px 4px'}}>WC</span>wild card</span>
     </div>}
     </>}
   </div>);
@@ -196,7 +196,7 @@ function TeamSchedule({ab,onGame}){
 /* ---------- TEAM DETAIL ---------- */
 function Tabs({tabs,active,onChange}){return(<div style={{display:'flex',gap:24,borderBottom:`1px solid ${T.line}`,marginBottom:20}}>
   {tabs.map(t=><button key={t} onClick={()=>onChange(t)} style={{fontFamily:'inherit',background:'none',border:'none',borderBottom:`2px solid ${active===t?T.ink:'transparent'}`,color:active===t?T.ink:T.mut,fontWeight:600,fontSize:14,padding:'10px 0',marginBottom:-1,cursor:'pointer'}}>{t}</button>)}</div>);}
-function RankChip({rank}){if(!rank)return null;const tone=rank<=5?['#e7f5ec','#1a8a4f']:rank>=26?['#fdecea',T.red]:[T.bg,T.faint];return <span style={{fontFamily:MONO,fontSize:10.5,fontWeight:600,padding:'1px 6px',borderRadius:5,background:tone[0],color:tone[1]}}>#{rank}</span>;}
+function RankChip({rank}){if(!rank)return null;const tone=rank<=5?[T.posBg,T.posFg]:rank>=26?[T.negBg,T.negFg]:[T.bg,T.faint];return <span style={{fontFamily:MONO,fontSize:10.5,fontWeight:600,padding:'1px 6px',borderRadius:5,background:tone[0],color:tone[1]}}>#{rank}</span>;}
 function Metric({l,v,suf,rank}){return <div style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={ML}>{l}</div><RankChip rank={rank}/></div><div style={{fontSize:23,fontWeight:600,color:T.ink,marginTop:3,letterSpacing:'-.02em'}}>{v}{suf||''}</div></div>;}
 
 function TeamStatsTab({ab}){
@@ -798,7 +798,7 @@ function HockeyIQPage({onPlayer,onTeam}){
         <div style={{...card,overflow:'hidden'}}><div style={{padding:'12px 15px',fontSize:13,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>Team skating distance · mi/gm</div>
           {teamDist.map((t,i)=><div key={t.ab} onClick={()=>onTeam(t.ab)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'8px 15px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}><span style={{width:14,color:T.faint,fontFamily:MONO,fontSize:11}}>{i+1}</span><Badge ab={t.ab} size={20}/><span style={{flex:1,color:T.ink,fontSize:13}}>{ct(t.ab)}</span><span style={{fontFamily:MONO,fontSize:13,fontWeight:700}}>{t.mi}</span></div>)}</div>
         <TList title="Strength of schedule" rows={sos} fmt={t=><span style={{fontFamily:MONO,fontSize:12,color:T.mut}}>{t.n} next 5d</span>}/>
-        <TList title="Rest tracker" rows={rest} fmt={t=>t.b2b?<span style={{fontFamily:MONO,fontSize:11,color:T.red,background:'#fdecea',padding:'2px 7px',borderRadius:5}}>back-to-back</span>:<span style={{fontFamily:MONO,fontSize:12,color:T.mut}}>{t.days}d rest</span>}/>
+        <TList title="Rest tracker" rows={rest} fmt={t=>t.b2b?<span style={{fontFamily:MONO,fontSize:11,color:T.negFg,background:T.negBg,padding:'2px 7px',borderRadius:5}}>back-to-back</span>:<span style={{fontFamily:MONO,fontSize:12,color:T.mut}}>{t.days}d rest</span>}/>
       </div>
       <Seeds/>
     </div>}
@@ -1209,7 +1209,7 @@ function RecordsPage({onTeam}){
       <div style={{display:'flex',gap:8,marginBottom:14}}>{['skater','goalie'].map(s=><Pill key={s} on={leadScope===s} onClick={()=>setLeadScope(s)}>{s==='skater'?'Skaters':'Goalies'}</Pill>)}</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:14}}>
       {leaders.map(c=><div key={c.cat} style={{...card,overflow:'hidden'}}><div style={{padding:'12px 15px',fontSize:13,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>{c.cat}</div>
-        {c.rows.map((p,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 15px',borderTop:i?`1px solid ${T.line}`:'none',background:i===0?'linear-gradient(90deg,#fdf6e6,transparent)':'transparent'}}><span style={{fontFamily:MONO,fontSize:11,color:i===0?'#9a6b1a':T.faint,width:14,fontWeight:i===0?700:400}}>{i+1}</span><span style={{flex:1,fontSize:13,color:T.ink,fontWeight:i===0?600:400}}>{p.name}</span><span style={{fontFamily:MONO,fontWeight:700}}>{p.v.toLocaleString()}</span></div>)}</div>)}
+        {c.rows.map((p,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 15px',borderTop:i?`1px solid ${T.line}`:'none',background:i===0?T.goldBg:'transparent'}}><span style={{fontFamily:MONO,fontSize:11,color:i===0?T.goldFg:T.faint,width:14,fontWeight:i===0?700:400}}>{i+1}</span><span style={{flex:1,fontSize:13,color:T.ink,fontWeight:i===0?600:400}}>{p.name}</span><span style={{fontFamily:MONO,fontWeight:700}}>{p.v.toLocaleString()}</span></div>)}</div>)}
       </div>
     </div>}
     {tab==='Single season'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14}}>
@@ -1344,7 +1344,7 @@ function DraftPage({onTeam}){
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:12}}>
       {picks.map(p=>{const up=p.moved>0,down=p.moved<0;return(
-        <div key={p.pick} className="ec" style={{...card,padding:'13px 15px',display:'flex',alignItems:'center',gap:13,border:p.lotteryWin?`1px solid #bfe3cd`:`1px solid ${T.line}`}}>
+        <div key={p.pick} className="ec" style={{...card,padding:'13px 15px',display:'flex',alignItems:'center',gap:13,border:p.lotteryWin?`1px solid ${T.posFg}55`:`1px solid ${T.line}`}}>
         <div style={{textAlign:'center',width:40,flexShrink:0}}>
           <div style={{fontFamily:MONO,fontSize:8.5,letterSpacing:'.08em',textTransform:'uppercase',color:T.faint}}>Landed</div>
           <div style={{fontFamily:SERIF,fontStyle:'italic',fontSize:28,lineHeight:1,color:p.lotteryWin?'#1a8a4f':T.ink}}>{p.pick}</div>
@@ -1407,7 +1407,7 @@ function DraftPage({onTeam}){
         <Badge ab={p.team} size={22}/>
         <span style={{width:40,fontFamily:MONO,fontSize:11,color:T.mut}}>{p.team}</span>
         <span style={{flex:1,fontWeight:600,color:T.ink,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
-        <span style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',borderRadius:5,flexShrink:0,...(p.made?{color:'#1a8a4f',background:'#e7f5ec'}:{color:T.faint,background:T.bg})}}>{p.made?'PICKED':'PROJECTED'}</span>
+        <span style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',borderRadius:5,flexShrink:0,...(p.made?{color:T.posFg,background:T.posBg}:{color:T.faint,background:T.bg})}}>{p.made?'PICKED':'PROJECTED'}</span>
         <span style={{fontFamily:MONO,fontSize:11.5,color:T.mut,whiteSpace:'nowrap',width:92,textAlign:'right'}}>{p.pos} · {p.league}</span>
       </div>))}</div>
       <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>PROJECTED = consensus prospect ranking slotted into the projected order · PICKED = the real selection, swapped in live as it's announced</div>

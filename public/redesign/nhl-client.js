@@ -271,47 +271,66 @@
   const foStr = (v) => (v == null ? null : (v <= 1 ? (v * 100).toFixed(1) : (+v).toFixed(1)) + '%');
   const ppStr = (v) => (v == null ? null : String(v));
   function mapGameLive(landing, box) {
-    const sm = landing && landing.summary; if (!sm) return null;
-    const a = dflt(landing.awayTeam && landing.awayTeam.abbrev), h = dflt(landing.homeTeam && landing.homeTeam.abbrev);
+    const L = landing || {};
+    const sm = L.summary || {};
+    const bs = box && box.playerByGameStats;
+    // identity/score/sog: prefer the boxscore (always present for a played game), else landing
+    const aT = (box && box.awayTeam) || L.awayTeam || {}, hT = (box && box.homeTeam) || L.homeTeam || {};
+    const a = dflt(aT.abbrev), h = dflt(hT.abbrev);
     if (!a || !h) return null;
+    if (!bs && !(sm.linescore)) return null; // nothing usable → keep mock
+    const aScore = aT.score ?? 0, hScore = hT.score ?? 0, aSog = aT.sog ?? 0, hSog = hT.sog ?? 0;
     const perLabel = (pd) => (pd && (pd.periodType === 'SO')) ? 'SO' : (pd && pd.number > 3 ? 'OT' : ordinal((pd && pd.number) || 1));
-    const lg = sm.linescore && sm.linescore.byPeriod || [], sbp = sm.shotsByPeriod || [];
-    const periods = lg.map((p) => perLabel(p.periodDescriptor));
-    const line = { periods: periods.length ? periods : ['1st','2nd','3rd'],
-      away: { goals: lg.map((p) => p.away ?? 0), shots: sbp.map((p) => p.away ?? 0), total: landing.awayTeam.score ?? 0, sog: landing.awayTeam.sog ?? 0 },
-      home: { goals: lg.map((p) => p.home ?? 0), shots: sbp.map((p) => p.home ?? 0), total: landing.homeTeam.score ?? 0, sog: landing.homeTeam.sog ?? 0 } };
+
+    // ---- skaters & goalies from the boxscore (the reliable source) ----
+    const sideSkaters = (grp) => grp ? [...(grp.forwards || []), ...(grp.defense || [])].map((p) => ({
+      name: dflt(p.name), pos: p.position || '', num: p.sweaterNumber ?? '', g: p.goals ?? 0, a: p.assists ?? 0, p: p.points ?? 0,
+      sog: p.sog ?? p.shots ?? 0, pm: p.plusMinus ?? 0, hits: p.hits ?? 0, blk: p.blockedShots ?? 0, toi: p.toi || '' })) : null;
+    const toiSec = (v) => { if (!v) return 0; const p = String(v).split(':'); return p.length === 2 ? (+p[0] * 60 + (+p[1] || 0)) : 0; };
+    // starter: explicit flag first, then W/L/O decision, then most shots faced / TOI
+    const pickStarter = (gs) => { if (!gs || !gs.length) return null;
+      return gs.find((x) => x.starter) || gs.find((x) => x.decision && /^[WLO]/i.test(String(x.decision)))
+        || gs.slice().sort((x, y) => ((y.shotsAgainst || 0) - (x.shotsAgainst || 0)) || (toiSec(y.toi) - toiSec(x.toi)))[0]; };
+    const sideGoalie = (grp) => { const gg = pickStarter(grp && grp.goalies); if (!gg) return null;
+      const parts = gg.saveShotsAgainst ? String(gg.saveShotsAgainst).split('/') : null;
+      const saves = (gg.saves != null) ? gg.saves : (parts ? (+parts[0] || 0) : Math.max(0, (gg.shotsAgainst ?? 0) - (gg.goalsAgainst ?? 0)));
+      const sa = (gg.shotsAgainst != null) ? gg.shotsAgainst : (parts ? (+parts[1] || 0) : 0);
+      const svRaw = gg.savePctg ?? gg.savePct ?? (sa ? saves / sa : null);
+      return { name: dflt(gg.name), sa, saves, ga: gg.goalsAgainst ?? (sa - saves), svp: (svRaw != null ? (+svRaw).toFixed(3).slice(1) : '—'), toi: gg.toi || '', dec: gg.decision || '—' }; };
+    const sk = bs ? { [a]: sideSkaters(bs.awayTeam), [h]: sideSkaters(bs.homeTeam) } : null;
+    const gb = bs ? { [a]: sideGoalie(bs.awayTeam), [h]: sideGoalie(bs.homeTeam) } : null;
+
+    // ---- team totals: SUM the boxscore players (robust); let landing override where it has values ----
     const tg = {}; (sm.teamGameStats || []).forEach((s) => { tg[s.category] = { a: s.awayValue, h: s.homeValue }; });
-    const mkTeamSide = (k) => ({ sog: landing[k === 'a' ? 'awayTeam' : 'homeTeam'].sog ?? 0, fo: foStr(tg.faceoffWinningPctg && tg.faceoffWinningPctg[k]),
-      hits: (tg.hits && tg.hits[k]) ?? 0, blk: (tg.blockedShots && tg.blockedShots[k]) ?? 0, pim: (tg.pim && tg.pim[k]) ?? 0, pp: ppStr(tg.powerPlay && tg.powerPlay[k]) });
-    const teamA = mkTeamSide('a'), teamH = mkTeamSide('h');
-    const boxTeam = { [a]: { pp: teamA.pp, pk: null, give: (tg.giveaways && tg.giveaways.a) ?? 0, take: (tg.takeaways && tg.takeaways.a) ?? 0, fo: teamA.fo },
-                      [h]: { pp: teamH.pp, pk: null, give: (tg.giveaways && tg.giveaways.h) ?? 0, take: (tg.takeaways && tg.takeaways.h) ?? 0, fo: teamH.fo } };
+    const sumSide = (grp) => { const all = grp ? [...(grp.forwards || []), ...(grp.defense || [])] : []; const s = (k) => all.reduce((n, p) => n + (p[k] || 0), 0);
+      return { hits: s('hits'), blk: s('blockedShots'), pim: s('pim'), give: s('giveaways'), take: s('takeaways'), sog: s('sog') }; };
+    const aSum = sumSide(bs && bs.awayTeam), hSum = sumSide(bs && bs.homeTeam);
+    const tgv = (cat, k, fb) => (tg[cat] && tg[cat][k] != null) ? tg[cat][k] : fb;
+    const foA = tg.faceoffWinningPctg ? foStr(tg.faceoffWinningPctg.a) : null, foH = tg.faceoffWinningPctg ? foStr(tg.faceoffWinningPctg.h) : null;
+    const ppA = tg.powerPlay ? ppStr(tg.powerPlay.a) : null, ppH = tg.powerPlay ? ppStr(tg.powerPlay.h) : null;
+    const teamA = { sog: aSog || aSum.sog, fo: foA, hits: tgv('hits','a',aSum.hits), blk: tgv('blockedShots','a',aSum.blk), pim: tgv('pim','a',aSum.pim), pp: ppA };
+    const teamH = { sog: hSog || hSum.sog, fo: foH, hits: tgv('hits','h',hSum.hits), blk: tgv('blockedShots','h',hSum.blk), pim: tgv('pim','h',hSum.pim), pp: ppH };
+    const boxTeam = { [a]: { pp: ppA, pk: null, give: tgv('giveaways','a',aSum.give), take: tgv('takeaways','a',aSum.take), fo: foA },
+                      [h]: { pp: ppH, pk: null, give: tgv('giveaways','h',hSum.give), take: tgv('takeaways','h',hSum.take), fo: foH } };
+
+    // ---- scoring-by-period line (landing only); null when absent so the table hides instead of showing zeros ----
+    const lg = (sm.linescore && sm.linescore.byPeriod) || [], sbp = sm.shotsByPeriod || [];
+    const line = lg.length ? {
+      periods: lg.map((p) => perLabel(p.periodDescriptor)),
+      away: { goals: lg.map((p) => p.away ?? 0), shots: sbp.map((p) => p.away ?? 0), total: aScore, sog: aSog },
+      home: { goals: lg.map((p) => p.home ?? 0), shots: sbp.map((p) => p.home ?? 0), total: hScore, sog: hSog },
+    } : null;
+
+    // ---- scoring plays + three stars (landing only) ----
     const goals = [];
     (sm.scoring || []).forEach((per) => (per.goals || []).forEach((go) => {
       goals.push({ team: dflt(go.teamAbbrev), scorer: dflt(go.name) || `${dflt(go.firstName)} ${dflt(go.lastName)}`.trim(),
         assists: (go.assists || []).map((x) => dflt(x.name)), str: (go.strength || 'ev').toUpperCase(),
-        per: perLabel(per.periodDescriptor), time: go.timeInPeriod || '' });
-    }));
+        per: perLabel(per.periodDescriptor), time: go.timeInPeriod || '' }); }));
     const stars = (sm.threeStars || []).slice(0, 3).map((s) => ({ n: s.star, name: dflt(s.name), team: dflt(s.teamAbbrev),
-      line: s.position === 'G' ? `${s.savePctg != null ? '.' + String(Math.round(s.savePctg * 1000)).padStart(3, '0') : ''} SV%` : `${s.goals ?? 0}G ${s.assists ?? 0}A` }));
-    const bs = box && box.playerByGameStats;
-    const sideSkaters = (grp) => grp ? [...(grp.forwards || []), ...(grp.defense || [])].map((p) => ({
-      name: dflt(p.name), pos: p.position || '', num: p.sweaterNumber ?? '', g: p.goals ?? 0, a: p.assists ?? 0, p: p.points ?? 0,
-      sog: p.shots ?? p.sog ?? 0, pm: p.plusMinus ?? 0, hits: p.hits ?? 0, blk: p.blockedShots ?? 0, toi: p.toi || '' })) : null;
-    const toiSec = (v) => { if (!v) return 0; const p = String(v).split(':'); return p.length === 2 ? (+p[0] * 60 + (+p[1] || 0)) : 0; };
-    // Pick the goalie who actually played: prefer a W/L/O decision, else most shots faced, else most TOI.
-    const pickStarter = (gs) => { if (!gs || !gs.length) return null;
-      const dec = gs.find((x) => x.decision && /^[WLO]/i.test(String(x.decision)));
-      if (dec) return dec;
-      return gs.slice().sort((a, b) => ((b.shotsAgainst || 0) - (a.shotsAgainst || 0)) || (toiSec(b.toi) - toiSec(a.toi)))[0]; };
-    const sideGoalie = (grp) => { const gg = pickStarter(grp && grp.goalies); if (!gg) return null;
-      const parts = gg.saveShotsAgainst ? String(gg.saveShotsAgainst).split('/') : null;
-      const saves = parts ? (+parts[0] || 0) : Math.max(0, (gg.shotsAgainst ?? 0) - (gg.goalsAgainst ?? 0));
-      const sa = parts ? (+parts[1] || 0) : (gg.shotsAgainst ?? 0);
-      return { name: dflt(gg.name), sa, saves, ga: gg.goalsAgainst ?? (sa - saves), svp: ((gg.savePctg ?? gg.savePct) != null ? (+(gg.savePctg ?? gg.savePct)).toFixed(3).slice(1) : (sa ? (saves / sa).toFixed(3).slice(1) : '—')), toi: gg.toi || '', dec: gg.decision || '—' }; };
-    const sk = bs ? { [a]: sideSkaters(bs.awayTeam), [h]: sideSkaters(bs.homeTeam) } : null;
-    const gb = bs ? { [a]: sideGoalie(bs.awayTeam), [h]: sideGoalie(bs.homeTeam) } : null;
-    const box2 = { periods: line.periods, line, team: boxTeam, scratches: { [a]: [], [h]: [] },
+      line: s.position === 'G' ? `${(s.savePctg ?? s.savePct) != null ? '.' + String(Math.round((s.savePctg ?? s.savePct) * 1000)).padStart(3, '0') : ''} SV%` : `${s.goals ?? 0}G ${s.assists ?? 0}A` }));
+
+    const box2 = { periods: line ? line.periods : ['1st','2nd','3rd'], line, team: boxTeam, scratches: { [a]: [], [h]: [] },
       skaters: (sk && sk[a] && sk[h]) ? sk : undefined, goalies: (gb && gb[a] && gb[h]) ? gb : undefined };
     return { goals, stars, teamA, teamH, box: box2, away: a, home: h };
   }
