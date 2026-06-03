@@ -514,6 +514,9 @@ function App(){
   const [legalDoc,setLegalDoc]=useState('terms');
   const [statusF,setStatusF]=useState('all');
   const games=useMemo(()=>slate(offset),[offset,hv]);
+  // On-demand live slate fetch: scrubbing the Scores calendar past the pre-fetched
+  // ±2-day window (or deep-linking an older game) pulls that day's real games.
+  useEffect(()=>{ if(window.BC&&BC.ensureSlate){ for(let o=offset-1;o<=offset+1;o++) BC.ensureSlate(o,()=>setHv(v=>v+1)); } },[offset,hv]);
   const toggleFav=ab=>setFavs(f=>{const n=f.includes(ab)?f.filter(x=>x!==ab):[...f,ab];saveF(n);return n;});
   const isFav=g=>favs.includes(g.a)||favs.includes(g.h);
   const baseGames=followOnly?games.filter(isFav):games;
@@ -530,7 +533,8 @@ function App(){
       const [k,arg]=h.split('/');
       if(k==='team'&&arg){setTeam(arg);setPlayer(null);setGame(null);}
       else if(k==='player'&&arg){const p=(BC.allPlayers||[]).find(x=>String(x.id)===arg)||(BC.goalies||[]).find(x=>String(x.id)===arg);if(p){setPlayer(p.gp!=null&&p.svp?{...p,type:'goalie'}:p);setTeam(null);setGame(null);}}
-      else if(k==='game'&&arg){const g=findGame(arg);if(g){setGame(g);setTeam(null);setPlayer(null);}}
+      else if(k==='game'&&arg){const g=findGame(arg);if(g){setGame(g);setTeam(null);setPlayer(null);}
+        else if(window.BC&&BC.ensureSlate){ for(let o=-7;o<=9;o++) BC.ensureSlate(o,()=>{ const gg=findGame(arg); if(gg){setGame(gg);setTeam(null);setPlayer(null);} }); }}
       else if(k==='legal'){setLegalDoc(arg||'terms');setRoute('legal');setTeam(null);setPlayer(null);setGame(null);}
       else if(NK[Object.keys(NK).find(n=>NK[n]===k)]||['highlights','news','scores','standings','teams','players','stats','iq','draft','records','playoffs'].includes(k)){setRoute(k);setTeam(null);setPlayer(null);setGame(null);}
     };

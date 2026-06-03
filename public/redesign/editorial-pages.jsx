@@ -227,7 +227,9 @@ function MiniGame({g,onOpen}){const aw=g.st.startsWith('final')&&g.as>g.hs,hw=g.
 
 function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const [tab,setTab]=uS('Hub');
-  const t=D.standBy(ab); const roster=D.teamRoster(ab); const gap=D.wildCardGap(ab);
+  const t=D.standBy(ab); const gap=D.wildCardGap(ab);
+  // overlay the real full club roster (official roster endpoint) when deployed
+  const roster=window.E_useLive(D.teamRoster(ab),()=>new Promise(res=>{window.BC.ensureRoster(ab,()=>res(window.BC.teamRoster(ab)));}),[ab]);
   const schedMock=uM(()=>D.teamSchedule(ab),[ab]);
   // overlay real Last/Next game from the full-season schedule when deployed
   const sched=window.E_useLive(schedMock,()=>window.NHL.teamRecUp(ab),[ab]);
@@ -344,8 +346,10 @@ function PlayersPage({onPlayer}){
   const teams=uM(()=>[...D.ABBR].sort((a,b)=>ct(a).localeCompare(ct(b))),[]);
   const [team,setTeam]=uS(teams[0]); const [filter,setFilter]=uS('All'); const [q,setQ]=uS('');
   const ql=q.toLowerCase();
-  const roster=D.teamRoster(team).filter(p=>p.name.toLowerCase().includes(ql));
-  const fwd=roster.filter(p=>p.pos!=='D'), def=roster.filter(p=>p.pos==='D');
+  // pull the real full roster for the selected team when deployed
+  const liveRoster=window.E_useLive(D.teamRoster(team),()=>new Promise(res=>{window.BC.ensureRoster(team,()=>res(window.BC.teamRoster(team)));}),[team]);
+  const roster=liveRoster.filter(p=>p.name.toLowerCase().includes(ql));
+  const fwd=roster.filter(p=>p.pos!=='D'&&p.pos!=='G'), def=roster.filter(p=>p.pos==='D');
   const goalies=D.goalies.filter(g=>g.team===team&&g.name.toLowerCase().includes(ql)).map(g=>({...g,type:'goalie',pos:'G'}));
   const PC=({p})=>(<div onClick={()=>onPlayer(p)} className="ec" style={{...card,padding:'13px 15px',cursor:'pointer'}}>
     <div style={{display:'flex',alignItems:'center',gap:13}}><PlayerAvatar pos={p.pos} team={p.team} name={p.name} size={42}/>
@@ -1407,12 +1411,13 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs}){
   const [ldrCat,setLdrCat]=uS('Points');
   const railGames=railView==='Tonight'?today:railView==='Recent'?D.slate(-1):D.slate(1);
 
-  // Game of the Night: closest live game, else marquee upcoming (best combined rank), else a recent final
-  const gotn=uM(()=>{
+  // Game of the Night: closest live game, else marquee upcoming (best combined rank),
+  // else a recent final. Recomputed every render so it tracks live slates as they load.
+  const gotn=(()=>{
     if(live.length) return [...live].sort((a,b)=>Math.abs(a.as-a.hs)-Math.abs(b.as-b.hs))[0];
     const pre=today.filter(g=>g.st==='pre'); if(pre.length) return [...pre].sort((a,b)=>(D.rankOf[a.a]+D.rankOf[a.h])-(D.rankOf[b.a]+D.rankOf[b.h]))[0];
-    return today[0]||D.slate(-1)[0];
-  },[]);
+    return today[0]||D.slate(-1)[0]||D.slate(1)[0]||null;
+  })();
   const topScorer=ab=>D.teamRoster(ab)[0];
 
   // storylines: one curated card per domain
@@ -1425,7 +1430,14 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs}){
   const draftLeader=[...D.STANDINGS][D.STANDINGS.length-1];
   const ldrKey={Points:'p',Goals:'g','Save%':'svp'};
 
-  const Hero=()=>{const g=gotn; if(!g)return null;
+  const Hero=()=>{const g=gotn; if(!g)return(
+    <div style={{...card,overflow:'hidden',marginBottom:16}}>
+      <div style={{padding:'10px 18px',borderBottom:`1px solid ${T.line}`}}><span style={ML}>Game of the night</span></div>
+      <div style={{padding:'48px 18px',textAlign:'center'}}>
+        <div style={{fontFamily:SERIF,fontSize:22,color:T.ink,marginBottom:6}}>No games on the schedule</div>
+        <div style={{fontSize:13,color:T.mut}}>It's a quiet night around the league — check Scores for the full calendar.</div>
+      </div>
+    </div>);
     const aw=g.st.startsWith('final')&&g.as>g.hs,hw=g.st.startsWith('final')&&g.hs>g.as;
     const as_=topScorer(g.a),hs_=topScorer(g.h);
     return(<div onClick={()=>onGame(g)} className="ec" style={{...card,overflow:'hidden',cursor:'pointer',marginBottom:16}}>
@@ -1469,7 +1481,7 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs}){
     {/* tonight rail */}
     <div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'11px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.line}`,gap:8,flexWrap:'wrap'}}>
-        <span style={ML}>{railView==='Tonight'?`${today.length} games tonight`:railView}</span>
+        <span style={ML}>{railView==='Tonight'?(today.length?`${today.length} games tonight`:'No games tonight'):railView}</span>
         <div style={{display:'flex',gap:6}}>{['Recent','Tonight','Upcoming'].map(v=><Pill key={v} on={railView===v} onClick={()=>setRailView(v)}>{v}</Pill>)}</div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(158px,1fr))',marginTop:-1,marginLeft:-1}}>

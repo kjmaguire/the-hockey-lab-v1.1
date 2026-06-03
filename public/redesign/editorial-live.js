@@ -10,10 +10,61 @@
   if (!BC || !NHL) return;
   BC.LIVE = false;
 
-  // cache of live slates by offset, consulted by the patched BC.slate
+  // cache of live slates by offset, consulted by the patched BC.slate.
+  // `fetchedSlates` records offsets we've actually heard back on (even when the
+  // league had ZERO games that day) so we return the real empty slate instead of
+  // falling back to mock's fabricated games — critical in the offseason.
   const liveSlates = {};
+  const fetchedSlates = {};
+  const inflightSlate = {};
   const mockSlate = BC.slate;
-  BC.slate = (offset) => (liveSlates[offset] ? liveSlates[offset] : mockSlate(offset));
+  BC.slate = (offset) => {
+    if (BC.LIVE && fetchedSlates[offset]) return liveSlates[offset] || [];
+    return liveSlates[offset] ? liveSlates[offset] : mockSlate(offset);
+  };
+  // On-demand slate loader for any offset (Scores can scrub far past ±2 days, and
+  // game deep-links resolve through findGame). De-dupes in-flight requests.
+  BC.ensureSlate = (offset, cb) => {
+    if (!BC.LIVE || fetchedSlates[offset] || inflightSlate[offset]) return;
+    inflightSlate[offset] = true;
+    Promise.resolve().then(() => NHL.scores(offset)).then((games) => {
+      (games || []).forEach((g) => { ensureTeam(g.a); ensureTeam(g.h); });
+      liveSlates[offset] = games || [];
+      fetchedSlates[offset] = true;
+      inflightSlate[offset] = false;
+      cb && cb();
+    }).catch(() => { inflightSlate[offset] = false; });
+  };
+
+  // ---- live full rosters (official roster endpoint, merged with the stats pool) ----
+  // teamRoster was derived from the season stats pool alone (skaters only, no
+  // sweater numbers, no goalies). We overlay the real club roster per team and
+  // merge season stat lines from the pool so the Team page is complete.
+  const liveRosters = {};
+  const inflightRoster = {};
+  let mockTeamRoster = BC.teamRoster;
+  BC.teamRoster = (ab) => (liveRosters[ab] && liveRosters[ab].length) ? liveRosters[ab] : mockTeamRoster(ab);
+  BC.ensureRoster = (ab, cb) => {
+    if (!BC.LIVE || liveRosters[ab] || inflightRoster[ab]) return;
+    inflightRoster[ab] = true;
+    Promise.resolve().then(() => NHL.roster(ab)).then((rows) => {
+      if (rows && rows.length) {
+        const skBy = {}; (BC.allPlayers || []).forEach((p) => { skBy[p.id] = p; });
+        const goBy = {}; (BC.goalies || []).forEach((g) => { goBy[g.id] = g; });
+        liveRosters[ab] = rows.map((r) => {
+          const s = skBy[r.id] || {};
+          const base = { id: r.id, name: r.name, team: ab, pos: r.pos, num: r.num };
+          return r._isGoalie
+            ? { ...base, ...(goBy[r.id] || {}), pos: 'G', _isGoalie: true }
+            : { ...base, gp: s.gp || 0, g: s.g || 0, a: s.a || 0, p: s.p || 0, pm: s.pm || 0, sog: s.sog || 0 };
+        }).sort((x, y) => (y.p || 0) - (x.p || 0));
+      } else {
+        liveRosters[ab] = []; // fetched-but-empty → keep mock via the guard above
+      }
+      inflightRoster[ab] = false;
+      cb && cb();
+    }).catch(() => { inflightRoster[ab] = false; });
+  };
 
   // patch team meta lookups so live abbrevs resolve even if not in the mock map
   const ensureTeam = (ab, name, city) => {
@@ -80,15 +131,16 @@
     }
 
     // ---- live score slates around today (drives Scores + Highlights) ----
+    // Mark every offset we hear back on as fetched — even an empty slate — so the
+    // board shows the real "no games" state instead of mock's fabricated games.
     if (BC.LIVE) {
       await Promise.all([-2, -1, 0, 1, 2].map(async (o) => {
         try {
           const games = await NHL.scores(o);
-          if (games && games.length) {
-            games.forEach((g) => { ensureTeam(g.a); ensureTeam(g.h); });
-            liveSlates[o] = games;
-            changed = true;
-          }
+          (games || []).forEach((g) => { ensureTeam(g.a); ensureTeam(g.h); });
+          liveSlates[o] = games || [];
+          fetchedSlates[o] = true;
+          changed = true;
         } catch (_) { /* keep mock for this offset */ }
       }));
     }
@@ -103,7 +155,7 @@
     const t = setInterval(async () => {
       try {
         const games = await NHL.scores(0);
-        if (games && games.length) { liveSlates[0] = games; onReady && onReady(); }
+        liveSlates[0] = games || []; fetchedSlates[0] = true; onReady && onReady();
       } catch (_) {}
     }, ms);
     return () => clearInterval(t);
