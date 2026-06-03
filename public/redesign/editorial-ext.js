@@ -322,6 +322,19 @@
         return {round:rd,pick:i+1,overall,team:t.ab,pickedBy,traded,name:pr.name,pos:pr.pos,league:pr.league,lotteryWin:rd===1&&winners.includes(t.ab)};}));}
     B._drnds=rounds; return B._drnds; };
 
+  // ---- past-year draft results (mock fallback; live overlay swaps in real picks) ----
+  const PCLUBS=['Knights','Hitmen','Spirit','Otters','Steelheads','Wheat Kings','Sea Dogs','Remparts','Pats','Storm','Petes','Cataractes','Greyhounds','Olympiques','Frölunda','Skellefteå','Tappara','HIFK','Färjestad','Sioux Falls'];
+  B._dpy={};
+  B.draftPastYear=year=>{ if(B._dpy[year])return B._dpy[year]; const r=rng('past'+year);
+    // a plausible, stable order (not tied to today's standings — these are historical)
+    const teams=[...B.ABBR]; for(let i=teams.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[teams[i],teams[j]]=[teams[j],teams[i]];}
+    const picks=[]; const rounds=[1,2,3,4,5,6,7];
+    rounds.forEach(rd=>{ teams.forEach((ab,i)=>{ const overall=(rd-1)*32+i+1;
+      picks.push({pick:overall,round:rd,pir:i+1,team:ab,
+        name:`${pick(r,PFN)} ${pick(r,PLN)}`,pos:pick(r,DRAFT_POS),league:pick(r,PLEAGUES),club:pick(r,PCLUBS),
+        ht:`${ri(r,5,6)}'${ri(r,8,11)}"`,wt:ri(r,168,214),country:pick(r,['CAN','USA','SWE','FIN','RUS','CZE'])}); }); });
+    const out={year,picks,rounds}; B._dpy[year]=out; return out; };
+
   // ---- game detail extras: recap, broadcasts, shift chart, goal replays ----
   B.gameRecap=g=>{const r=rng('rec'+g.id);const w=g.as>g.hs?g.a:g.h,wn=B.city(w);const star=pick(r,B.teamRoster(w).slice(0,4));
     return `${wn} ${g.as>g.hs?'held off':'edged'} ${B.city(g.as>g.hs?g.h:g.a)} ${Math.max(g.as,g.hs)}-${Math.min(g.as,g.hs)} behind ${star.name}'s multi-point night and ${ri(r,24,38)} saves. The result moves ${B.nick(w)} in a tight ${B.standBy(w)?B.standBy(w).conf:'conference'} race.`;};

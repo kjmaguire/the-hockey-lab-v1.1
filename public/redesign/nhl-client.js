@@ -500,6 +500,51 @@
   // (captured from the standings payload on hydrate); fall back to a date calc
   // (season starts in October; Sept+ = new season).
   function curSeason(){ if(window.NHL&&window.NHL._season) return String(window.NHL._season); var d=new Date(); var y=d.getFullYear(); return d.getMonth()>=8 ? String(y)+String(y+1) : String(y-1)+String(y); }
+  // ---- draft picks for a given year (real results) -> board by round ----
+  // draft/picks/{year}/all returns every pick; for completed drafts each pick
+  // carries the actual player selected. Shapes vary (picks[] or rounds[].picks[]).
+  function mapDraftYear(payload, year) {
+    let arr = payload && (payload.picks || (payload.rounds ? payload.rounds.flatMap((r) => r.picks || []) : null));
+    if (!arr || !arr.length) return null;
+    const hin = (v, p) => { const n = num(v) ?? (p && num(p.heightInInches)); return n != null ? `${Math.floor(n / 12)}'${n % 12}"` : (dflt(v) || ''); };
+    const picks = arr.map((p) => {
+      const overall = num(p.overallPick) ?? num(p.pickOverall) ?? num(p.pickNumber);
+      const round = num(p.round) ?? num(p.roundNumber) ?? 1;
+      const first = dflt(p.firstName), last = dflt(p.lastName);
+      const name = `${first || ''} ${last || ''}`.trim() || dflt(p.playerName) || dflt(p.name) || '';
+      return {
+        pick: overall ?? 0, round, pir: num(p.pickInRound) ?? null,
+        team: dflt(p.teamAbbrev) || dflt(p.triCode) || (p.teamAbbrevs && dflt(p.teamAbbrevs)) || '',
+        name, pos: p.positionCode || dflt(p.position) || '',
+        league: dflt(p.amateurLeague) || dflt(p.lastAmateurLeague) || dflt(p.leagueAbbrev) || '',
+        club: dflt(p.amateurClubName) || dflt(p.lastAmateurClubName) || '',
+        ht: hin(p.height, p), wt: num(p.weightInPounds) ?? num(p.weight) ?? 0,
+        country: dflt(p.countryCode) || dflt(p.birthCountry) || '',
+      };
+    }).filter((p) => p.team).sort((a, b) => a.pick - b.pick);
+    if (!picks.length) return null;
+    const rounds = [...new Set(picks.map((p) => p.round))].sort((a, b) => a - b);
+    return { year, picks, rounds };
+  }
+
+  // ---- live draft tracker (during the draft) -> actual picks made so far ----
+  function mapDraftTracker(payload) {
+    const arr = payload && (payload.picks || payload.draftTracker || (Array.isArray(payload) ? payload : null));
+    if (!arr || !arr.length) return null;
+    const made = arr.map((p) => {
+      const first = dflt(p.firstName), last = dflt(p.lastName);
+      const name = `${first || ''} ${last || ''}`.trim() || dflt(p.playerName) || '';
+      return {
+        pick: num(p.overallPick) ?? num(p.pickOverall) ?? num(p.pickNumber) ?? 0,
+        team: dflt(p.teamAbbrev) || dflt(p.triCode) || '',
+        name, pos: p.positionCode || dflt(p.position) || '',
+        league: dflt(p.amateurLeague) || dflt(p.lastAmateurLeague) || '',
+        onClock: !!(p.onClock || p.isOnClock), made: !!name,
+      };
+    }).filter((p) => p.team);
+    return made.length ? made : null;
+  }
+
   window.NHL = {
     BASE, get,
     ymd, ordinal,
@@ -573,6 +618,10 @@
         return { rankings: live, picks };
       } catch (_) { return null; }
     },
+    // Draft board for any year (real results for completed drafts):
+    draftYear: async (year) => { try { return mapDraftYear(await get(`draft/picks/${year}/all`), year); } catch (_) { return null; } },
+    // Live draft tracker (actual picks as they're made during the draft):
+    draftLiveTracker: async () => { try { return mapDraftTracker(await get('draft/tracker')); } catch (_) { return null; } },
     // Club prospects (team Prospects tab):
     prospectsMapped: async (team) => { try { return mapProspects(await get(`prospects/${team}`)); } catch (_) { return null; } },
     // Game officials (refs + linesmen) from the game landing summary:

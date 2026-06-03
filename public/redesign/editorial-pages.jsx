@@ -236,7 +236,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const prosMock=uM(()=>D.prospects(ab),[ab]);
   // overlay real club prospects when deployed
   const pros=window.E_useLive(prosMock,()=>window.NHL.prospectsMapped(ab),[ab]);
-  const fwd=roster.filter(p=>p.pos!=='D'),def=roster.filter(p=>p.pos==='D');const tg=D.goalies.filter(g=>g.team===ab);
+  const fwd=roster.filter(p=>p.pos!=='D'&&p.pos!=='G'),def=roster.filter(p=>p.pos==='D');const tg=D.goalies.filter(g=>g.team===ab);
   const Stat=({l,v})=><div style={{...card,padding:'15px 16px'}}><div style={ML}>{l}</div><div style={{fontSize:26,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
   const RT=({title,rows,cols})=>rows.length?<div style={{marginBottom:18}}><div style={{...ML,marginBottom:8}}>{title}</div><div style={{...card,overflow:'hidden'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}><th style={{padding:'9px 14px',textAlign:'left',fontWeight:600,...ML}}>Player</th>{cols.map(([h])=><th key={h} style={{padding:'9px',textAlign:'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead><tbody>{rows.map(p=><tr key={p.id} onClick={()=>onPlayer(p)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontWeight:500}}>{p.name} <span style={{color:T.faint,fontFamily:MONO,fontSize:11}}>#{p.num}</span></td>{cols.map(([h,k])=><td key={h} style={{textAlign:'center',color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{k==='pm'?(p[k]>=0?'+':'')+p[k]:p[k]}</td>)}</tr>)}</tbody></table></div></div>:null;
   const SC=[['Pos','pos'],['GP','gp'],['G','g'],['A','a'],['P','p'],['+/-','pm']],GC=[['GP','gp'],['W','w'],['L','l'],['SV%','svp'],['GAA','gaa']];
@@ -738,7 +738,7 @@ function HockeyIQPage({onPlayer,onTeam}){
   const Seeds=()=>(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}} className="g2">
       {[['East','Eastern'],['West','Western']].map(([cf,lab])=>(<div key={cf} style={{...card,overflow:'hidden'}}><div style={{padding:'13px 16px',fontSize:14,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>{lab} · playoff seeds</div>
         {seeds(cf).map((t,i)=><div key={t.ab} onClick={()=>onTeam(t.ab)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
-          <span style={{width:22,height:22,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:11,fontWeight:600,background:i<3?T.ink:T.bg,color:i<3?'#fff':T.mut}}>{i+1}</span>
+          <span style={{width:22,height:22,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:11,fontWeight:600,background:i<3?T.invBg:T.bg,color:i<3?T.invFg:T.mut}}>{i+1}</span>
           <Badge ab={t.ab} size={20}/><span style={{flex:1,color:T.ink,fontSize:13.5}}>{ct(t.ab)}</span><span style={{fontWeight:700}}>{t.pts}</span></div>)}</div>))}
     </div>);
   return(<div>
@@ -1282,18 +1282,38 @@ function RecordsPage({onTeam}){
 
 window.E_TOK={T,MONO,SERIF,card,ML};
 function DraftPage({onTeam}){
+  const NOW=new Date();
+  const curDraftYear=NOW.getMonth()>=9?NOW.getFullYear()+1:NOW.getFullYear();
+  const years=uM(()=>Array.from({length:6},(_,i)=>curDraftYear-i),[curDraftYear]);
+  const [year,setYear]=uS(curDraftYear);
+  const isUpcoming=year>=curDraftYear;
   const [tab,setTab]=uS('Draft order');
   const [doView,setDoView]=uS('result');
   const [round,setRound]=uS(1);
-  // overlay real prospect rankings + live names on the standings-derived order when deployed
+  // upcoming draft: projected order (reverse standings) + prospect board + live tracker
   const draftMock=uM(()=>({rankings:D.draftRankings(),picks:D.draftPicks()}),[]);
   const draftLive=window.E_useLive(draftMock,()=>window.NHL.draftFull(),[]);
   const rankings=draftLive.rankings;
   const picks=draftLive.picks;
-  const tracker=uM(()=>picks.slice(0,10),[picks]);
+  // past draft: real results for the chosen year (mock fallback in preview)
+  const pastMock=uM(()=>D.draftPastYear(year),[year]);
+  const past=window.E_useLive(pastMock,()=>window.NHL.draftYear(year),[year]);
+  // live tracker: prospect-ranking-based predicted FIRST ROUND (32 teams, reverse
+  // standings), swapped to the real selection as each pick lands on draft night
+  const predicted=uM(()=>{const rev=[...D.STANDINGS].slice().reverse();return rev.map((t,i)=>({pick:i+1,team:t.ab,name:(rankings[i]&&rankings[i].name)||'TBD',pos:(rankings[i]&&rankings[i].pos)||'',league:(rankings[i]&&rankings[i].league)||'',made:false}));},[rankings]);
+  const tracker=window.E_useLive(predicted,()=>window.NHL.draftLiveTracker().then(made=>{if(!made||!made.length)return null;const by={};made.forEach(m=>{by[m.pick]=m;});return predicted.map(p=>by[p.pick]?{...p,...by[p.pick],made:true}:p);}),[predicted]);
+  const madeCount=tracker.filter(p=>p.made).length;
+  const upTabs=['Draft order','Prospect rankings','Mock first round','Live tracker'];
+  React.useEffect(()=>{ setTab(isUpcoming?'Draft order':'Results'); setRound(1); },[year,isUpcoming]);
   return(<div>
-    <PageHead k="Draft" t="2026 NHL" serif="Draft"/>
-    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{['Draft order','Prospect rankings','Mock first round','Live tracker'].map(s=><Pill key={s} on={tab===s} onClick={()=>setTab(s)}>{s}</Pill>)}</div>
+    <PageHead k="Draft" t={`${year} NHL`} serif="Draft"/>
+    <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
+      <select value={year} onChange={e=>setYear(+e.target.value)} style={{fontFamily:'inherit',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'8px 12px',color:T.ink,fontSize:13.5,fontWeight:600,cursor:'pointer'}}>
+        {years.map(y=><option key={y} value={y}>{y}{y>=curDraftYear?' · projected':''}</option>)}
+      </select>
+      <span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>{isUpcoming?'Upcoming draft — projected order & prospect board':'Completed draft — full results'}</span>
+    </div>
+    {isUpcoming&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{upTabs.map(s=><Pill key={s} on={tab===s} onClick={()=>setTab(s)}>{s}</Pill>)}</div>}
     {tab==='Prospect rankings'&&<div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Central Scouting · top 32 prospects</div>
       <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:640,borderCollapse:'collapse',fontSize:13.5}}>
@@ -1375,25 +1395,40 @@ function DraftPage({onTeam}){
       <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>{doView==='result'?'Pick = post-lottery position · Exp = pre-lottery slot (reverse standings)':'Proj = pre-lottery slot (reverse standings) · Landed = actual post-lottery pick'} · ▲▼ = lottery movement</div>
     </div>
     </div>}
-    {tab==='Live tracker'&&(()=>{const rounds=D.draftRounds();const list=rounds[round-1];return(<div>
-      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>{[1,2,3,4,5,6,7].map(n=><Pill key={n} on={round===n} onClick={()=>setRound(n)}>Round {n}</Pill>)}</div>
+    {tab==='Live tracker'&&(()=>{const list=tracker;return(<div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12,alignItems:'center'}}>
+        <span style={{fontFamily:MONO,fontSize:11.5,fontWeight:600,color:T.ink}}>First round</span>
+        <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:11,color:madeCount?'#1a8a4f':T.faint}}>{madeCount?`${madeCount} picks in`:'Predicted order — updates live on draft night'}</span>
+      </div>
       <div style={{...card,overflow:'hidden'}}>
-      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><span style={{display:'inline-flex',alignItems:'center',gap:8}}>{round===1&&<span className="ed-pulse" style={{width:6,height:6,borderRadius:99,background:T.red,display:'inline-block'}}/>}Round {round} · {list.length} picks</span><span style={{color:T.faint}}>picks {list[0].overall}–{list[list.length-1].overall}</span></div>
-      <div>{list.map((p,i)=>(<div key={p.overall} onClick={()=>onTeam(p.pickedBy)} className="er" style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
-        <span style={{fontFamily:MONO,fontSize:12,color:p.lotteryWin?'#1a8a4f':T.faint,fontWeight:p.lotteryWin?700:400,width:30}}>{p.overall}</span>
+      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><span style={{display:'inline-flex',alignItems:'center',gap:8}}>{madeCount>0&&<span className="ed-pulse" style={{width:6,height:6,borderRadius:99,background:T.red,display:'inline-block'}}/>}First round · {list.length} picks</span><span style={{color:T.faint}}>{list.length?`picks ${list[0].pick}–${list[list.length-1].pick}`:''}</span></div>
+      <div>{list.map((p,i)=>(<div key={p.pick} onClick={()=>onTeam(p.team)} className="er" style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer',background:p.made?'rgba(26,138,79,.05)':'transparent'}}>
+        <span style={{fontFamily:MONO,fontSize:12,color:p.made?'#1a8a4f':T.faint,fontWeight:p.made?700:400,width:30}}>{p.pick}</span>
         <Badge ab={p.team} size={22}/>
         <span style={{width:40,fontFamily:MONO,fontSize:11,color:T.mut}}>{p.team}</span>
-        <span style={{flex:1,fontWeight:600,color:T.ink,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}{p.lotteryWin&&<span style={{fontFamily:MONO,fontSize:9,color:'#1a8a4f',background:'#e7f5ec',padding:'1px 5px',borderRadius:5,marginLeft:8}}>LOTTERY</span>}</span>
-        <span style={{display:'inline-flex',alignItems:'center',gap:7,justifyContent:'flex-end',flexShrink:0}}>
-          {p.traded&&<span title={`Originally ${ct(p.team)}'s pick`} style={{display:'inline-flex',alignItems:'center',gap:6}}>
-            <span style={{fontFamily:MONO,fontSize:9,color:T.red,background:'#fdecea',border:'1px solid #f4cdc6',borderRadius:5,padding:'1px 5px'}}>TRADE</span>
-            <Badge ab={p.pickedBy} size={18}/>
-            <span style={{fontFamily:MONO,fontSize:11,fontWeight:600,color:T.ink,width:34}}>{p.pickedBy}</span>
-          </span>}
-        </span>
+        <span style={{flex:1,fontWeight:600,color:T.ink,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
+        <span style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',borderRadius:5,flexShrink:0,...(p.made?{color:'#1a8a4f',background:'#e7f5ec'}:{color:T.faint,background:T.bg})}}>{p.made?'PICKED':'PROJECTED'}</span>
         <span style={{fontFamily:MONO,fontSize:11.5,color:T.mut,whiteSpace:'nowrap',width:92,textAlign:'right'}}>{p.pos} · {p.league}</span>
       </div>))}</div>
-      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>left badge = original draft slot · TRADE = pick acquired from that club, now held by the team shown · 7 rounds · 32 picks each (224 total)</div>
+      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>PROJECTED = consensus prospect ranking slotted into the projected order · PICKED = the real selection, swapped in live as it's announced</div>
+    </div>
+    </div>);})()}
+    {!isUpcoming&&(()=>{const rl=past.rounds||[1];const list=(past.picks||[]).filter(p=>p.round===round);return(<div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>{rl.map(n=><Pill key={n} on={round===n} onClick={()=>setRound(n)}>Round {n}</Pill>)}</div>
+      <div style={{...card,overflow:'hidden'}}>
+      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><span>{year} Draft · Round {round} · {list.length} picks</span><span style={{color:T.faint}}>{list.length?`picks ${list[0].pick}–${list[list.length-1].pick}`:''}</span></div>
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:680,borderCollapse:'collapse',fontSize:13.5}}>
+        <thead><tr style={ML}>{['#','Team','Player','Pos','League','Club'].map((h,i)=><th key={h} style={{padding:'11px 12px',textAlign:i===1||i===2||i===5?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
+        <tbody>{list.map(p=>(<tr key={p.pick} onClick={()=>onTeam(p.team)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}>
+          <td style={{padding:'10px 12px',fontFamily:MONO,fontWeight:700,color:p.pick<=3?T.red:T.ink}}>{String(p.pick).padStart(2,'0')}</td>
+          <td style={{padding:'10px 12px'}}><span style={{display:'inline-flex',alignItems:'center',gap:9}}><Badge ab={p.team} size={22}/><span style={{fontWeight:600,color:T.ink}}>{ct(p.team)||p.team}</span></span></td>
+          <td style={{padding:'10px 12px',fontWeight:600,color:T.ink}}>{p.name||'—'}</td>
+          <td style={{textAlign:'center',color:T.mut}}>{p.pos}</td>
+          <td style={{textAlign:'center',color:T.mut,fontFamily:MONO,fontSize:12}}>{p.league}</td>
+          <td style={{padding:'10px 12px',color:T.mut,fontFamily:MONO,fontSize:12}}>{p.club||'—'}</td>
+        </tr>))}</tbody>
+      </table></div>
+      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>{year} NHL Draft — full results, all seven rounds</div>
     </div>
     </div>);})()}
   </div>);

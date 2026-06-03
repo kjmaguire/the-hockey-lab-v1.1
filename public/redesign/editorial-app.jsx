@@ -166,7 +166,7 @@ function GameCard({g,fav,toggleFav,onOpen}){
         {x&&<button onClick={()=>setExp(e=>!e)} style={{fontFamily:MONO,fontSize:10,letterSpacing:'.05em',textTransform:'uppercase',background:'none',border:'none',color:T.faint,cursor:'pointer'}}>{exp?'hide ▲':'details ▼'}</button>}
       </div>
     </div>
-    {exp&&x&&<div style={{borderTop:`1px solid ${T.line}`,background:'#faf9f6',padding:'12px 16px',fontFamily:MONO,fontSize:11.5,color:T.mut,lineHeight:1.7}}>
+    {exp&&x&&<div style={{borderTop:`1px solid ${T.line}`,background:T.bg,padding:'12px 16px',fontFamily:MONO,fontSize:11.5,color:T.mut,lineHeight:1.7}}>
       {g.st!=='pre'&&<div style={{marginBottom:6}}>line: <span style={{color:T.ink}}>{g.a} {x.line.away.join('-')} · {g.h} {x.line.home.join('-')}</span></div>}
       <div>leaders: <span style={{color:T.ink}}>{x.leaders.away.name} ({g.a}, {x.leaders.away.p}P) · {x.leaders.home.name} ({g.h}, {x.leaders.home.p}P)</span></div>
       <div>goalies: <span style={{color:T.ink}}>{x.goalies.away?x.goalies.away.name:'TBD'} · {x.goalies.home?x.goalies.home.name:'TBD'}</span></div>
@@ -432,7 +432,7 @@ function GameDetail({g,onBack,onTeam}){
     </div>}
     {pbp.length>0&&<div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'13px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.line}`,flexWrap:'wrap',gap:8}}><span style={ML}>Play-by-play</span>
-        <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{['All','Goal','Penalty','Shot','Hit'].map(t=><button key={t} onClick={()=>setEv(t)} style={{fontFamily:MONO,fontSize:10.5,padding:'3px 9px',borderRadius:999,border:`1px solid ${ev===t?T.ink:T.line2}`,background:ev===t?T.ink:'transparent',color:ev===t?'#fff':T.mut,cursor:'pointer'}}>{t}</button>)}</div>
+        <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{['All','Goal','Penalty','Shot','Hit'].map(t=><button key={t} onClick={()=>setEv(t)} style={{fontFamily:MONO,fontSize:10.5,padding:'3px 9px',borderRadius:999,border:`1px solid ${ev===t?T.invBg:T.line2}`,background:ev===t?T.invBg:'transparent',color:ev===t?T.invFg:T.mut,cursor:'pointer'}}>{t}</button>)}</div>
       </div>
       <div style={{maxHeight:340,overflowY:'auto'}}>{feed.length?feed.map((e,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderTop:i?`1px solid ${T.line}`:'none',fontSize:13}}><span style={{fontFamily:MONO,fontSize:11,color:T.faint,width:62}}>{e.per} {e.time}</span><span style={{width:7,height:7,borderRadius:99,background:col(e.team),flexShrink:0}}/><span style={{flex:1,color:e.type==='Goal'?T.ink:T.mut,fontWeight:e.type==='Goal'?600:400}}>{e.desc}</span></div>):<div style={{padding:16,fontFamily:MONO,fontSize:12,color:T.mut}}>no events match.</div>}</div>
     </div>}

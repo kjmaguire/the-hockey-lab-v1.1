@@ -425,7 +425,7 @@
             ))}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {mode === 'live' && <button onClick={() => setShowShots((v) => !v)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 7, border: `1px solid ${showShots ? T.ink : T.line2}`, background: showShots ? T.ink : 'transparent', color: showShots ? '#fff' : T.mut, cursor: 'pointer' }}>{showShots ? '✓ ' : ''}Show shots</button>}
+            {mode === 'live' && <button onClick={() => setShowShots((v) => !v)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 7, border: `1px solid ${showShots ? T.invBg : T.line2}`, background: showShots ? T.invBg : 'transparent', color: showShots ? T.invFg : T.mut, cursor: 'pointer' }}>{showShots ? '✓ ' : ''}Show shots</button>}
             <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5, color: '#1a8a4f', border: `1px solid ${T.line2}`, borderRadius: 5, padding: '2px 6px' }}><span style={{ width: 5, height: 5, borderRadius: 99, background: '#1a8a4f' }} />{mode === 'shots' ? 'live shots' : 'live'}</span>
             {mode === 'live' && <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: T.faint, border: `1px solid ${T.line2}`, borderRadius: 5, padding: '2px 6px' }}>simulated positions</span>}
           </span>
@@ -433,13 +433,13 @@
         {showShotMarkers && <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: T.faint, marginRight: 2 }}>Period</span>
           {[['all', 'All'], ['1st', '1st'], ['2nd', '2nd'], ['3rd', '3rd']].map(([k, lab]) => (
-            <button key={k} onClick={() => setPeriod(k)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.04em', textTransform: 'uppercase', padding: '3px 10px', borderRadius: 999, border: `1px solid ${period === k ? T.ink : T.line2}`, background: period === k ? T.ink : 'transparent', color: period === k ? '#fff' : T.mut, cursor: 'pointer' }}>{lab}{k !== 'all' ? ` · ${shotList.filter(s => s.per === k).length}` : ''}</button>
+            <button key={k} onClick={() => setPeriod(k)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.04em', textTransform: 'uppercase', padding: '3px 10px', borderRadius: 999, border: `1px solid ${period === k ? T.invBg : T.line2}`, background: period === k ? T.invBg : 'transparent', color: period === k ? T.invFg : T.mut, cursor: 'pointer' }}>{lab}{k !== 'all' ? ` · ${shotList.filter(s => s.per === k).length}` : ''}</button>
           ))}
         </div>}
         {showShotMarkers && <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: T.faint, marginRight: 2 }}>Type</span>
           {[['all', 'All'], ['goal', 'Goals'], ['on', 'On net'], ['miss', 'Missed'], ['block', 'Blocked']].map(([k, lab]) => (
-            <button key={k} onClick={() => setStype(k)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.04em', textTransform: 'uppercase', padding: '3px 10px', borderRadius: 999, border: `1px solid ${stype === k ? T.ink : T.line2}`, background: stype === k ? T.ink : 'transparent', color: stype === k ? '#fff' : T.mut, cursor: 'pointer' }}>{lab}{k !== 'all' ? ` · ${typeN[k] || 0}` : ''}</button>
+            <button key={k} onClick={() => setStype(k)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.04em', textTransform: 'uppercase', padding: '3px 10px', borderRadius: 999, border: `1px solid ${stype === k ? T.invBg : T.line2}`, background: stype === k ? T.invBg : 'transparent', color: stype === k ? T.invFg : T.mut, cursor: 'pointer' }}>{lab}{k !== 'all' ? ` · ${typeN[k] || 0}` : ''}</button>
           ))}
         </div>}
         <div ref={wrap} style={{ position: 'relative' }}>

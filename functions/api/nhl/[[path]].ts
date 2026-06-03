@@ -143,7 +143,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('goalie/summary', {
-            isAggregate: 'false', isGame: 'false', start: 0, limit: 200,
+            isAggregate: 'false', isGame: 'false', start: 0, limit: 1000,
             cayenneExp: `seasonId=${season} and gameTypeId=${gameType}`,
           });
           return json(data);
