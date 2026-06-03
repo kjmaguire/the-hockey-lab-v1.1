@@ -39,6 +39,46 @@
       }
     } catch (_) { /* stay on mock */ }
 
+    // ---- player pool (skaters + goalies) ----
+    // skater-leaders -> skater/summary (every skater w/ real stats); goalie-leaders
+    // likewise. We swap the contents of BC.allPlayers / BC.goalies IN PLACE so the
+    // closures (skaterLeaders, goalieLeaders, teamRoster, edgeLeaders, milestones…)
+    // all read live data. Then resetDerived() recomputes everything downstream
+    // (leaders, rosters, playoff seeding, draft order, news, team stats).
+    if (BC.LIVE) {
+      await Promise.all([
+        (async () => {
+          try {
+            const sk = await NHL.skaterLeaders();
+            if (sk && sk.length && Array.isArray(BC.allPlayers)) {
+              sk.forEach((p) => ensureTeam(p.team));
+              BC.allPlayers.length = 0;
+              sk.forEach((p) => BC.allPlayers.push(p));
+              changed = true;
+            }
+          } catch (_) { /* keep mock skaters */ }
+        })(),
+        (async () => {
+          try {
+            const go = await NHL.goalieLeaders();
+            if (go && go.length && Array.isArray(BC.goalies)) {
+              go.forEach((g) => ensureTeam(g.team));
+              BC.goalies.length = 0;
+              go.forEach((g) => BC.goalies.push(g));
+              changed = true;
+            }
+          } catch (_) { /* keep mock goalies */ }
+        })(),
+      ]);
+      // league team summary -> live PP%/PK%/FO% (consumed by buildTS in resetDerived)
+      try {
+        const ts = await NHL.teamSeasonStats();
+        if (ts) BC._liveTeamStats = ts;
+      } catch (_) { /* team stats stay projected */ }
+      // recompute every standings/player-derived cache from the live data
+      try { if (BC.resetDerived) BC.resetDerived(); } catch (_) {}
+    }
+
     // ---- live score slates around today (drives Scores + Highlights) ----
     if (BC.LIVE) {
       await Promise.all([-2, -1, 0, 1, 2].map(async (o) => {
@@ -86,6 +126,7 @@
       if (rows && rows.length) {
         BC.STANDINGS.length = 0; rows.forEach((r) => BC.STANDINGS.push(r));
         const rank = {}; BC.STANDINGS.forEach((t, i) => (rank[t.ab] = i + 1)); BC.rankOf = rank;
+        try { if (BC.resetDerived) BC.resetDerived(); } catch (_) {}
         onReady && onReady();
       }
     } catch (_) {}

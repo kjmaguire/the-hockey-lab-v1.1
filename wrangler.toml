@@ -1,0 +1,28 @@
+# The Hockey Lab — Cloudflare Workers (Static Assets + /api/nhl/* proxy)
+#
+# This is the config that makes `wrangler deploy` actually work:
+#   - `main` points wrangler at worker.ts, so the /api/nhl/* proxy runs.
+#   - the [assets] block serves everything in ./public as static files AND
+#     binds it as `env.ASSETS` so worker.ts can do its SPA .html fallback.
+#
+# Request flow on the deployed Worker:
+#   /api/nhl/*  -> no static asset matches -> worker.ts runs -> NHL proxy
+#   everything else (/, /app.html, /redesign/*) -> served from ./public
+#
+# Without this file, `wrangler deploy` has no entrypoint or assets binding,
+# the proxy never mounts, every live fetch 404s, and the app stays on mock
+# ("demo data"). That was the bug.
+
+name = "the-hockey-lab"
+main = "worker.ts"
+compatibility_date = "2025-05-15"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# Unmatched routes return 404 so worker.ts can retry them as `<path>.html`
+# (its SPA/extensionless fallback). Don't let the assets layer swallow them.
+not_found_handling = "none"
+
+[observability]
+enabled = true

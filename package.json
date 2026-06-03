@@ -1,0 +1,14 @@
+{
+  "name": "the-hockey-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Hockey Lab — editorial NHL analytics app on Cloudflare Workers (static assets + live /api/nhl proxy).",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  }
+}

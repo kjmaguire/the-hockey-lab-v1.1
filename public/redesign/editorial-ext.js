@@ -13,22 +13,27 @@
     const m={};order.forEach(([ab],i)=>m[ab]=i+1);return m;
   }
 
-  // ---- team stats (full) ----
+  // ---- team stats (full) — rebuildable so live standings recompute it ----
   const TS={};
-  B.ABBR.forEach(ab=>{const t=B.standBy(ab),r=rng('ts'+ab);
-    TS[ab]={ gfPg:+(t.gf/t.gp).toFixed(2), gaPg:+(t.ga/t.gp).toFixed(2),
-      pp:+(16+r()*12).toFixed(1), pk:+(74+r()*14).toFixed(1), fo:+(45+r()*10).toFixed(1),
-      ptPct:+(t.pts/(t.gp*2)).toFixed(3), shotsFor:+(28+r()*6).toFixed(1), shotsAgainst:+(27+r()*6).toFixed(1),
-      shPct:+(8+r()*4).toFixed(1), svPct:(0.895+r()*0.02).toFixed(3).slice(1), pdo:+(0.985+r()*0.03).toFixed(3),
-      byPeriod:[ri(r,30,55),ri(r,30,55),ri(r,30,58)],
-      gfStr:{ev:ri(r,80,120),pp:ri(r,28,55),sh:ri(r,2,10)}, gaStr:{ev:ri(r,80,120),pp:ri(r,24,50),sh:ri(r,1,9)} };
-  });
-  const rkGf=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a].gfPg])),false);
-  const rkGa=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a].gaPg])),true);
-  const rkPp=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a].pp])),false);
-  const rkPk=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a].pk])),false);
-  const rkFo=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a].fo])),false);
-  const rkPt=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a].ptPct])),false);
+  let rkGf,rkGa,rkPp,rkPk,rkFo,rkPt;
+  function buildTS(){
+    B.ABBR.forEach(ab=>{const t=B.standBy(ab),r=rng('ts'+ab); if(!t)return;
+      const lv=(B._liveTeamStats&&B._liveTeamStats[ab])||null;
+      TS[ab]={ gfPg:+(t.gf/t.gp).toFixed(2), gaPg:+(t.ga/t.gp).toFixed(2),
+        pp:lv&&lv.pp!=null?lv.pp:+(16+r()*12).toFixed(1), pk:lv&&lv.pk!=null?lv.pk:+(74+r()*14).toFixed(1), fo:lv&&lv.fo!=null?lv.fo:+(45+r()*10).toFixed(1),
+        ptPct:+(t.pts/(t.gp*2)).toFixed(3), shotsFor:+(28+r()*6).toFixed(1), shotsAgainst:+(27+r()*6).toFixed(1),
+        shPct:+(8+r()*4).toFixed(1), svPct:(0.895+r()*0.02).toFixed(3).slice(1), pdo:+(0.985+r()*0.03).toFixed(3),
+        byPeriod:[ri(r,30,55),ri(r,30,55),ri(r,30,58)],
+        gfStr:{ev:ri(r,80,120),pp:ri(r,28,55),sh:ri(r,2,10)}, gaStr:{ev:ri(r,80,120),pp:ri(r,24,50),sh:ri(r,1,9)} };
+    });
+    rkGf=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a]?.gfPg||0])),false);
+    rkGa=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a]?.gaPg||0])),true);
+    rkPp=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a]?.pp||0])),false);
+    rkPk=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a]?.pk||0])),false);
+    rkFo=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a]?.fo||0])),false);
+    rkPt=rankField(Object.fromEntries(B.ABBR.map(a=>[a,TS[a]?.ptPct||0])),false);
+  }
+  buildTS();
   B.teamStatsFull=ab=>({...TS[ab],ranks:{gf:rkGf[ab],ga:rkGa[ab],pp:rkPp[ab],pk:rkPk[ab],fo:rkFo[ab],pt:rkPt[ab]}});
 
   // ---- wild-card gap ----
@@ -681,4 +686,21 @@
     ];
     B._news={articles:A,tweets:TW,ticker:TICK,topics:['All','Trade','Rumor','Injury','Signing','Recap','Analysis']};
     return B._news; };
+
+  // ---- LIVE invalidation -----------------------------------------------------
+  // After the bridge swaps live standings + players into BC, every cache that was
+  // derived from the *mock* standings/players is stale. Clearing them forces a
+  // recompute from live data on next access, so playoff seeding, draft order,
+  // milestone watch, team stats, edge leaders and the news wire all reflect the
+  // real standings + real player pool. (Series results, draft prospects and
+  // all-time records remain editorial projections — there's no always-on feed.)
+  B.resetDerived=function(){
+    try{ buildTS(); }catch(e){}
+    if(_el)Object.keys(_el).forEach(k=>delete _el[k]);
+    // single-value caches → delete so the getter rebuilds
+    ['_dr','_dp','_drnds','_lotteryWinners','_pb','_mw','_news',
+     '_rs','_rg','_rsn','_rt','_rf','_rst'].forEach(k=>{ delete B[k]; });
+    // keyed caches → reset to empty map
+    ['_tn','_tt','_off','_le','_st','_lgp','_box','_sd','_gd','_tfr','_tc'].forEach(k=>{ B[k]={}; });
+  };
 })();

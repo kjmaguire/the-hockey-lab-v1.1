@@ -1,6 +1,27 @@
 /* The Hockey Lab — Editorial theme · pages (Standings/Teams/Players/Stats/IQ + detail) */
 const { useState: uS, useMemo: uM } = React;
 const D = window.BC;
+// Shared live-overlay hook: render `mock` immediately, then (only when deployed,
+// i.e. BC.LIVE) call fetchLive() and swap in the mapped result if it resolves
+// truthy. Any failure → stay on mock. Matches the shot-map live/sample pattern.
+window.E_useLive = function(mock, fetchLive, deps){
+  const [val,setVal] = React.useState(mock);
+  const depRef = React.useRef(deps);
+  // If deps changed since the last commit, `val` still holds the PREVIOUS inputs'
+  // result (useState's initializer only runs on mount). Return the fresh `mock`
+  // synchronously this render so we never serve a stale / cross-shaped object
+  // (e.g. a skater's edge while now rendering a goalie). The effect then syncs val.
+  const dprev = depRef.current, dnow = deps||[];
+  const depsChanged = !dprev || dprev.length!==dnow.length || dnow.some((d,i)=>d!==dprev[i]);
+  React.useEffect(()=>{ depRef.current = deps; let alive=true; setVal(mock);
+    if(window.NHL && window.BC && window.BC.LIVE && typeof fetchLive==='function'){
+      Promise.resolve().then(fetchLive).then(live=>{ if(alive && live) setVal(live); }).catch(()=>{});
+    }
+    return ()=>{ alive=false; };
+  // eslint-disable-next-line
+  }, deps);
+  return depsChanged ? mock : val;
+};
 const c2=D.col, nk=D.nick, ct=D.city;
 const LIGHT={mode:'light',ink:'#15161b',mut:'#62636a',faint:'#9b9ca3',line:'#e6e4de',line2:'#dad8d0',red:'#e5341f',paper:'#fff',bg:'#f5f4f0',glass:'rgba(245,244,240,.85)',invBg:'#15161b',invFg:'#fff'};
 const DARK={mode:'dark',ink:'#ecedf0',mut:'#a2a4ad',faint:'#6d6f78',line:'#2a2c33',line2:'#3b3d46',red:'#ff5a45',paper:'#1c1d23',bg:'#141519',glass:'rgba(18,19,23,.82)',invBg:'#33343d',invFg:'#f3f3f5'};
@@ -130,7 +151,11 @@ function TeamSchedule({ab,onGame}){
   const [mAnchor,setMAnchor]=uS(0);
   const dOf=o=>{const d=new Date(today);d.setDate(d.getDate()+o);return d;};
   const offOf=d=>Math.round((d-today)/86400000);
-  const gameOn=o=>D.slate(o).find(g=>g.a===ab||g.h===ab);
+  // overlay the real full-season schedule when deployed (mock slate fallback otherwise)
+  const liveSched=window.E_useLive(null,()=>window.NHL.clubScheduleMapped(ab),[ab]);
+  const liveByDate=uM(()=>{const m={};(liveSched||[]).forEach(g=>{m[g._date]=g;});return m;},[liveSched]);
+  const ymdK=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const gameOn=o=>{const k=ymdK(dOf(o));return liveByDate[k]||D.slate(o).find(g=>g.a===ab||g.h===ab);};
   const open=g=>{if(g)onGame(g);};
   const WeekCell=({o})=>{const d=dOf(o),g=gameOn(o),isT=o===0;const home=g&&g.h===ab,opp=g?(home?g.a:g.h):null;
     const final=g&&g.st.startsWith('final');const won=final&&((home&&g.hs>g.as)||(!home&&g.as>g.hs));
@@ -203,7 +228,12 @@ function MiniGame({g,onOpen}){const aw=g.st.startsWith('final')&&g.as>g.hs,hw=g.
 function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const [tab,setTab]=uS('Hub');
   const t=D.standBy(ab); const roster=D.teamRoster(ab); const gap=D.wildCardGap(ab);
-  const sched=D.teamSchedule(ab); const pros=D.prospects(ab);
+  const schedMock=uM(()=>D.teamSchedule(ab),[ab]);
+  // overlay real Last/Next game from the full-season schedule when deployed
+  const sched=window.E_useLive(schedMock,()=>window.NHL.teamRecUp(ab),[ab]);
+  const prosMock=uM(()=>D.prospects(ab),[ab]);
+  // overlay real club prospects when deployed
+  const pros=window.E_useLive(prosMock,()=>window.NHL.prospectsMapped(ab),[ab]);
   const fwd=roster.filter(p=>p.pos!=='D'),def=roster.filter(p=>p.pos==='D');const tg=D.goalies.filter(g=>g.team===ab);
   const Stat=({l,v})=><div style={{...card,padding:'15px 16px'}}><div style={ML}>{l}</div><div style={{fontSize:26,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
   const RT=({title,rows,cols})=>rows.length?<div style={{marginBottom:18}}><div style={{...ML,marginBottom:8}}>{title}</div><div style={{...card,overflow:'hidden'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}><th style={{padding:'9px 14px',textAlign:'left',fontWeight:600,...ML}}>Player</th>{cols.map(([h])=><th key={h} style={{padding:'9px',textAlign:'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead><tbody>{rows.map(p=><tr key={p.id} onClick={()=>onPlayer(p)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontWeight:500}}>{p.name} <span style={{color:T.faint,fontFamily:MONO,fontSize:11}}>#{p.num}</span></td>{cols.map(([h,k])=><td key={h} style={{textAlign:'center',color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{k==='pm'?(p[k]>=0?'+':'')+p[k]:p[k]}</td>)}</tr>)}</tbody></table></div></div>:null;
@@ -341,8 +371,12 @@ function PlayersPage({onPlayer}){
 /* ---------- PLAYER DETAIL ---------- */
 function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
   const isG=p.type==='goalie';
-  const ex=uM(()=>D.playerExtras(p),[p.id]);
-  const edge=uM(()=>isG?D.goalieEdge(p):D.skaterEdge(p),[p.id]);
+  const exMock=uM(()=>D.playerExtras(p),[p.id]);
+  // overlay real career history / season totals / awards from player landing when live
+  const ex=window.E_useLive(exMock,()=>window.NHL.playerCard(p.id).then(c=>c?{...exMock,...c}:null),[p.id]);
+  const edgeMock=uM(()=>isG?D.goalieEdge(p):D.skaterEdge(p),[p.id]);
+  // overlay real NHL EDGE tracking when deployed (partial → merged over mock)
+  const edge=window.E_useLive(edgeMock,()=>(isG?window.NHL.edgeGoalieMapped(p.id):window.NHL.edgeSkaterMapped(p.id)).then(e=>e?{...edgeMock,...e}:null),[p.id]);
   const log=uM(()=>D.gameLog(p),[p.id]);
   const Stat=({l,v})=><div style={{...card,padding:16,textAlign:'center'}}><div style={ML}>{l}</div><div style={{fontSize:30,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
   const Sec=({k,children})=><div style={{...card,overflow:'hidden',marginBottom:16}}><div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>{k}</div>{children}</div>;
@@ -383,10 +417,10 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
     {/* edge */}
     <div style={{...card,padding:20,marginBottom:16}}>
       <Eyebrow>NHL Edge · tracking detail</Eyebrow>
-      <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>{edge.seasons.map(s=><span key={s} style={{fontFamily:MONO,fontSize:11,border:`1px solid ${T.line2}`,borderRadius:999,padding:'4px 10px',color:T.mut}}>{s}</span>)}</div>
-      {isG?(<div style={{marginTop:16}}><div style={ML}>Save quality by danger</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:12,marginTop:10}}>{edge.saveQ.map(([l,v,pc,avg,sh])=><div key={l} style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={ML}>{l}</div><div style={{fontSize:19,fontWeight:600,margin:'5px 0'}}>{v}</div><div style={{fontFamily:MONO,fontSize:11,color:T.faint}}>pct {pc} · avg {avg} · {sh} shots</div></div>)}</div></div>):(
-        <div style={{marginTop:16}}><div style={ML}>Speed + distance</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginTop:10}}>{edge.speed.map(([l,v,pc,avg])=><div key={l} style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={ML}>{l}</div><div style={{fontSize:18,fontWeight:600,margin:'5px 0'}}>{v}</div><div style={{fontFamily:MONO,fontSize:11,color:T.faint}}>pct {pc} · league avg {avg}</div></div>)}</div>
-        <div style={{...ML,marginTop:16}}>Zone time</div><div style={{marginTop:10}}>{edge.zones.map(([z,pct])=><div key={z} style={{display:'flex',alignItems:'center',gap:12,marginBottom:8}}><span style={{width:90,fontSize:13,color:T.mut}}>{z}</span><div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:c2(p.team)}}/></div><span style={{width:44,textAlign:'right',fontWeight:600,fontFamily:MONO,fontSize:12}}>{pct}%</span></div>)}</div></div>
+      <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>{(edge.seasons||[]).map(s=><span key={s} style={{fontFamily:MONO,fontSize:11,border:`1px solid ${T.line2}`,borderRadius:999,padding:'4px 10px',color:T.mut}}>{s}</span>)}</div>
+      {isG?(<div style={{marginTop:16}}><div style={ML}>Save quality by danger</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:12,marginTop:10}}>{(edge.saveQ||[]).map(([l,v,pc,avg,sh])=><div key={l} style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={ML}>{l}</div><div style={{fontSize:19,fontWeight:600,margin:'5px 0'}}>{v}</div><div style={{fontFamily:MONO,fontSize:11,color:T.faint}}>pct {pc} · avg {avg} · {sh} shots</div></div>)}</div></div>):(
+        <div style={{marginTop:16}}><div style={ML}>Speed + distance</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginTop:10}}>{(edge.speed||[]).map(([l,v,pc,avg])=><div key={l} style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={ML}>{l}</div><div style={{fontSize:18,fontWeight:600,margin:'5px 0'}}>{v}</div><div style={{fontFamily:MONO,fontSize:11,color:T.faint}}>pct {pc} · league avg {avg}</div></div>)}</div>
+        <div style={{...ML,marginTop:16}}>Zone time</div><div style={{marginTop:10}}>{(edge.zones||[]).map(([z,pct])=><div key={z} style={{display:'flex',alignItems:'center',gap:12,marginBottom:8}}><span style={{width:90,fontSize:13,color:T.mut}}>{z}</span><div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:c2(p.team)}}/></div><span style={{width:44,textAlign:'right',fontWeight:600,fontFamily:MONO,fontSize:12}}>{pct}%</span></div>)}</div></div>
       )}
     </div>
     {/* shot zones (NHL Edge season aggregate) */}
@@ -1013,7 +1047,9 @@ function SeriesDetail({hiAb,loAb,hiW,loW,onBack,onTeam}){
 
 /* ---------- PLAYOFFS ---------- */
 function PlayoffsPage({onTeam}){
-  const b=D.playoffBracket();
+  const bMock=uM(()=>D.playoffBracket(),[]);
+  // overlay the real bracket (series carousel) seeded to live standings when deployed
+  const b=window.E_useLive(bMock,()=>window.NHL.playoffFull(),[]);
   const [sel,setSel]=uS(null);
   const [pview,setPview]=uS(()=>{try{return localStorage.getItem('e_pview')||'rink';}catch(e){return 'rink';}});
   const dragRef=React.useRef({down:false,x:0,sl:0});
@@ -1141,8 +1177,11 @@ function PlayoffsPage({onTeam}){
 /* ---------- RECORDS ---------- */
 function RecordsPage({onTeam}){
   const [tab,setTab]=uS('All-time leaders');
-  const skaters=D.recordSkaters();
-  const goalies=D.recordGoalies();
+  // overlay real all-time leaders (records.nhl.com) when deployed; season/trophies stay projected
+  const recMock=uM(()=>({skaters:D.recordSkaters(),goalies:D.recordGoalies()}),[]);
+  const rec=window.E_useLive(recMock,()=>window.NHL.recordsAllTime().then(r=>r?{...recMock,...r}:null),[]);
+  const skaters=rec.skaters;
+  const goalies=rec.goalies;
   const trophies=D.recordTrophiesList();
   const franchise=D.recordFranchiseList();
   const season=D.recordSeason();
@@ -1242,9 +1281,12 @@ function DraftPage({onTeam}){
   const [tab,setTab]=uS('Draft order');
   const [doView,setDoView]=uS('result');
   const [round,setRound]=uS(1);
-  const rankings=D.draftRankings();
-  const picks=D.draftPicks();
-  const tracker=D.draftTracker();
+  // overlay real prospect rankings + live names on the standings-derived order when deployed
+  const draftMock=uM(()=>({rankings:D.draftRankings(),picks:D.draftPicks()}),[]);
+  const draftLive=window.E_useLive(draftMock,()=>window.NHL.draftFull(),[]);
+  const rankings=draftLive.rankings;
+  const picks=draftLive.picks;
+  const tracker=uM(()=>picks.slice(0,10),[picks]);
   return(<div>
     <PageHead k="Draft" t="2026 NHL" serif="Draft"/>
     <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{['Draft order','Prospect rankings','Mock first round','Live tracker'].map(s=><Pill key={s} on={tab===s} onClick={()=>setTab(s)}>{s}</Pill>)}</div>

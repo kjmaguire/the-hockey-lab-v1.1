@@ -1,4 +1,4 @@
-# The Hockey Lab — Cloudflare Pages 
+# The Hockey Lab — Cloudflare Pages
 
 The Hockey Lab as a deployable Cloudflare Pages site: a static editorial SPA
 (landing + app) served from `public/`, with live NHL data proxied through Pages
@@ -27,19 +27,64 @@ cloudflare/
 └── wrangler.toml
 ```
 
+## Edge caching (tiered by volatility)
+
+`_lib.ts` caches every upstream response at the edge (`caches.default`), but the
+TTL is **not** a flat 5 minutes — it's chosen per resource by how often it
+actually changes (see `ttlFor()`):
+
+| Resource | TTL | Why |
+|---|---|---|
+| Live game (`gameState` LIVE/CRIT) | 20s | needs to stay fresh |
+| Today's scoreboard / date slates | 30s | drives the live board + polling |
+| Pre-game feed | 2 min | lineups / odds still firming |
+| **Final game** (box score, play-by-play, landing) | **24h** | immutable once final — no reason to re-pull |
+| Standings, leaders, rosters, club-stats, player landing | 5 min | default |
+| Records book, league meta, historical drafts | 24h | reference data, effectively static |
+
+Game feeds are classified by peeking at the payload's `gameState` (a slate is
+"final" only when **all** its games are final, "live" if **any** are live), so a
+finished game is fetched from the NHL once and then served from the edge for a
+day — while a game in progress refreshes every ~20s. Nothing is persisted to a
+database; entries simply expire.
+
+**Stale-if-error:** alongside the tiered entry, each successful fetch also writes
+a long-lived (~7-day) "last-known-good" copy. If the NHL API is unreachable when
+a tiered entry has expired, the proxy serves that copy instead of erroring — so a
+brief upstream outage shows slightly-stale **real** data rather than dropping the
+client to bundled mock. Only a cold load with *no* cached copy at all falls back
+to mock.
+
 ## Deploy
 
-**Git integration (recommended):**
-- Root directory: `cloudflare`
-- Build command: *(none)* — the site is static (runtime Babel, no build step)
-- Build output directory: `public`
-- Functions auto-detected from `functions/`
+This repo deploys as a **Cloudflare Worker with Static Assets** (`worker.ts` +
+`./public`). The `wrangler.toml` is what wires it together — `main = worker.ts`
+mounts the `/api/nhl/*` proxy, and the `[assets]` block serves `./public` and
+binds it as `env.ASSETS`.
 
-**Direct upload:**
 ```bash
 cd cloudflare
-npx wrangler pages deploy public
+npm install        # installs wrangler
+npm run deploy     # = wrangler deploy
 ```
+
+First time, `wrangler` will prompt you to log in (`npx wrangler login`).
+
+> **If you see "demo data" after deploying:** the Worker isn't running the
+> proxy. Confirm `wrangler.toml` is present and that `wrangler deploy` reported
+> uploading **both** the Worker and the assets. Hit `/api/nhl/standings` on your
+> deployed URL — it should return JSON, not your HTML page. If it returns HTML,
+> the assets layer is swallowing the route (check `main`/`[assets]` in
+> `wrangler.toml`).
+
+### Alternative: Cloudflare Pages
+
+The `functions/api/nhl/[[path]].ts` Pages Function mirrors `worker.ts`, so the
+same code also runs on Pages:
+- Root directory: `cloudflare`
+- Build command: *(none)* — static, runtime Babel
+- Build output directory: `public`
+- Functions auto-detected from `functions/`
 
 On deploy, `app.html` boots on mock data, then `BC.hydrate()` calls
 `/api/nhl/standings` + `/api/nhl/scoreboard`; if the proxy answers, `BC.LIVE`

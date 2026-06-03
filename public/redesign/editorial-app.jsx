@@ -180,15 +180,29 @@ function GameCard({g,fav,toggleFav,onOpen}){
 
 /* game detail */
 function GameDetail({g,onBack,onTeam}){
-  const d=useMemo(()=>detail(g),[g.id]);
+  const dMock=useMemo(()=>detail(g),[g.id]);
+  // live overlay: real scoring summary, three stars, team stats + box score / lineups
+  const gl=window.E_useLive(null,()=>g.st!=='pre'&&window.NHL&&window.NHL.gameLive?window.NHL.gameLive(g.id):null,[g.id]);
+  const d=gl?{...dMock,
+    goals:(gl.goals&&gl.goals.length)?gl.goals:dMock.goals,
+    stars:(gl.stars&&gl.stars.length)?gl.stars:dMock.stars,
+    away:{...dMock.away,team:{...dMock.away.team,...(gl.teamA||{})}},
+    home:{...dMock.home,team:{...dMock.home.team,...(gl.teamH||{})}}}:dMock;
   const series=useMemo(()=>BC.seasonSeries(g),[g.id]);
-  const pbp=useMemo(()=>BC.playByPlay(g),[g.id]);
+  const pbpMock=useMemo(()=>BC.playByPlay(g),[g.id]);
+  const pbp=window.E_useLive(pbpMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gamePbp?window.NHL.gamePbp(g.id):null,[g.id]);
   const recap=useMemo(()=>g.st.startsWith('final')?BC.gameRecap(g):'',[g.id]);
-  const bx=useMemo(()=>BC.broadcasts(g),[g.id]);
+  const bxMock=useMemo(()=>BC.broadcasts(g),[g.id]);
+  // overlay real TV networks from the game landing when deployed
+  const bx=window.E_useLive(bxMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gameBroadcasts?window.NHL.gameBroadcasts(g.id).then(b=>b?{...bxMock,...b}:null):null,[g.id]);
+  const offMock=useMemo(()=>BC.officials?BC.officials(g):null,[g.id]);
+  // overlay real referees + linesmen from the game landing when deployed
+  const off=window.E_useLive(offMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gameOfficials?window.NHL.gameOfficials(g.id):null,[g.id]);
   const replays=useMemo(()=>g.st!=='pre'?BC.goalReplays(g):[],[g.id]);
   const shifts=useMemo(()=>g.st!=='pre'?BC.shiftChart(g):{away:[],home:[]},[g.id]);
   const shotData=useMemo(()=>g.st!=='pre'&&BC.shotMap?BC.shotMap(g):[],[g.id]);
-  const box=useMemo(()=>g.st!=='pre'&&BC.boxStats?BC.boxStats(g):null,[g.id]);
+  const boxMock=useMemo(()=>g.st!=='pre'&&BC.boxStats?BC.boxStats(g):null,[g.id]);
+  const box=(gl&&gl.box)?{...(boxMock||{}),...gl.box,skaters:gl.box.skaters||(boxMock&&boxMock.skaters),goalies:gl.box.goalies||(boxMock&&boxMock.goalies)}:boxMock;
   const [ev,setEv]=useState('All');
   const feed=pbp.filter(e=>ev==='All'||e.type===ev);
   const final=g.st.startsWith('final');
@@ -239,7 +253,7 @@ function GameDetail({g,onBack,onTeam}){
       <span style={{marginLeft:'auto',color:T.faint,letterSpacing:'.06em',textTransform:'uppercase'}}>NHL Edge · player &amp; puck tracking</span>
       <ProvTag kind="proj"/>
     </div>
-    {(()=>{const pp=sit.type==='PP';const max=sit.max||(sit.strength==='5-on-3'?90:120);return <div style={{...card,padding:'12px 16px',borderLeft:pp?`3px solid ${col(sit.team)}`:'3px solid transparent'}}>
+    {(()=>{const pp=sit.type==='PP';const max=sit.max||(sit.strength==='5-on-3'?90:120);return <div style={{...card,padding:'12px 16px',boxShadow:pp?`inset 3px 0 0 ${col(sit.team)}`:'none'}}>
       <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
         {pp?<React.Fragment>
           <span style={{fontFamily:MONO,fontSize:11,letterSpacing:'.1em',textTransform:'uppercase',fontWeight:700,color:col(sit.team),display:'inline-flex',alignItems:'center',gap:7}}><span className="ed-pulse" style={{width:6,height:6,borderRadius:99,background:col(sit.team),display:'inline-block'}}/>Power play · {sit.team} {sit.strength}</span>
@@ -341,7 +355,7 @@ function GameDetail({g,onBack,onTeam}){
         </React.Fragment>}
       </div>
     </div>
-    {(()=>{const off=BC.officials?BC.officials(g):null;const pens=pbp.filter(e=>e.type==='Penalty');return <div style={{...card,overflow:'hidden'}}>
+    {(()=>{const pens=pbp.filter(e=>e.type==='Penalty');return <div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'13px 16px',display:'flex',alignItems:'center',gap:10,borderBottom:`1px solid ${T.line}`,flexWrap:'wrap'}}><span style={ML}>Officials &amp; penalties</span><span style={{marginLeft:'auto'}}><ProvTag kind="live"/></span></div>
       {off&&<div style={{display:'flex',flexWrap:'wrap',gap:'8px 24px',padding:'12px 16px',borderBottom:`1px solid ${T.line}`}}>
         <span style={{display:'inline-flex',flexDirection:'column',gap:2}}><span style={{...ML,fontSize:9}}>Referees</span><span style={{fontSize:13,color:T.ink}}>{off.refs.join(' · ')}</span></span>
@@ -430,13 +444,13 @@ function GameDetail({g,onBack,onTeam}){
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:30,maxWidth:560,margin:'0 auto',padding:'30px 20px'}}>
         {[[g.a,s.as],[g.h,s.hs]].map(([ab,sc],idx)=>(<React.Fragment key={ab}>
           <button onClick={()=>onTeam(ab)} className="el" style={{background:'none',border:'none',cursor:'pointer',textAlign:'center',flex:1}}><Badge ab={ab} size={52}/><div style={{fontWeight:600,marginTop:8,color:T.ink}}>{city(ab)}</div><div style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{nick(ab)}</div></button>
-          {idx===0&&<div style={{textAlign:'center'}}><div style={{fontSize:44,fontWeight:600,letterSpacing:'-.03em',color:T.ink}}>{pre?'–':`${s.as}:${s.hs}`}</div><div style={{fontFamily:MONO,fontSize:11,textTransform:'uppercase',letterSpacing:'.06em',color:live?T.red:final?T.faint:'#1a8a4f',marginTop:4}}>{live?`Live · ${g.per} ${s.clk}`:final?(g.ot?'Final/OT':'Final'):g.start}</div><div style={{fontFamily:MONO,fontSize:10,color:T.faint,marginTop:4,whiteSpace:'nowrap'}}>{d.venue}</div></div>}
+          {idx===0&&<div style={{textAlign:'center'}}><div style={{fontSize:44,fontWeight:600,letterSpacing:'-.03em',color:T.ink}}>{pre?'–':`${s.as}:${s.hs}`}</div><div style={{fontFamily:MONO,fontSize:11,textTransform:'uppercase',letterSpacing:'.06em',color:live?T.red:final?T.faint:'#1a8a4f',marginTop:4}}>{live?`Live · ${g.per} ${s.clk}`:final?(g.ot?'Final/OT':'Final'):g.start}</div><div style={{fontFamily:MONO,fontSize:10,color:T.faint,marginTop:4,whiteSpace:'nowrap'}}>{g._venue||d.venue}</div></div>}
         </React.Fragment>))}
       </div>
     </div>
     {(g.st!=='pre'||true)&&<div style={{...card,padding:'11px 18px',marginBottom:16,display:'flex',flexWrap:'wrap',gap:'8px 22px',fontFamily:MONO,fontSize:12,color:T.mut,alignItems:'center'}}>
       <span style={{...ML}}>Broadcast</span>
-      {bx.tv.length>0&&<span>TV <span style={{color:T.ink}}>{bx.tv.join(' · ')}</span></span>}
+      {(()=>{const tv=(g._tv&&g._tv.length)?g._tv:bx.tv;return tv.length>0&&<span>TV <span style={{color:T.ink}}>{tv.join(' · ')}</span></span>;})()}
       {bx.stream.length>0&&<span>Stream <span style={{color:T.ink}}>{bx.stream.join(' · ')}</span></span>}
       <span>Game Center <span style={{color:T.ink}}>Live stream</span></span>
       {bx.radio&&<span>Radio <span style={{color:T.ink}}>{bx.radio}</span></span>}
@@ -496,6 +510,7 @@ function App(){
   const [hv,setHv]=useState(0); // hydration version: bumps to re-render when live data lands
   const [toast,setToast]=useState(null);
   const [loading,setLoading]=useState(false);
+  const [isLive,setIsLive]=useState(false); // true once live NHL feeds hydrate (flips the header badge)
   const [legalDoc,setLegalDoc]=useState('terms');
   const [statusF,setStatusF]=useState('all');
   const games=useMemo(()=>slate(offset),[offset,hv]);
@@ -522,7 +537,7 @@ function App(){
     apply(); window.addEventListener('hashchange',apply); return()=>window.removeEventListener('hashchange',apply);
   },[]);
   useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setPal(p=>!p);}if(e.key==='Escape')setPal(false);};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);},[]);
-  useEffect(()=>{ let stop=()=>{}; if(window.BC&&BC.hydrate){ setLoading(true); const off=BC.onError&&BC.onError(m=>setToast(m)); BC.hydrate(()=>setHv(v=>v+1)).then(live=>{ setLoading(false); if(live) stop=BC.startPolling(()=>setHv(v=>v+1)); }).catch(()=>setLoading(false)); return ()=>{stop();off&&off();}; } },[]);
+  useEffect(()=>{ let stop=()=>{}; if(window.BC&&BC.hydrate){ setLoading(true); const off=BC.onError&&BC.onError(m=>setToast(m)); BC.hydrate(()=>setHv(v=>v+1)).then(live=>{ setLoading(false); if(live){ setIsLive(true); stop=BC.startPolling(()=>setHv(v=>v+1)); } }).catch(()=>setLoading(false)); return ()=>{stop();off&&off();}; } },[]);
   const live=games.filter(g=>g.st==='live').length;
 
   let content;
@@ -567,7 +582,7 @@ function App(){
       <div style={{maxWidth:1080,margin:'0 auto',padding:'0 18px',height:58,display:'flex',alignItems:'center',gap:14}}>
         <div onClick={()=>go('highlights')} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',flexShrink:0}}><span style={{width:28,height:28,borderRadius:7,background:T.invBg,color:T.invFg,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flexShrink:0}}>H</span><span style={{fontWeight:700,whiteSpace:'nowrap'}}>The Hockey Lab</span></div>
         <a href="The Hockey Lab - Landing.html" title="Lab home" style={{color:T.faint,fontSize:17,textDecoration:'none'}}>⌂</a>
-        <span className="ed-demo" title="Projected/sample data for demo — live NHL feeds fill in on deploy" style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.08em',textTransform:'uppercase',color:T.mut,background:T.bg,border:`1px solid ${T.line2}`,borderRadius:999,padding:'3px 8px',flexShrink:0,whiteSpace:'nowrap'}}>demo data</span>
+        <span className="ed-demo" title={isLive?"Live NHL feeds connected — updating in real time":"Projected/sample data for demo — live NHL feeds fill in on deploy"} style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.08em',textTransform:'uppercase',color:isLive?'#1a8a4f':T.mut,background:T.bg,border:`1px solid ${isLive?'#1a8a4f55':T.line2}`,borderRadius:999,padding:'3px 8px',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5}}>{isLive&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:'#1a8a4f',display:'inline-block'}}/>}{isLive?'live · NHL':'demo data'}</span>
         <nav className="ed-nav" style={{display:'flex',gap:2,flex:1}}>{NAV.map(n=>{const k=NK[n];const on=route===k&&!team&&!player&&!game;return <button key={n} onClick={()=>go(k)} style={{fontFamily:'inherit',background:on?T.invBg:'none',color:on?T.invFg:T.mut,border:'none',fontWeight:600,fontSize:13.5,padding:'6px 12px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap'}}>{n}</button>;})}</nav>
         <div className="ed-spacer" style={{flex:1}}></div>
         <button onClick={toggleTheme} aria-label="Toggle theme" title="Toggle light/dark" style={{fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',width:34,height:34,borderRadius:9,background:T.paper,border:`1px solid ${T.line2}`,color:T.mut,cursor:'pointer',flexShrink:0}}>

@@ -13,7 +13,7 @@ Pages (live — the proxy exists).
 | `redesign/broadcast-data.js` | mock data (`window.BC`) — instant first paint + fallback |
 | `redesign/editorial-ext.js` | mock depth (team stats, edge, prospects, pbp…) |
 | `redesign/nhl-client.js` | **live client** `window.NHL` — one fetcher per `/api/nhl/*` endpoint + field mappers to the UI view-models |
-| `redesign/editorial-live.js` | **bridge** — `BC.hydrate()` overwrites `BC.STANDINGS` + score slates with live data and re-renders; `BC.startPolling()` re-polls today's scores every 20s |
+| `redesign/editorial-live.js` | **bridge** — `BC.hydrate()` overwrites `BC.STANDINGS`, the league player pool (`BC.allPlayers`/`BC.goalies`) and score slates with live data, then `BC.resetDerived()` recomputes everything downstream; `BC.startPolling()` re-polls today's scores every 20s |
 | `cloudflare/functions/api/nhl/[[path]].ts` | the **proxy** (edge-cached) that makes `window.NHL` resolve in production |
 
 ## Flow
@@ -21,14 +21,75 @@ Pages (live — the proxy exists).
 ```
 App mounts
   └─ BC.hydrate(reRender)
-       ├─ NHL.standings()      → /api/nhl/standings      → map → BC.STANDINGS
-       ├─ NHL.scores(-2..2)    → /api/nhl/scoreboard?date → map → live slates
+       ├─ NHL.standings()      → /api/nhl/standings       → map → BC.STANDINGS
+       ├─ NHL.skaterLeaders()  → /api/nhl/skater-leaders   → map → BC.allPlayers (in place)
+       ├─ NHL.goalieLeaders()  → /api/nhl/goalie-leaders   → map → BC.goalies (in place)
+       ├─ BC.resetDerived()    → recompute every standings/player-derived cache
+       ├─ NHL.scores(-2..2)    → /api/nhl/scoreboard?date  → map → live slates
        └─ on success: BC.LIVE=true, reRender(), startPolling()
   (any fetch throws → silently keep mock; UI never breaks)
 ```
 
-Detail views (game / player / team) can call `window.NHL.*` directly with a
-`try/catch` → mock fallback, so they upgrade to live independently.
+### Why the player-pool swap covers so much
+
+Almost the entire app derives from three core structures: `BC.STANDINGS`,
+`BC.allPlayers`, `BC.goalies`. `skaterLeaders`, `goalieLeaders`, `teamRoster`,
+`edgeLeaders`, `milestoneWatch`, `teamNews`, the playoff **seeding**, the draft
+**order**, the news wire and per-team stats are all closures/caches over those.
+So swapping the player pool in place + `BC.resetDerived()` (which clears the
+derived caches and rebuilds team stats) lights up:
+
+- **Stats, Players, Hockey IQ, Highlights** — real leaders + rosters + compares
+- **Playoffs** — bracket seeded from the live standings (top-3/div + 2 WC)
+- **Draft** — pick order from the live reverse standings + lottery
+- **Records** — live milestone watch; franchise/all-time holders stay projections
+- **News wire** — storylines reference the real player pool
+
+What stays an **editorial projection** (no always-on live feed exists): simulated
+playoff *series results* / game-by-game box scores, *all-time single-season records*
+and *trophy winners*, the franchise wins/cups table, and the *fictional news
+articles/X posts*. Player **honors graphics** on the detail page remain projections.
+
+**Now wired live (added this pass — mock-first, live-overlay via `E_useLive`):**
+
+- **Playoffs** — `NHL.playoffFull()` maps the real **series carousel**
+  (`playoff-series-carousel/{season}`, fallback `playoff-bracket/now`) into the full
+  `{east,west,final,cup}` bracket, seeded to the live standings. Rounds not yet
+  played are synthesized from the leaders of the prior round and the advancing team
+  is projected as the current series leader, so the bracket is always complete
+  (never null → no crash). Bails to the mock bracket if it can't read ≥4 series.
+- **Draft** — `NHL.draftFull()` maps live **prospect rankings**
+  (`draft/rankings/now`) into the board and overlays those names onto the
+  standings-derived pick order (order was already live; names now are too).
+- **Player EDGE tracking** — `NHL.edgeSkaterMapped/edgeGoalieMapped(id)`
+  (`edge/{skater,goalie}-detail/{id}`) scan the EDGE payload for top skating/shot
+  speed, distance, bursts, O-zone time (skaters) and high/mid/low-danger SV%
+  (goalies). Returns a **partial** overlay merged over the mock edge view, so any
+  field it can't recognize keeps its projection.
+- **All-time records** — `NHL.recordsAllTime()` (`records/skater-records`,
+  `records/goalie-records`) builds the categorized all-time leader cards. Lowest
+  confidence of the set (records.nhl.com shapes are loosely documented); bails to the
+  editorial projection if it can't recognize player+value arrays.
+
+⚠️ The EDGE and records mappers are defensive scans against internal/undocumented
+feeds — expect to tune field paths against live payloads on deploy (same caveat as
+the shot-zone heatmap). Playoffs and draft map well-structured public endpoints and
+are higher confidence.
+
+Detail views (game / player / team) can additionally call `window.NHL.*` directly
+with a `try/catch` → mock fallback, so they upgrade to live independently. The
+per-game shot map and season shot-zone heatmap already do this, and a shared
+`window.E_useLive(mock, fetchLive, deps)` hook (mock-first, live-overlay, only
+fires when `BC.LIVE`) wires the rest:
+
+- **Game Detail** — `NHL.gameLive(id)` (gamecenter `landing` + `boxscore`) overlays
+  the scoring summary, three stars, team game stats, box score by period, and
+  skater/goalie lines; `NHL.gamePbp(id)` overlays the play-by-play feed.
+- **Player Detail** — `NHL.playerCard(id)` (player `landing`) overlays real season
+  history, career totals and awards (identity + current line already come from the
+  live player pool; EDGE tracking + honors graphics remain projections).
+- **Team stats** — `NHL.teamSeasonStats()` (stats `team/summary`) hydrates real
+  PP%/PK%/FO% into `buildTS()` league-wide during `BC.hydrate()`.
 
 ## Endpoints the client covers (`window.NHL`)
 

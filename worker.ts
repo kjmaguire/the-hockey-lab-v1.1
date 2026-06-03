@@ -16,6 +16,7 @@ import {
   teamStats,
   errorJson,
   json,
+  currentSeason,
 } from './functions/api/nhl/_lib';
 
 interface Env {
@@ -57,7 +58,7 @@ async function handleNhl(url: URL): Promise<Response> {
         return proxyWeb('standings/now');
       case 'roster': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         return proxyWeb(`roster/${b}/${season}`, { gameType });
       }
@@ -66,7 +67,7 @@ async function handleNhl(url: URL): Promise<Response> {
         return proxyWeb(`roster-season/${b}`);
       case 'club-schedule': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         return proxyWeb(`club-schedule-season/${b}/${season}`);
       }
       case 'club-schedule-view': {
@@ -79,7 +80,7 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'club-stats': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         return proxyWeb(`club-stats/${b}/${season}/${gameType}`);
       }
@@ -91,7 +92,7 @@ async function handleNhl(url: URL): Promise<Response> {
         return proxyWeb(`prospects/${b}`);
       case 'team-stats': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         return teamStats(b, season, gameType);
       }
@@ -101,14 +102,14 @@ async function handleNhl(url: URL): Promise<Response> {
         if (!playerId || !kind) break;
         if (kind === 'landing') return proxyWeb(`player/${playerId}/landing`);
         if (kind === 'game-log') {
-          const season = q('season', '20242025')!;
+          const season = q('season', currentSeason())!;
           const gameType = q('gameType', '2')!;
           return proxyWeb(`player/${playerId}/game-log/${season}/${gameType}`);
         }
         break;
       }
       case 'goalie-leaders': {
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('goalie/summary', {
@@ -121,7 +122,7 @@ async function handleNhl(url: URL): Promise<Response> {
         }
       }
       case 'skater-leaders': {
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('skater/summary', {
@@ -135,7 +136,7 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'edge': {
         const kind = b;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const group = q('group', '2')!;
         if (kind === 'skater-landing') return proxyWeb(`edge/skater-landing/${season}/${group}`);
         if (kind === 'goalie-landing') return proxyWeb(`edge/goalie-landing/${season}/${group}`);
@@ -160,7 +161,7 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'edge-team': {
         const kind = b;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const group = q('group', '2')!;
         if (kind === 'skating-speed' && c) return proxyWeb(`edge/team-skating-speed-top-10/${c}/points/${season}/${group}`);
         if (kind === 'shot-location' && c) return proxyWeb(`edge/team-shot-location-top-10/${c}/all/points/${season}/${group}`);

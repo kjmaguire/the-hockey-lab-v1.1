@@ -13,6 +13,60 @@ export const STATS_API_BASE = 'https://api.nhle.com/stats/rest/en';
 export const RECORDS_API_BASE = 'https://records.nhl.com/site/api';
 export const CACHE_SECONDS = 300;
 
+// ---------------------------------------------------------------------------
+// Tiered edge-cache TTLs. A flat 5-minute cache is wrong in both directions:
+// a FINAL game's box score / play-by-play never changes again (no reason to
+// re-pull it every 5 min), while a LIVE game wants fresher data. We classify
+// each upstream URL by volatility, and for game feeds we peek at `gameState`
+// so finals are cached for a day and live games for ~20s.
+// ---------------------------------------------------------------------------
+const TTL = {
+  live: 20,      // a game in progress — refresh fast
+  slate: 30,     // today's scoreboard / date slates
+  pre: 120,      // pre-game (lineups, odds still firming)
+  medium: 300,   // leaders, rosters, club-stats, standings, player landing (default)
+  long: 3600,    // season meta
+  day: 86400,    // immutable: finals, records book, league meta, historical drafts
+};
+
+/** Normalize a payload's game state to 'live' | 'final' | 'pre' | null. */
+function gameStateOf(payload: any): 'live' | 'final' | 'pre' | null {
+  if (!payload || typeof payload !== 'object') return null;
+  // score/schedule slates carry games[].gameState — classify by the set
+  if (!payload.gameState && Array.isArray(payload.games) && payload.games.length) {
+    const states = payload.games.map((g: any) => String(g?.gameState || '').toUpperCase());
+    if (states.some((s: string) => s === 'LIVE' || s === 'CRIT')) return 'live';
+    if (states.length && states.every((s: string) => s === 'OFF' || s === 'FINAL')) return 'final';
+    return null; // mixed / upcoming
+  }
+  const st = String(payload.gameState || '').toUpperCase();
+  if (st === 'LIVE' || st === 'CRIT') return 'live';
+  if (st === 'OFF' || st === 'FINAL') return 'final';
+  if (st === 'FUT' || st === 'PRE') return 'pre';
+  return null;
+}
+
+/** Decide the edge-cache lifetime (seconds) for an upstream URL + (optional) parsed body. */
+export function ttlFor(url: string, payload?: any): number {
+  // immutable / rarely-changing reference data
+  if (url.startsWith(RECORDS_API_BASE)) return TTL.day;
+  if (/\/(meta|config|glossary|country|franchise)(\b|\/)/.test(url)) return TTL.day;
+  if (/\/season(\b|\/)/.test(url)) return TTL.long;
+  if (/\/draft\/(rankings|picks)\/\d{4}(\b|\/)/.test(url)) return TTL.day; // a specific draft year
+
+  const isNow = /\/now(\b|\/|$)/.test(url);
+  const gs = gameStateOf(payload);
+  if (gs === 'live') return TTL.live;            // always refresh a live game fast
+  if (gs === 'final' && !isNow) return TTL.day;  // a specific final game/date never changes
+  if (gs === 'pre' && !isNow) return TTL.pre;
+
+  if (/\/standings(\b|\/)/.test(url)) return TTL.medium;
+  if (isNow || /\/(score|scoreboard)(\b|\/)/.test(url)) return TTL.slate; // live-ish slates
+
+  // leaders, rosters, club-stats, prospects, player landing, schedule, edge, …
+  return TTL.medium;
+}
+
 /** Thrown when an upstream NHL endpoint fails; mapped to a 502 by the router. */
 export class UpstreamError extends Error {
   status: number;
@@ -23,12 +77,12 @@ export class UpstreamError extends Error {
 }
 
 /** JSON response with the same cache hint we store at the edge. */
-export function json(data: unknown, status = 200): Response {
+export function json(data: unknown, status = 200, maxAge = CACHE_SECONDS): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': `public, max-age=${CACHE_SECONDS}`,
+      'cache-control': `public, max-age=${maxAge}`,
     },
   });
 }
@@ -48,37 +102,67 @@ export function errorJson(message: string, status = 502, extra: Record<string, u
 export async function fetchUpstream(url: string): Promise<unknown> {
   const cache = (caches as unknown as { default: Cache }).default;
   const cacheKey = new Request(url, { method: 'GET' });
+  // Long-lived "last-known-good" copy under a sibling key, served only when the
+  // NHL API is unreachable (stale-if-error). Kept ~7 days.
+  const fallbackKey = new Request(url + (url.includes('?') ? '&' : '?') + '__fb=1', { method: 'GET' });
+  const serveFallback = async (): Promise<unknown | undefined> => {
+    const fb = await cache.match(fallbackKey);
+    return fb ? fb.json() : undefined;
+  };
 
   const hit = await cache.match(cacheKey);
   if (hit) {
     return hit.json();
   }
 
+  const baseTtl = ttlFor(url); // URL-only guess for the origin fetch hint
   let upstream: Response;
   try {
     upstream = await fetch(url, {
       headers: { accept: 'application/json' },
       // Belt-and-suspenders: also let the Cloudflare cache hold the origin body.
-      cf: { cacheTtl: CACHE_SECONDS, cacheEverything: true },
+      cf: { cacheTtl: baseTtl, cacheEverything: true },
     } as RequestInit);
   } catch {
+    // NHL unreachable → serve the last-known-good copy if we have one.
+    const stale = await serveFallback();
+    if (stale !== undefined) return stale;
     throw new UpstreamError('Unable to reach the NHL API.');
   }
 
   if (!upstream.ok) {
+    const stale = await serveFallback();
+    if (stale !== undefined) return stale;
     throw new UpstreamError('NHL API responded with an error.', 502);
   }
 
   const body = await upstream.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    // upstream returned non-JSON (e.g. an HTML error page) → prefer last-known-good
+    const stale = await serveFallback();
+    if (stale !== undefined) return stale;
+    throw new UpstreamError('NHL API returned an unexpected response.', 502);
+  }
+  // Now that we can see the payload, refine the TTL (e.g. a FINAL game → 24h).
+  const ttl = ttlFor(url, parsed);
   const stored = new Response(body, {
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': `public, max-age=${CACHE_SECONDS}`,
+      'cache-control': `public, max-age=${ttl}`,
     },
   });
-  // Store a clone; do not await the network round-trip of put() unnecessarily.
+  // Primary (tiered TTL) + long-lived fallback, both from this single fetch.
   await cache.put(cacheKey, stored.clone());
-  return JSON.parse(body);
+  await cache.put(fallbackKey, new Response(body, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=604800',
+    },
+  }));
+  return parsed;
 }
 
 /** Build an upstream URL with an optional query object. */
@@ -91,9 +175,10 @@ export function withQuery(base: string, query: Record<string, string | number | 
 
 /** Equivalent of the controller's `proxy()` helper for api-web.nhle.com. */
 export async function proxyWeb(path: string, query: Record<string, string | number | undefined> = {}): Promise<Response> {
+  const url = withQuery(`${API_BASE}/${path}`, query);
   try {
-    const data = await fetchUpstream(withQuery(`${API_BASE}/${path}`, query));
-    return json(data);
+    const data = await fetchUpstream(url);
+    return json(data, 200, ttlFor(url, data));
   } catch (e) {
     if (e instanceof UpstreamError) {
       return errorJson(e.message, 502);
@@ -306,4 +391,12 @@ export async function teamStats(teamAbbrev: string, season: string, gameType: st
   } catch {
     return errorJson('Unable to reach the NHL stats API.', 502);
   }
+}
+
+
+// NHL season id for "now" — season starts in October; treat Sept+ as the new season.
+export function currentSeason(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  return d.getMonth() >= 8 ? String(y) + String(y + 1) : String(y - 1) + String(y);
 }

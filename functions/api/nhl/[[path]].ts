@@ -15,6 +15,7 @@ import {
   teamStats,
   errorJson,
   json,
+  currentSeason,
 } from './_lib';
 
 interface Env {}
@@ -67,7 +68,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       // GET /api/nhl/roster/{teamAbbrev}
       case 'roster': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         return proxyWeb(`roster/${b}/${season}`, { gameType });
       }
@@ -80,7 +81,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       // GET /api/nhl/club-schedule/{teamAbbrev}
       case 'club-schedule': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         return proxyWeb(`club-schedule-season/${b}/${season}`);
       }
 
@@ -99,7 +100,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       // GET /api/nhl/club-stats/{teamAbbrev}
       case 'club-stats': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         return proxyWeb(`club-stats/${b}/${season}/${gameType}`);
       }
@@ -117,7 +118,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       // GET /api/nhl/team-stats/{teamAbbrev}
       case 'team-stats': {
         if (!b) break;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         return teamStats(b, season, gameType);
       }
@@ -129,7 +130,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         if (!playerId || !kind) break;
         if (kind === 'landing') return proxyWeb(`player/${playerId}/landing`);
         if (kind === 'game-log') {
-          const season = q('season', '20242025')!;
+          const season = q('season', currentSeason())!;
           const gameType = q('gameType', '2')!;
           return proxyWeb(`player/${playerId}/game-log/${season}/${gameType}`);
         }
@@ -138,7 +139,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
       // GET /api/nhl/goalie-leaders
       case 'goalie-leaders': {
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('goalie/summary', {
@@ -153,7 +154,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
       // GET /api/nhl/skater-leaders
       case 'skater-leaders': {
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('skater/summary', {
@@ -175,7 +176,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       //   edge/team-skating-speed-detail/{teamId}, etc.
       case 'edge': {
         const kind = b;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const group = q('group', '2')!;
         if (kind === 'skater-landing') {
           return proxyWeb(`edge/skater-landing/${season}/${group}`);
@@ -219,7 +220,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       // GET /api/nhl/edge/team-skating-speed/{positions}/{sortBy}
       case 'edge-team': {
         const kind = b;
-        const season = q('season', '20242025')!;
+        const season = q('season', currentSeason())!;
         const group = q('group', '2')!;
         if (kind === 'skating-speed' && c) {
           return proxyWeb(`edge/team-skating-speed-top-10/${c}/points/${season}/${group}`);
