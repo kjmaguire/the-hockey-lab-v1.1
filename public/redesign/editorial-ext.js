@@ -67,10 +67,10 @@
     // structured honors: trophies grouped w/ years + count, all-star selections, career milestones
     const TROPHY_DESC={'Vanguard':'Scoring leader','Keystone':'League MVP','Marksman':'Goal-scoring leader','Bastion':'Top defenseman','Backcheck':'Top defensive forward','Fair Play':'Sportsmanship','Newcomer':'Rookie of the year','Sentinel':'Top goaltender','Crucible':'Playoff MVP'};
     const poolT=isG?['Sentinel','Keystone','Crucible']:(p.pos==='D'?['Bastion','Keystone','Vanguard','Crucible']:['Vanguard','Keystone','Marksman','Backcheck','Fair Play','Crucible']);
-    const won={};if(star){const n=ri(r,1,3);for(let i=0;i<n;i++){const t=pick(r,poolT);(won[t]=won[t]||[]).push(2018+ri(r,0,7));}}
+    const won={};
     const trophies=Object.entries(won).map(([name,yrs])=>({name,desc:TROPHY_DESC[name]||'',years:[...new Set(yrs)].sort((a,b)=>b-a),count:[...new Set(yrs)].length}));
-    const allStar=star?ri(r,1,8):(r()<.3?ri(r,1,2):0);
-    const cup=r()<(star?.34:.16);const cupYears=cup?[2017+ri(r,0,8)]:[];
+    const allStar=0;
+    const cup=false;const cupYears=[];
     const milestones=[];
     if(!isG){if(p.g>=30)milestones.push({label:`${Math.floor((400+p.g*4)/100)*100}+ career goals`,hit:true});if(p.p>=55)milestones.push({label:`${Math.floor((600+p.p*4)/100)*100}+ career points`,hit:true});}
     else{if(p.w>=15)milestones.push({label:`${Math.floor((200+p.w*6)/50)*50}+ career wins`,hit:true});}
@@ -275,7 +275,7 @@
   // ---- team hub news feed (front-page storylines, team-driven) ----
   B._tn={};
   B.teamNews=ab=>{ if(B._tn[ab])return B._tn[ab]; const r=rng('news'+ab);
-    const rs=B.teamRoster(ab); const top=rs[0],second=rs[1]||rs[0];
+    const rs=B.teamRoster(ab); if(!rs.length){return (B._tn[ab]=[]);} const top=rs[0],second=rs[1]||rs[0];
     const gs=(B.goalies||[]).filter(x=>x.team===ab).slice().sort((a,b)=>parseFloat(b.svp)-parseFloat(a.svp)); const g1=gs[0];
     const st=B.standBy(ab); const pros=B.prospects(ab); const topPro=pros.forwards[0]||pros.defensemen[0]||pros.goalies[0];
     const gap=B.wildCardGap?B.wildCardGap(ab):null;
@@ -407,7 +407,8 @@
   B._le={};
   B.liveEdge=g=>{ if(B._le[g.id])return B._le[g.id];
     const r=rng('le'+g.id);
-    const aR=B.teamRoster(g.a),hR=B.teamRoster(g.h);
+    let aR=B.teamRoster(g.a),hR=B.teamRoster(g.h);
+    if(!aR.length)aR=[{name:'—'}]; if(!hR.length)hR=[{name:'—'}];
     const aAtt=ri(r,30,64),hAtt=ri(r,30,64);
     const oz=ri(r,40,60);
     const base={

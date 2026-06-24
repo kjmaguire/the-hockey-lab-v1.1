@@ -18,9 +18,14 @@ window.BC = (function () {
     UTA:['Hockey Club','Utah','#3aa0e0'], PHI:['Flyers','Philadelphia','#f0742a'],
     ANA:['Ducks','Anaheim','#f0863a'], CBJ:['Blue Jackets','Columbus','#2a4f86'],
   };
-  const col = a => (TEAMS[a]||[])[2] || '#888';
-  const nick = a => (TEAMS[a]||[])[0] || a;
-  const city = a => (TEAMS[a]||[])[1] || a;
+  // Normalize ANY team code (case / punctuation / alias / relocation) to the canonical
+  // tricode before lookup, so a live feed code like "ARI", "L.A", "veg" never greys out
+  // a logo/color or shows the wrong abbreviation.
+  const TEAM_ALIAS={LA:'LAK',NJ:'NJD',SJ:'SJS',TB:'TBL',CBS:'CBJ',CLB:'CBJ',VEG:'VGK',LV:'VGK',WIN:'WPG',WPJ:'WPG',MON:'MTL',NAS:'NSH',CAL:'CGY',ARI:'UTA',PHX:'UTA',UTAH:'UTA',ANH:'ANA',SEA:'SEA'};
+  const normAb=a=>{const s=String(a||'').toUpperCase().replace(/[^A-Z]/g,'');return TEAM_ALIAS[s]||s;};
+  const col = a => (TEAMS[normAb(a)]||[])[2] || '#888';
+  const nick = a => (TEAMS[normAb(a)]||[])[0] || a;
+  const city = a => (TEAMS[normAb(a)]||[])[1] || a;
   const ABBR = Object.keys(TEAMS);
 
   // seeded rng for deterministic slates
@@ -111,7 +116,7 @@ window.BC = (function () {
   ABBR.forEach(a=>{const r=rng('go'+a);goalies.push({id:a+'g',name:fullName(r),team:a,gp:ri(r,20,38),w:ri(r,12,28),l:ri(r,6,18),svp:(0.895+r()*0.035).toFixed(3).slice(1),gaa:(2.1+r()*1.1).toFixed(2),so:ri(r,0,5)});});
   const skaterLeaders=k=>[...allPlayers].sort((x,y)=>y[k]-x[k]);
   const goalieLeaders=()=>[...goalies].sort((x,y)=>y.svp.localeCompare(x.svp));
-  const teamRoster=a=>allPlayers.filter(p=>p.team===a).sort((x,y)=>y.p-x.p);
+  const teamRoster=a=>{const k=normAb(a);return allPlayers.filter(p=>p.team===k).sort((x,y)=>y.p-x.p);};
 
   const PLAYERS = Array.from({length:24},(_,i)=>{const r=rng('pl0'+i);return {name:fullName(r), team:ABBR[i%ABBR.length]};});
   return { TEAMS, col, nick, city, ABBR, slate, dateLabel, detail, PLAYERS,

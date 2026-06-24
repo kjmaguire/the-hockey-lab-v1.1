@@ -689,7 +689,12 @@ function App(){
   // hydrate will actually be attempted; resolves false the moment hydrate settles (live
   // OR mock-fallback), so preview / a failed proxy degrade to real content, never a hang.
   const [booting,setBooting]=useState(!!(window.BC&&window.BC.hydrate));
-  const curId=(window.NHL&&window.NHL._season)?String(window.NHL._season):'20252026';
+  // Stable LEAGUE-current season id: the MAX season ever observed. Derived from the
+  // active fetch season (NHL._season), but never shrinks when the user views a PAST
+  // season — otherwise the dropdown would drop the current/newer years after switching.
+  const curIdRef=React.useRef('20252026');
+  {const liveS=(window.NHL&&window.NHL._season)?String(window.NHL._season):null; if(liveS&&/^\d{8}$/.test(liveS)&&liveS>curIdRef.current)curIdRef.current=liveS;}
+  const curId=curIdRef.current;
   const SEASONS=useMemo(()=>{const top=parseInt(curId.slice(0,4),10)||2025;const a=[];for(let y=top;y>=2010;y--)a.push(`${y}${y+1}`);return a;},[curId]);
   const seasonLabel=v=>v==='cur'?`${curId.slice(0,4)}\u2013${curId.slice(6,8)}`:`${v.slice(0,4)}\u2013${v.slice(6,8)}`;
   const changeSeason=v=>{ setSeason(v); const id=v==='cur'?curId:v; if(window.BC&&BC.LIVE&&BC.hydrateSeason){ setLoading(true); BC.hydrateSeason(id,()=>{setHv(x=>x+1);setLoading(false);}); } window.scrollTo(0,0); };
