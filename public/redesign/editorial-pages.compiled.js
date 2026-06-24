@@ -271,12 +271,27 @@ function StandingsPage({
     });
   }, [curSeasonId]);
   const [season, setSeason] = uS(curSeasonId);
-  const [, forceSeason] = uS(0);
+  const [seasonRows, setSeasonRows] = uS(null);
+  const [seasonBusy, setSeasonBusy] = uS(false);
   const onSeason = e => {
     const s = e.target.value;
     setSeason(s);
-    if (window.BC && window.BC.hydrateSeason) window.BC.hydrateSeason(s, () => forceSeason(x => x + 1));
+    if (s === curSeasonId) {
+      setSeasonRows(null);
+      return;
+    }
+    setSeasonBusy(true);
+    if (window.NHL && window.NHL.standingsForSeason) {
+      window.NHL.standingsForSeason(s).then(r => {
+        setSeasonRows(r && r.length ? r : []);
+        setSeasonBusy(false);
+      }).catch(() => {
+        setSeasonRows([]);
+        setSeasonBusy(false);
+      });
+    } else setSeasonBusy(false);
   };
+  const STD = seasonRows && seasonRows.length ? seasonRows : D.STANDINGS;
   const seasSel = {
     fontFamily: MONO,
     fontSize: 12,
@@ -290,7 +305,7 @@ function StandingsPage({
   const [sortK, setSortK] = uS(null);
   const [sortDir, setSortDir] = uS('desc');
   const views = ['League', 'Wild Card', 'Atlantic', 'Metro', 'Central', 'Pacific'];
-  const baseRows = uM(() => v === 'League' ? D.STANDINGS : D.STANDINGS.filter(t => t.div === v), [v]);
+  const baseRows = uM(() => v === 'League' ? STD : STD.filter(t => t.div === v), [v, seasonRows]);
   const sval = (t, k) => k === 'strk' ? (t.strk[0] === 'W' ? 1 : t.strk[0] === 'L' ? -1 : 0) * (parseInt(t.strk.slice(1), 10) || 0) : k === 'last10' ? parseInt(t.last10, 10) || 0 : t[k];
   const rows = uM(() => {
     if (!sortK) return baseRows;
@@ -317,12 +332,12 @@ function StandingsPage({
   const wildCard = conf => {
     const byDiv = confDivs[conf].map(d => ({
       d,
-      teams: D.STANDINGS.filter(t => t.div === d).slice(0, 3)
+      teams: STD.filter(t => t.div === d).slice(0, 3)
     }));
     const top3 = new Set(byDiv.flatMap(x => x.teams.map(t => t.ab)));
     return {
       byDiv,
-      wc: D.STANDINGS.filter(t => t.conf === conf && !top3.has(t.ab))
+      wc: STD.filter(t => t.conf === conf && !top3.has(t.ab))
     };
   };
   const pstatus = uM(() => {
@@ -340,7 +355,7 @@ function StandingsPage({
       });
     });
     return s;
-  }, []);
+  }, [seasonRows]);
   const Mark = ({
     ab
   }) => {
@@ -485,11 +500,17 @@ function StandingsPage({
       value: season,
       onChange: onSeason,
       style: seasSel,
-      title: "Season"
+      title: "Season (this page only)"
     }, seasonList.map(s => React.createElement("option", {
       key: s,
       value: s
-    }, s.slice(0, 4), "-", s.slice(6, 8)))), views.map(x => React.createElement(Pill, {
+    }, s.slice(0, 4), "-", s.slice(6, 8)))), seasonBusy && React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 10,
+        color: T.faint
+      }
+    }, "loading\u2026"), views.map(x => React.createElement(Pill, {
       key: x,
       on: v === x,
       onClick: () => setV(x)
@@ -715,7 +736,7 @@ function StandingsPage({
       gap: 7
     }
   }, React.createElement(Mark, {
-    ab: D.STANDINGS[0].ab
+    ab: STD[0].ab
   }), "clinched playoff spot (division top 3)"), React.createElement("span", {
     style: {
       display: 'inline-flex',
@@ -1527,6 +1548,11 @@ function TeamDetailPage({
   const [tab, setTab] = uS('Hub');
   const t = D.standBy(ab);
   const gap = D.wildCardGap(ab);
+  const _sid = window.NHL && window.NHL._season ? String(window.NHL._season) : window.BC && window.BC._seasonId || '';
+  const _yr = _sid.length === 8 ? _sid.slice(4, 8) : '';
+  const _titles = D.teamTitles ? D.teamTitles(ab) : null;
+  const reigning = !!(_yr && _titles && _titles.stanleyCups && _titles.stanleyCups.length && String(_titles.stanleyCups[0]) === _yr);
+  const _gold = T.mode === 'dark' ? '#cda85a' : '#9a7c2a';
   const roster = window.E_useLive(D.teamRoster(ab), () => new Promise(res => {
     window.BC.ensureRoster(ab, () => res(window.BC.teamRoster(ab)));
   }), [ab]);
@@ -1649,7 +1675,7 @@ function TeamDetailPage({
   }, React.createElement("div", {
     style: {
       height: 5,
-      background: c2(ab)
+      background: reigning ? 'linear-gradient(90deg,#caa24e,#f0dd9c,#caa24e)' : c2(ab)
     }
   }), React.createElement("div", {
     style: {
@@ -1683,7 +1709,22 @@ function TeamDetailPage({
       color: T.mut,
       marginTop: 3
     }
-  }, t.div, " division \xB7 ", t.conf === 'East' ? 'eastern' : 'western', " conference"))), gap && React.createElement("div", {
+  }, t.div, " division \xB7 ", t.conf === 'East' ? 'eastern' : 'western', " conference"), reigning && React.createElement("div", {
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 8,
+      fontFamily: MONO,
+      fontSize: 10.5,
+      letterSpacing: '.04em',
+      color: _gold,
+      background: T.mode === 'dark' ? 'rgba(202,162,78,.14)' : 'rgba(202,162,78,.12)',
+      border: `1px solid ${T.mode === 'dark' ? 'rgba(202,162,78,.35)' : '#e8dcb4'}`,
+      borderRadius: 999,
+      padding: '3px 10px'
+    }
+  }, React.createElement("span", null, "\uD83C\uDFC6"), _yr, " Stanley Cup Champions"))), gap && React.createElement("div", {
     style: {
       border: `1px solid ${T.line2}`,
       borderRadius: 11,
@@ -1879,10 +1920,27 @@ function TeamDetailPage({
       emptyMsg: sched.rec && sched.rec.length ? 'Season complete' : 'None scheduled'
     })), React.createElement("div", {
       style: {
-        ...ML,
-        marginBottom: 10
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 10,
+        flexWrap: 'wrap'
       }
-    }, ct(ab), " headlines"), React.createElement("div", {
+    }, React.createElement("span", {
+      style: ML
+    }, ct(ab), " headlines"), React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 9,
+        letterSpacing: '.06em',
+        textTransform: 'uppercase',
+        color: '#b5762a',
+        border: '1px solid rgba(181,118,42,.35)',
+        borderRadius: 5,
+        padding: '2px 6px'
+      },
+      title: "Generated narrative from live standings & stats \u2014 not reporting"
+    }, "Editorial")), React.createElement("div", {
       style: {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))',
@@ -2696,7 +2754,14 @@ function PlayerDetailPage({
       fontSize: 11,
       color: T.faint
     }
-  }, "Tracked seasons \xB7 ", (edge.seasons || []).join('  ·  ')), isG ? React.createElement("div", {
+  }, "Tracked seasons \xB7 ", (edge.seasons || []).join('  ·  ')), React.createElement("div", {
+    style: {
+      marginTop: 6,
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.faint
+    }
+  }, "Live NHL EDGE tracking in-season \xB7 projected estimates when tracking isn't published."), isG ? React.createElement("div", {
     style: {
       marginTop: 16
     }
@@ -3097,7 +3162,7 @@ function PlayerDetailPage({
       fontSize: 11,
       fontWeight: 600
     }
-  }, tm.num), React.createElement("span", {
+  }, tm.num || tm.pos), React.createElement("span", {
     style: {
       flex: 1,
       fontSize: 13.5,
@@ -5144,10 +5209,21 @@ function HockeyIQPage({
     className: "g2"
   }, React.createElement(SkSpot, null), React.createElement(GoSpot, null))), iqTab === 'Skaters' && React.createElement("div", null, React.createElement("div", {
     style: {
-      ...ML,
-      marginBottom: 11
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: 10,
+      marginBottom: 11,
+      flexWrap: 'wrap'
     }
-  }, "Skater tracking leaders"), React.createElement("div", {
+  }, React.createElement("span", {
+    style: ML
+  }, "Skater tracking leaders"), React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.faint
+    }
+  }, "NHL EDGE \xB7 live in-season, projected otherwise")), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))',
@@ -5245,10 +5321,21 @@ function HockeyIQPage({
     }
   }, String(g.hd).slice(1)))))), React.createElement(GoCompare, null)), iqTab === 'Teams' && React.createElement("div", null, React.createElement("div", {
     style: {
-      ...ML,
-      marginBottom: 11
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: 10,
+      margin: '22px 0 11px',
+      flexWrap: 'wrap'
     }
-  }, "Team tracking leaders"), React.createElement(EdgeTeams, null), React.createElement("div", {
+  }, React.createElement("span", {
+    style: ML
+  }, "Team tracking leaders"), React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.faint
+    }
+  }, "NHL EDGE \xB7 live in-season, projected otherwise")), React.createElement(EdgeTeams, null), React.createElement("div", {
     style: {
       ...ML,
       margin: '22px 0 11px'
@@ -5380,7 +5467,8 @@ function HockeyIQPage({
           height: 6,
           borderRadius: 3,
           background: T.bg,
-          overflow: 'hidden'
+          overflow: 'hidden',
+          display: 'flex'
         }
       }, React.createElement("div", {
         style: {
@@ -7715,30 +7803,153 @@ function PlayoffsPage({
       on: pview === k,
       onClick: () => choosePview(k)
     }, l)))
-  }), React.createElement("div", {
-    style: {
-      ...card,
-      padding: '18px 20px',
-      marginBottom: 18,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 16,
-      background: `linear-gradient(110deg, ${c2(b.cup.ab)}12, transparent)`
+  }), (() => {
+    const decided = b.final && (b.final.hiW >= 4 || b.final.loW >= 4);
+    const champ = b.cup.ab;
+    const opp = decided ? b.final.hi.ab === champ ? b.final.lo : b.final.hi : null;
+    const champW = decided ? Math.max(b.final.hiW, b.final.loW) : 0,
+      oppW = decided ? Math.min(b.final.hiW, b.final.loW) : 0;
+    const sid = window.NHL && window.NHL._season ? String(window.NHL._season) : window.BC && window.BC._seasonId || '';
+    const yr = sid.length === 8 ? sid.slice(4, 8) : '';
+    const gold = T.mode === 'dark' ? '#cda85a' : '#9a7c2a';
+    if (decided) {
+      const titles = (D.teamTitles ? D.teamTitles(champ) : {
+        stanleyCups: []
+      }) || {
+        stanleyCups: []
+      };
+      const prevCups = (titles.stanleyCups || []).filter(y => String(y) !== String(yr));
+      const tro = D.recordTrophiesList ? D.recordTrophiesList() : [];
+      const cs = tro.find(t => /Conn Smythe/i.test(t.name));
+      const smythe = cs && String(cs.year) === String(yr) ? cs.winner : null;
+      const chip = {
+        fontFamily: MONO,
+        fontSize: 10.5,
+        letterSpacing: '.04em',
+        color: gold,
+        background: T.mode === 'dark' ? 'rgba(202,162,78,.14)' : 'rgba(202,162,78,.12)',
+        border: `1px solid ${T.mode === 'dark' ? 'rgba(202,162,78,.35)' : '#e8dcb4'}`,
+        borderRadius: 999,
+        padding: '3px 9px'
+      };
+      return React.createElement("div", {
+        style: {
+          ...card,
+          padding: '20px 22px',
+          marginBottom: 18,
+          position: 'relative',
+          overflow: 'hidden',
+          background: `linear-gradient(110deg, ${c2(champ)}22, ${T.mode === 'dark' ? 'rgba(202,162,78,.12)' : 'rgba(240,221,156,.4)'} 55%, transparent)`,
+          border: `1px solid ${T.mode === 'dark' ? 'rgba(202,162,78,.42)' : '#e8dcb4'}`
+        }
+      }, React.createElement("div", {
+        style: {
+          height: 3,
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          background: 'linear-gradient(90deg,#caa24e,#f0dd9c,#caa24e)',
+          zIndex: 2
+        }
+      }), React.createElement("div", {
+        className: "champ-shine",
+        style: {
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: '-50%',
+          width: '45%',
+          background: 'linear-gradient(105deg,transparent,rgba(255,255,255,.4),transparent)',
+          pointerEvents: 'none',
+          zIndex: 1
+        }
+      }), React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          position: 'relative',
+          zIndex: 2
+        }
+      }, React.createElement(Badge, {
+        ab: champ,
+        size: 52
+      }), React.createElement("div", {
+        style: {
+          flex: 1,
+          minWidth: 0
+        }
+      }, React.createElement("div", {
+        style: {
+          ...ML,
+          color: gold,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 7
+        }
+      }, React.createElement("span", {
+        style: {
+          fontSize: 14
+        }
+      }, "\uD83C\uDFC6"), yr ? `${yr} ` : '', "Stanley Cup Champions"), React.createElement("div", {
+        style: {
+          fontFamily: SERIF,
+          fontSize: 27,
+          fontStyle: 'italic',
+          color: T.ink,
+          marginTop: 3
+        }
+      }, ct(champ), " ", nk(champ)), opp && React.createElement("div", {
+        style: {
+          fontFamily: MONO,
+          fontSize: 11.5,
+          color: T.mut,
+          marginTop: 4
+        }
+      }, "defeated ", ct(opp.ab), " ", nk(opp.ab), " ", champW, "\u2013", oppW, " in the Final"), React.createElement("div", {
+        style: {
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          marginTop: 10,
+          alignItems: 'center'
+        }
+      }, smythe && React.createElement("span", {
+        style: chip
+      }, "Conn Smythe \xB7 ", smythe), titles.stanleyCups.some(y => String(y) === String(yr)) && React.createElement("span", {
+        style: chip
+      }, "Cup #", titles.stanleyCups.length, " in franchise history"), prevCups.length > 0 ? React.createElement("span", {
+        style: chip
+      }, "Previous \xB7 ", prevCups.slice(0, 6).join(' · '), prevCups.length > 6 ? ' …' : '') : React.createElement("span", {
+        style: chip
+      }, "First Stanley Cup in franchise history")))), React.createElement("style", null, `@keyframes champShine{0%{left:-50%}60%,100%{left:120%}}@media(prefers-reduced-motion:no-preference){.champ-shine{animation:champShine 5s ease-in-out infinite}}`));
     }
-  }, React.createElement(Badge, {
-    ab: b.cup.ab,
-    size: 44
-  }), React.createElement("div", null, React.createElement("div", {
-    style: ML
-  }, "Projected Cup champion"), React.createElement("div", {
-    style: {
-      fontFamily: SERIF,
-      fontSize: 24,
-      fontStyle: 'italic',
-      color: T.ink,
-      marginTop: 2
-    }
-  }, ct(b.cup.ab), " ", nk(b.cup.ab)))), pview === 'bracket' && React.createElement("div", {
+    return React.createElement("div", {
+      style: {
+        ...card,
+        padding: '18px 20px',
+        marginBottom: 18,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        background: `linear-gradient(110deg, ${c2(champ)}12, transparent)`
+      }
+    }, React.createElement(Badge, {
+      ab: champ,
+      size: 44
+    }), React.createElement("div", null, React.createElement("div", {
+      style: ML
+    }, "Projected Cup champion"), React.createElement("div", {
+      style: {
+        fontFamily: SERIF,
+        fontSize: 24,
+        fontStyle: 'italic',
+        color: T.ink,
+        marginTop: 2
+      }
+    }, ct(champ), " ", nk(champ))));
+  })(), pview === 'bracket' && React.createElement("div", {
     style: {
       ...card,
       padding: '18px 14px 22px',
@@ -9951,10 +10162,27 @@ function HighlightsPage({
     }
   }, "no games"))), React.createElement("div", {
     style: {
-      ...ML,
-      marginBottom: 10
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 10,
+      flexWrap: 'wrap'
     }
-  }, "Storylines \xB7 what changed today"), React.createElement("div", {
+  }, React.createElement("span", {
+    style: ML
+  }, "Storylines \xB7 what changed today"), React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 9,
+      letterSpacing: '.06em',
+      textTransform: 'uppercase',
+      color: '#b5762a',
+      border: '1px solid rgba(181,118,42,.35)',
+      borderRadius: 5,
+      padding: '2px 6px'
+    },
+    title: "Generated narrative from live standings & stats \u2014 not reporting"
+  }, "Editorial")), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))',

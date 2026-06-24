@@ -4185,7 +4185,7 @@ function App() {
   const curIdRef = React.useRef(null);
   const _liveS = window.NHL && window.NHL._season ? String(window.NHL._season) : null;
   if (season === 'cur' && _liveS && /^\d{8}$/.test(_liveS)) curIdRef.current = _liveS;
-  const curId = curIdRef.current || _liveS || '20242025';
+  const curId = curIdRef.current || _liveS || '20252026';
   const SEASONS = useMemo(() => {
     const top = parseInt(curId.slice(0, 4), 10) || 2025;
     const a = [];
@@ -4723,7 +4723,7 @@ function App() {
   }), isLive ? 'live · NHL' : 'demo data'), React.createElement(PriorityNav, {
     active: !team && !player && !game ? route : null,
     onGo: go
-  }), React.createElement("select", {
+  }), route !== 'standings' && React.createElement("select", {
     value: season,
     onChange: e => changeSeason(e.target.value),
     "aria-label": "Season",
@@ -4744,7 +4744,7 @@ function App() {
     }
   }, React.createElement("option", {
     value: "cur"
-  }, seasonLabel('cur'), " \xB7 Current"), SEASONS.slice(1).map(s => React.createElement("option", {
+  }, seasonLabel('cur')), SEASONS.slice(1).map(s => React.createElement("option", {
     key: s,
     value: s
   }, seasonLabel(s)))), React.createElement("button", {
@@ -5016,7 +5016,7 @@ function App() {
     }
   }, React.createElement("option", {
     value: "cur"
-  }, seasonLabel('cur'), " \xB7 Current"), SEASONS.slice(1).map(s => React.createElement("option", {
+  }, seasonLabel('cur')), SEASONS.slice(1).map(s => React.createElement("option", {
     key: s,
     value: s
   }, seasonLabel(s))))), React.createElement("button", {

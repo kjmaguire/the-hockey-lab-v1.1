@@ -56,24 +56,33 @@ function StandingsPage({onTeam}){
   const curSeasonId=(window.NHL&&window.NHL._season)?String(window.NHL._season):((window.BC&&window.BC._seasonId)||'20252026');
   const seasonList=uM(()=>{const sy=+String(curSeasonId).slice(0,4);return Array.from({length:6},(_,i)=>{const a=sy-i;return String(a)+String(a+1);});},[curSeasonId]);
   const [season,setSeason]=uS(curSeasonId);
-  const [,forceSeason]=uS(0);
-  const onSeason=e=>{const s=e.target.value;setSeason(s);if(window.BC&&window.BC.hydrateSeason)window.BC.hydrateSeason(s,()=>forceSeason(x=>x+1));};
+  // PAGE-LOCAL season switch: fetch standings for the chosen season into local state only.
+  // Never calls the global hydrateSeason, so changing the year here affects THIS page alone
+  // (the rest of the app stays on the current season) and the dropdown never gets stuck.
+  const [seasonRows,setSeasonRows]=uS(null); const [seasonBusy,setSeasonBusy]=uS(false);
+  const onSeason=e=>{const s=e.target.value;setSeason(s);
+    if(s===curSeasonId){setSeasonRows(null);return;}
+    setSeasonBusy(true);
+    if(window.NHL&&window.NHL.standingsForSeason){window.NHL.standingsForSeason(s).then(r=>{setSeasonRows(r&&r.length?r:[]);setSeasonBusy(false);}).catch(()=>{setSeasonRows([]);setSeasonBusy(false);});}
+    else setSeasonBusy(false);
+  };
+  const STD=(seasonRows&&seasonRows.length)?seasonRows:D.STANDINGS;
   const seasSel={fontFamily:MONO,fontSize:12,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:8,padding:'6px 9px',color:T.ink,cursor:'pointer'};
   const [sortK,setSortK]=uS(null);const [sortDir,setSortDir]=uS('desc');
   const views=['League','Wild Card','Atlantic','Metro','Central','Pacific'];
-  const baseRows=uM(()=>v==='League'?D.STANDINGS:D.STANDINGS.filter(t=>t.div===v),[v]);
+  const baseRows=uM(()=>v==='League'?STD:STD.filter(t=>t.div===v),[v,seasonRows]);
   const sval=(t,k)=>k==='strk'?(t.strk[0]==='W'?1:t.strk[0]==='L'?-1:0)*(parseInt(t.strk.slice(1),10)||0):k==='last10'?(parseInt(t.last10,10)||0):t[k];
   const rows=uM(()=>{if(!sortK)return baseRows;const r=[...baseRows].sort((a,b)=>{const x=sval(a,sortK),y=sval(b,sortK);return sortDir==='desc'?y-x:x-y;});return r;},[baseRows,sortK,sortDir]);
   const sortBy=k=>{if(sortK===k){setSortDir(d=>d==='desc'?'asc':'desc');}else{setSortK(k);setSortDir(k==='l'||k==='ga'?'asc':'desc');}};
   const cut=v==='League'?16:8;
   const confDivs={East:['Atlantic','Metro'],West:['Central','Pacific']};
   const wildCard=conf=>{
-    const byDiv=confDivs[conf].map(d=>({d,teams:D.STANDINGS.filter(t=>t.div===d).slice(0,3)}));
+    const byDiv=confDivs[conf].map(d=>({d,teams:STD.filter(t=>t.div===d).slice(0,3)}));
     const top3=new Set(byDiv.flatMap(x=>x.teams.map(t=>t.ab)));
-    return {byDiv,wc:D.STANDINGS.filter(t=>t.conf===conf&&!top3.has(t.ab))};
+    return {byDiv,wc:STD.filter(t=>t.conf===conf&&!top3.has(t.ab))};
   };
   // playoff status per team: 'clinch' = division top 3, 'wc' = one of two wild-card spots
-  const pstatus=uM(()=>{const s={};['East','West'].forEach(conf=>{const{byDiv,wc}=wildCard(conf);byDiv.forEach(x=>x.teams.forEach(t=>{s[t.ab]='clinch';}));wc.slice(0,2).forEach(t=>{s[t.ab]='wc';});});return s;},[]);
+  const pstatus=uM(()=>{const s={};['East','West'].forEach(conf=>{const{byDiv,wc}=wildCard(conf);byDiv.forEach(x=>x.teams.forEach(t=>{s[t.ab]='clinch';}));wc.slice(0,2).forEach(t=>{s[t.ab]='wc';});});return s;},[seasonRows]);
   const Mark=({ab})=>{const st=pstatus[ab];if(!st)return null;
     if(st==='clinch')return <span title="Clinched playoff position — division top 3" style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:17,height:17,borderRadius:5,background:T.posBg,flexShrink:0}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.posFg} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>;
     return <span title="Wild card spot" style={{fontFamily:MONO,fontSize:9,fontWeight:700,letterSpacing:'.04em',color:T.goldFg,background:T.goldBg,border:`1px solid ${T.goldLine}`,borderRadius:5,padding:'1px 4px',flexShrink:0}}>WC</span>;};
@@ -87,7 +96,7 @@ function StandingsPage({onTeam}){
     <div style={{padding:'11px 14px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}><span style={ML}>{label}</span>{sub&&<span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>{sub}</span>}</div>
     {children}</div>;
   return(<div>
-    <PageHead k="Standings" t={v==='Wild Card'?'Wild Card':'League'} serif={v==='Wild Card'?'race':'table'} right={<div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}><select value={season} onChange={onSeason} style={seasSel} title="Season">{seasonList.map(s=><option key={s} value={s}>{s.slice(0,4)}-{s.slice(6,8)}</option>)}</select>{views.map(x=><Pill key={x} on={v===x} onClick={()=>setV(x)}>{x}</Pill>)}</div>}/>
+    <PageHead k="Standings" t={v==='Wild Card'?'Wild Card':'League'} serif={v==='Wild Card'?'race':'table'} right={<div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}><select value={season} onChange={onSeason} style={seasSel} title="Season (this page only)">{seasonList.map(s=><option key={s} value={s}>{s.slice(0,4)}-{s.slice(6,8)}</option>)}</select>{seasonBusy&&<span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>loading…</span>}{views.map(x=><Pill key={x} on={v===x} onClick={()=>setV(x)}>{x}</Pill>)}</div>}/>
     {v==='Wild Card'?
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}} className="g2">
         {['East','West'].map(conf=>{const{byDiv,wc}=wildCard(conf);return(<div key={conf} style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -119,7 +128,7 @@ function StandingsPage({onTeam}){
       </table></div>
     </div>
     {v==='League'&&<div style={{display:'flex',gap:18,marginTop:12,fontFamily:MONO,fontSize:11,color:T.mut,flexWrap:'wrap'}}>
-      <span style={{display:'inline-flex',alignItems:'center',gap:7}}><Mark ab={D.STANDINGS[0].ab}/>clinched playoff spot (division top 3)</span>
+      <span style={{display:'inline-flex',alignItems:'center',gap:7}}><Mark ab={STD[0].ab}/>clinched playoff spot (division top 3)</span>
       <span style={{display:'inline-flex',alignItems:'center',gap:7}}><span style={{fontFamily:MONO,fontSize:9,fontWeight:700,color:T.goldFg,background:T.goldBg,border:`1px solid ${T.goldLine}`,borderRadius:5,padding:'1px 4px'}}>WC</span>wild card</span>
     </div>}
     </>}
@@ -234,6 +243,12 @@ function MiniGame({g,onOpen}){const aw=g.st.startsWith('final')&&g.as>g.hs,hw=g.
 function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const [tab,setTab]=uS('Hub');
   const t=D.standBy(ab); const gap=D.wildCardGap(ab);
+  // reigning Stanley Cup champion = the franchise whose most recent Cup year is THIS season's end year
+  const _sid=(window.NHL&&window.NHL._season)?String(window.NHL._season):((window.BC&&window.BC._seasonId)||'');
+  const _yr=_sid.length===8?_sid.slice(4,8):'';
+  const _titles=D.teamTitles?D.teamTitles(ab):null;
+  const reigning=!!(_yr&&_titles&&_titles.stanleyCups&&_titles.stanleyCups.length&&String(_titles.stanleyCups[0])===_yr);
+  const _gold=T.mode==='dark'?'#cda85a':'#9a7c2a';
   // overlay the real full club roster (official roster endpoint) when deployed
   const roster=window.E_useLive(D.teamRoster(ab),()=>new Promise(res=>{window.BC.ensureRoster(ab,()=>res(window.BC.teamRoster(ab)));}),[ab]);
   const schedMock=uM(()=>D.teamSchedule(ab),[ab]);
@@ -249,10 +264,10 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   return(<div>
     <button onClick={onBack} className="el" style={{background:'none',border:'none',color:T.mut,cursor:'pointer',fontFamily:MONO,fontSize:12,padding:'0 0 18px'}}>← back to teams</button>
     <div style={{...card,padding:0,overflow:'hidden',marginBottom:16}}>
-      <div style={{height:5,background:c2(ab)}}/>
+      <div style={{height:5,background:reigning?'linear-gradient(90deg,#caa24e,#f0dd9c,#caa24e)':c2(ab)}}/>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,padding:'24px',flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:16}}><Badge ab={ab} size={56}/>
-          <div><h1 style={{fontSize:30,fontWeight:600,letterSpacing:'-.02em',color:T.ink}}>{ct(ab)} {nk(ab)}</h1><div style={{fontFamily:MONO,fontSize:12,color:T.mut,marginTop:3}}>{t.div} division · {t.conf==='East'?'eastern':'western'} conference</div></div></div>
+          <div><h1 style={{fontSize:30,fontWeight:600,letterSpacing:'-.02em',color:T.ink}}>{ct(ab)} {nk(ab)}</h1><div style={{fontFamily:MONO,fontSize:12,color:T.mut,marginTop:3}}>{t.div} division · {t.conf==='East'?'eastern':'western'} conference</div>{reigning&&<div style={{display:'inline-flex',alignItems:'center',gap:6,marginTop:8,fontFamily:MONO,fontSize:10.5,letterSpacing:'.04em',color:_gold,background:T.mode==='dark'?'rgba(202,162,78,.14)':'rgba(202,162,78,.12)',border:`1px solid ${T.mode==='dark'?'rgba(202,162,78,.35)':'#e8dcb4'}`,borderRadius:999,padding:'3px 10px'}}><span>🏆</span>{_yr} Stanley Cup Champions</div>}</div></div>
         {gap&&<div style={{border:`1px solid ${T.line2}`,borderRadius:11,padding:'10px 14px'}}><div style={ML}>Wild-card gap</div><div style={{fontSize:17,fontWeight:700,color:gap.inField?'#1a8a4f':T.red}}>{gap.gap>=0?'+':''}{gap.gap} <span style={{fontFamily:MONO,fontSize:11,fontWeight:400,color:T.mut}}>{gap.inField?'in field':'outside'}</span></div></div>}
       </div>
     </div>
@@ -287,7 +302,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}} className="g2">
           <GameHero label="Last game" g={sched.rec[0]}/><GameHero label="Next game" g={sched.up[0]} emptyMsg={(sched.rec&&sched.rec.length)?'Season complete':'None scheduled'}/>
         </div>
-        <div style={{...ML,marginBottom:10}}>{ct(ab)} headlines</div>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}><span style={ML}>{ct(ab)} headlines</span><span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.06em',textTransform:'uppercase',color:'#b5762a',border:'1px solid rgba(181,118,42,.35)',borderRadius:5,padding:'2px 6px'}} title="Generated narrative from live standings & stats — not reporting">Editorial</span></div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:14,marginBottom:18}}>
           {news.map((c,i)=><NewsCard key={i} c={c}/>)}
         </div>
@@ -427,6 +442,7 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
     <div style={{...card,padding:20,marginBottom:16}}>
       <Eyebrow>NHL Edge · tracking detail</Eyebrow>
       {(edge.seasons||[]).length>0&&<div style={{marginTop:10,fontFamily:MONO,fontSize:11,color:T.faint}}>Tracked seasons · {(edge.seasons||[]).join('  ·  ')}</div>}
+      <div style={{marginTop:6,fontFamily:MONO,fontSize:10,color:T.faint}}>Live NHL EDGE tracking in-season · projected estimates when tracking isn't published.</div>
       {isG?(<div style={{marginTop:16}}><div style={ML}>Save quality by danger</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:12,marginTop:10}}>{(edge.saveQ||[]).map(([l,v,pc,avg,sh])=><div key={l} style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={ML}>{l}</div><div style={{fontSize:19,fontWeight:600,margin:'5px 0'}}>{v}</div><div style={{fontFamily:MONO,fontSize:11,color:T.faint}}>pct {pc} · avg {avg} · {sh} shots</div></div>)}</div></div>):(
         <div style={{marginTop:16}}><div style={ML}>Speed + distance</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginTop:10}}>{(edge.speed||[]).map(([l,v,pc,avg])=><div key={l} style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={ML}>{l}</div><div style={{fontSize:18,fontWeight:600,margin:'5px 0'}}>{v}</div><div style={{fontFamily:MONO,fontSize:11,color:T.faint}}>pct {pc} · league avg {avg}</div></div>)}</div>
         <div style={{...ML,marginTop:16}}>Zone time</div><div style={{marginTop:10}}>{(edge.zones||[]).map(([z,pct])=><div key={z} style={{display:'flex',alignItems:'center',gap:12,marginBottom:8}}><span style={{width:90,fontSize:13,color:T.mut}}>{z}</span><div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:c2(p.team)}}/></div><span style={{width:44,textAlign:'right',fontWeight:600,fontFamily:MONO,fontSize:12}}>{pct}%</span></div>)}</div></div>
@@ -457,7 +473,7 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
     {/* awards */}
     {ex.awards.length>0&&<Sec k="Awards"><div style={{display:'flex',flexWrap:'wrap',gap:8,padding:'14px 18px'}}>{ex.awards.map((a,i)=><span key={i} style={{fontFamily:MONO,fontSize:12,padding:'5px 11px',borderRadius:999,background:'#fdf6e6',color:'#9a6b1a',border:'1px solid #f0e2c0'}}>{a.name} · {a.yr}</span>)}</div></Sec>}
     {/* teammates */}
-    <Sec k="Current teammates"><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))'}}>{ex.teammates.map((tm,i)=><div key={tm.id} onClick={()=>onPlayer&&onPlayer(tm)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'10px 18px',borderTop:`1px solid ${T.line}`,cursor:'pointer'}}><span style={{width:26,height:26,borderRadius:7,background:c2(tm.team),color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:11,fontWeight:600}}>{tm.num}</span><span style={{flex:1,fontSize:13.5,color:T.ink}}>{tm.name}</span><span style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{tm.pos} · {tm.p}P</span></div>)}</div></Sec>
+    <Sec k="Current teammates"><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))'}}>{ex.teammates.map((tm,i)=><div key={tm.id} onClick={()=>onPlayer&&onPlayer(tm)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'10px 18px',borderTop:`1px solid ${T.line}`,cursor:'pointer'}}><span style={{width:26,height:26,borderRadius:7,background:c2(tm.team),color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:11,fontWeight:600}}>{tm.num||tm.pos}</span><span style={{flex:1,fontSize:13.5,color:T.ink}}>{tm.name}</span><span style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{tm.pos} · {tm.p}P</span></div>)}</div></Sec>
     {/* game log */}
     {/* game log — full season w/ trend */}
     {(()=>{const slog=D.seasonLog(p);const pts=slog.map(r=>isG?(parseFloat(r.svp)||0):r.p);
@@ -802,7 +818,7 @@ function HockeyIQPage({onPlayer,onTeam}){
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}} className="g2"><SkSpot/><GoSpot/></div>
     </div>}
     {iqTab==='Skaters'&&<div>
-      <div style={{...ML,marginBottom:11}}>Skater tracking leaders</div>
+      <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:11,flexWrap:'wrap'}}><span style={ML}>Skater tracking leaders</span><span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>NHL EDGE · live in-season, projected otherwise</span></div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14,marginBottom:16}}>
         <EdgeCard title="Top skating speed" metric="top" unit=" mph"/><EdgeCard title="22+ mph bursts" metric="b22" unit=""/><EdgeCard title="Max shot speed" metric="shot" unit=" mph"/><EdgeCard title="O-zone time" metric="oz" unit="%"/>
       </div>
@@ -823,7 +839,7 @@ function HockeyIQPage({onPlayer,onTeam}){
       <GoCompare/>
     </div>}
     {iqTab==='Teams'&&<div>
-      <div style={{...ML,marginBottom:11}}>Team tracking leaders</div>
+      <div style={{display:'flex',alignItems:'baseline',gap:10,margin:'22px 0 11px',flexWrap:'wrap'}}><span style={ML}>Team tracking leaders</span><span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>NHL EDGE · live in-season, projected otherwise</span></div>
       <EdgeTeams/>
       <div style={{...ML,margin:'22px 0 11px'}}>Team head-to-head</div>
       {(()=>{const Row=({r})=>{const an=r.a,bn=r.b;const aw=r.low?an<=bn:an>=bn;const tot=(Math.abs(an)+Math.abs(bn))||1;const ap=Math.round(Math.abs(an)/tot*100);
@@ -839,7 +855,7 @@ function HockeyIQPage({onPlayer,onTeam}){
             </div>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden',display:'flex',justifyContent:'flex-end'}}><div style={{width:`${row.aPct}%`,background:c2(tcA),opacity:aw?1:.45}}/></div>
-              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{width:`${row.bPct}%`,background:c2(tcB),opacity:!aw?1:.45}}/></div>
+              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden',display:'flex'}}><div style={{width:`${row.bPct}%`,background:c2(tcB),opacity:!aw?1:.45}}/></div>
             </div>
           </div>);};
         return(<div style={{...card,overflow:'hidden',marginBottom:16}}>
@@ -1195,11 +1211,51 @@ function PlayoffsPage({onTeam}){
   };
   return(<div>
     <PageHead k="Playoffs" t="Stanley Cup" serif="bracket" right={<div style={{display:'flex',gap:6}}>{[['bracket','Bracket'],['rink','On the rink']].map(([k,l])=><Pill key={k} on={pview===k} onClick={()=>choosePview(k)}>{l}</Pill>)}</div>}/>
-    {/* champion banner */}
-    <div style={{...card,padding:'18px 20px',marginBottom:18,display:'flex',alignItems:'center',gap:16,background:`linear-gradient(110deg, ${c2(b.cup.ab)}12, transparent)`}}>
-      <Badge ab={b.cup.ab} size={44}/>
-      <div><div style={ML}>Projected Cup champion</div><div style={{fontFamily:SERIF,fontSize:24,fontStyle:'italic',color:T.ink,marginTop:2}}>{ct(b.cup.ab)} {nk(b.cup.ab)}</div></div>
-    </div>
+    {/* champion banner — celebratory once the Cup Final is decided (a team reaches 4 wins),
+        otherwise the in-progress projection */}
+    {(()=>{
+      const decided=b.final&&(b.final.hiW>=4||b.final.loW>=4);
+      const champ=b.cup.ab;
+      const opp=decided?(b.final.hi.ab===champ?b.final.lo:b.final.hi):null;
+      const champW=decided?Math.max(b.final.hiW,b.final.loW):0, oppW=decided?Math.min(b.final.hiW,b.final.loW):0;
+      const sid=(window.NHL&&window.NHL._season)?String(window.NHL._season):((window.BC&&window.BC._seasonId)||'');
+      const yr=sid.length===8?sid.slice(4,8):'';
+      const gold=T.mode==='dark'?'#cda85a':'#9a7c2a';
+      if(decided){
+        const titles=(D.teamTitles?D.teamTitles(champ):{stanleyCups:[]})||{stanleyCups:[]};
+        const prevCups=(titles.stanleyCups||[]).filter(y=>String(y)!==String(yr));
+        const tro=D.recordTrophiesList?D.recordTrophiesList():[];
+        const cs=tro.find(t=>/Conn Smythe/i.test(t.name));
+        const smythe=(cs&&String(cs.year)===String(yr))?cs.winner:null;
+        const chip={fontFamily:MONO,fontSize:10.5,letterSpacing:'.04em',color:gold,background:T.mode==='dark'?'rgba(202,162,78,.14)':'rgba(202,162,78,.12)',border:`1px solid ${T.mode==='dark'?'rgba(202,162,78,.35)':'#e8dcb4'}`,borderRadius:999,padding:'3px 9px'};
+        return(
+        <div style={{...card,padding:'20px 22px',marginBottom:18,position:'relative',overflow:'hidden',background:`linear-gradient(110deg, ${c2(champ)}22, ${T.mode==='dark'?'rgba(202,162,78,.12)':'rgba(240,221,156,.4)'} 55%, transparent)`,border:`1px solid ${T.mode==='dark'?'rgba(202,162,78,.42)':'#e8dcb4'}`}}>
+          <div style={{height:3,position:'absolute',top:0,left:0,right:0,background:'linear-gradient(90deg,#caa24e,#f0dd9c,#caa24e)',zIndex:2}}/>
+          <div className="champ-shine" style={{position:'absolute',top:0,bottom:0,left:'-50%',width:'45%',background:'linear-gradient(105deg,transparent,rgba(255,255,255,.4),transparent)',pointerEvents:'none',zIndex:1}}/>
+          <div style={{display:'flex',alignItems:'center',gap:16,position:'relative',zIndex:2}}>
+            <Badge ab={champ} size={52}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{...ML,color:gold,display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:14}}>🏆</span>{yr?`${yr} `:''}Stanley Cup Champions</div>
+              <div style={{fontFamily:SERIF,fontSize:27,fontStyle:'italic',color:T.ink,marginTop:3}}>{ct(champ)} {nk(champ)}</div>
+              {opp&&<div style={{fontFamily:MONO,fontSize:11.5,color:T.mut,marginTop:4}}>defeated {ct(opp.ab)} {nk(opp.ab)} {champW}–{oppW} in the Final</div>}
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10,alignItems:'center'}}>
+                {smythe&&<span style={chip}>Conn Smythe · {smythe}</span>}
+                {titles.stanleyCups.some(y=>String(y)===String(yr))&&<span style={chip}>Cup #{titles.stanleyCups.length} in franchise history</span>}
+                {prevCups.length>0
+                  ? <span style={chip}>Previous · {prevCups.slice(0,6).join(' · ')}{prevCups.length>6?' …':''}</span>
+                  : <span style={chip}>First Stanley Cup in franchise history</span>}
+              </div>
+            </div>
+          </div>
+          <style>{`@keyframes champShine{0%{left:-50%}60%,100%{left:120%}}@media(prefers-reduced-motion:no-preference){.champ-shine{animation:champShine 5s ease-in-out infinite}}`}</style>
+        </div>);
+      }
+      return(
+        <div style={{...card,padding:'18px 20px',marginBottom:18,display:'flex',alignItems:'center',gap:16,background:`linear-gradient(110deg, ${c2(champ)}12, transparent)`}}>
+          <Badge ab={champ} size={44}/>
+          <div><div style={ML}>Projected Cup champion</div><div style={{fontFamily:SERIF,fontSize:24,fontStyle:'italic',color:T.ink,marginTop:2}}>{ct(champ)} {nk(champ)}</div></div>
+        </div>);
+    })()}
     {/* bracket — two conference wings converging to the center */}
     {pview==='bracket'&&<div style={{...card,padding:'18px 14px 22px',marginBottom:18}}>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
@@ -1611,7 +1667,7 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs,booting}){
       </div>
     </div>
     {/* storylines — one curated card per domain */}
-    <div style={{...ML,marginBottom:10}}>Storylines · what changed today</div>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}><span style={ML}>Storylines · what changed today</span><span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.06em',textTransform:'uppercase',color:'#b5762a',border:'1px solid rgba(181,118,42,.35)',borderRadius:5,padding:'2px 6px'}} title="Generated narrative from live standings & stats — not reporting">Editorial</span></div>
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:14,marginBottom:18}}>
       {hottest&&story('Hot streak',`${ct(hottest.ab)} are surging`,`${hottest.strk} · climbing the ${hottest.conf==='East'?'East':'West'}`,()=>onTeam(hottest.ab))}
       {wcBubble&&story('Wild-card race',`${ct(wcBubble.ab)} cling to the final spot`,`${wcBubble.pts} pts · East bubble — tap for the race`,()=>onGo('standings'),'#b5762a')}

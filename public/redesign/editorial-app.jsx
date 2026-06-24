@@ -699,7 +699,7 @@ function App(){
   const curIdRef=React.useRef(null);
   const _liveS=(window.NHL&&window.NHL._season)?String(window.NHL._season):null;
   if(season==='cur'&&_liveS&&/^\d{8}$/.test(_liveS))curIdRef.current=_liveS;
-  const curId=curIdRef.current||_liveS||'20242025';
+  const curId=curIdRef.current||_liveS||'20252026';
   const SEASONS=useMemo(()=>{const top=parseInt(curId.slice(0,4),10)||2025;const a=[];for(let y=top;y>=2010;y--)a.push(`${y}${y+1}`);return a;},[curId]);
   const seasonLabel=v=>v==='cur'?`${curId.slice(0,4)}\u2013${curId.slice(6,8)}`:`${v.slice(0,4)}\u2013${v.slice(6,8)}`;
   const changeSeason=v=>{ setSeason(v); const id=v==='cur'?curId:v; if(window.BC&&BC.LIVE&&BC.hydrateSeason){ setLoading(true); BC.hydrateSeason(id,()=>{setHv(x=>x+1);setLoading(false);}); } window.scrollTo(0,0); };
@@ -781,10 +781,10 @@ function App(){
         <a href="The Hockey Lab - Landing.html" title="Lab home" aria-label="Lab home" style={{color:T.faint,fontSize:17,textDecoration:'none'}}>⌂</a>
         <span className="ed-demo" title={isLive?"Live NHL feeds connected — updating in real time":"Projected/sample data for demo — live NHL feeds fill in on deploy"} style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.08em',textTransform:'uppercase',color:isLive?'#1a8a4f':T.mut,background:T.bg,border:`1px solid ${isLive?'#1a8a4f55':T.line2}`,borderRadius:999,padding:'3px 8px',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5}}>{isLive&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:'#1a8a4f',display:'inline-block'}}/>}{isLive?'live · NHL':'demo data'}</span>
         <PriorityNav active={(!team&&!player&&!game)?route:null} onGo={go}/>
-        <select value={season} onChange={e=>changeSeason(e.target.value)} aria-label="Season" title={isLive?'Pick a season \u2014 historical standings, stats, rosters & leaders':'Historical seasons load when live NHL feeds are connected'} className="ed-season" style={{fontFamily:MONO,fontSize:12,fontWeight:600,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'7px 8px',color:T.ink,cursor:'pointer',flexShrink:0,maxWidth:130}}>
-          <option value="cur">{seasonLabel('cur')} · Current</option>
+        {route!=='standings'&&<select value={season} onChange={e=>changeSeason(e.target.value)} aria-label="Season" title={isLive?'Pick a season \u2014 historical standings, stats, rosters & leaders':'Historical seasons load when live NHL feeds are connected'} className="ed-season" style={{fontFamily:MONO,fontSize:12,fontWeight:600,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'7px 8px',color:T.ink,cursor:'pointer',flexShrink:0,maxWidth:130}}>
+          <option value="cur">{seasonLabel('cur')}</option>
           {SEASONS.slice(1).map(s=><option key={s} value={s}>{seasonLabel(s)}</option>)}
-        </select>
+        </select>}
         <button onClick={toggleTheme} aria-label="Toggle theme" title="Toggle light/dark" style={{fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',width:34,height:34,borderRadius:9,background:T.paper,border:`1px solid ${T.line2}`,color:T.mut,cursor:'pointer',flexShrink:0}}>
           {theme==='dark'
             ?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
@@ -810,7 +810,7 @@ function App(){
         <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${T.line}`}}>
           <label style={{...ML,display:'block',marginBottom:6}}>Season</label>
           <select value={season} onChange={e=>{changeSeason(e.target.value);}} aria-label="Season" style={{fontFamily:MONO,fontSize:14,fontWeight:600,background:T.bg,border:`1px solid ${T.line2}`,borderRadius:10,padding:'11px 12px',color:T.ink,cursor:'pointer',width:'100%'}}>
-            <option value="cur">{seasonLabel('cur')} · Current</option>
+            <option value="cur">{seasonLabel('cur')}</option>
             {SEASONS.slice(1).map(s=><option key={s} value={s}>{seasonLabel(s)}</option>)}
           </select>
         </div>

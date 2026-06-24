@@ -841,6 +841,37 @@
       style: {
         display: 'flex',
         alignItems: 'center',
+        gap: 9,
+        margin: '2px 0 16px',
+        padding: '9px 13px',
+        borderRadius: 9,
+        background: T.mode === 'dark' ? 'rgba(181,118,42,.12)' : 'rgba(181,118,42,.08)',
+        border: `1px solid ${T.mode === 'dark' ? 'rgba(181,118,42,.32)' : 'rgba(181,118,42,.25)'}`
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 9,
+        letterSpacing: '.08em',
+        textTransform: 'uppercase',
+        color: '#b5762a',
+        border: '1px solid rgba(181,118,42,.4)',
+        borderRadius: 5,
+        padding: '2px 6px',
+        whiteSpace: 'nowrap',
+        flexShrink: 0
+      }
+    }, "Editorial \xB7 sample"), React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 11,
+        color: T.mut,
+        lineHeight: 1.5
+      }
+    }, "Storylines and posts here are illustrative editorial content \u2014 not live reporting, real quotes, or real accounts.")), React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
         gap: 8,
         flexWrap: 'wrap',
         marginBottom: 18

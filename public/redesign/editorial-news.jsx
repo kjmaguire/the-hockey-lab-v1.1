@@ -140,6 +140,10 @@
         <button onClick={()=>setFollowing(f=>!f)} style={{fontFamily:'inherit',display:'flex',alignItems:'center',gap:6,padding:'7px 13px',borderRadius:999,border:`1px solid ${following?T.red:T.line2}`,background:following?'#fdecea':T.paper,color:following?T.red:T.mut,fontWeight:600,fontSize:12.5,cursor:'pointer'}}>★ Following{fav.length?` · ${fav.length}`:''}</button>
       }/>
       <Ticker items={ticker} onTeam={onTeam}/>
+      <div style={{display:'flex',alignItems:'center',gap:9,margin:'2px 0 16px',padding:'9px 13px',borderRadius:9,background:T.mode==='dark'?'rgba(181,118,42,.12)':'rgba(181,118,42,.08)',border:`1px solid ${T.mode==='dark'?'rgba(181,118,42,.32)':'rgba(181,118,42,.25)'}`}}>
+        <span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.08em',textTransform:'uppercase',color:'#b5762a',border:'1px solid rgba(181,118,42,.4)',borderRadius:5,padding:'2px 6px',whiteSpace:'nowrap',flexShrink:0}}>Editorial · sample</span>
+        <span style={{fontFamily:MONO,fontSize:11,color:T.mut,lineHeight:1.5}}>Storylines and posts here are illustrative editorial content — not live reporting, real quotes, or real accounts.</span>
+      </div>
 
       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:18}}>
         {topics.map(x=><Pill key={x} on={topic===x} onClick={()=>setTopic(x)}>{x}</Pill>)}

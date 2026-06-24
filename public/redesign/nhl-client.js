@@ -26,6 +26,19 @@
     let s = String(dflt(c) ?? '').toUpperCase().replace(/[^A-Z]/g, '').trim();
     return TEAM_ALIAS[s] || s;
   };
+  // Resolve a team NAME ("Edmonton Oilers", "Oilers", "Edmonton") to its tricode using
+  // the loaded team table. Player-landing season rows often carry a full name and no
+  // abbrev, which left the season-history badge gray.
+  const teamByName = (v) => {
+    const s = String(dflt(v) ?? '').toLowerCase().trim(); if (!s) return '';
+    const B = window.BC; if (!B || !B.ABBR) return '';
+    for (const ab of B.ABBR) {
+      if (s === ab.toLowerCase()) return ab;
+      const nk = String(B.nick(ab) || '').toLowerCase(), ct = String(B.city(ab) || '').toLowerCase();
+      if (s === (ct + ' ' + nk) || (nk && s.endsWith(nk)) || (ct && s.startsWith(ct))) return ab;
+    }
+    return '';
+  };
 
   // Request layer: in-flight de-dup (concurrent identical GETs share one fetch),
   // a short TTL cache for non-live endpoints (instant revisits, less proxy load),
@@ -39,8 +52,26 @@
   // been pulled it is never re-fetched (so a cold edge / slow upstream can't drop
   // that year back to mock on the next switch).
   const LONG_TTL = 6 * 3600 * 1000;
-  const IMMUTABLE = /draft\/(picks|rankings)\/\d{4}|^records\//;
+  // Immutable historical endpoints: a specific past draft year, the records book, and
+  // standings AS OF a specific past date (a completed season's final table). These never
+  // change, so they're cached permanently — in memory for the session AND in localStorage
+  // so they survive reloads and repeat visits with ZERO refetch. (Caching immutable
+  // responses is standard good-citizen practice; it reduces NHL API load.)
+  const IMMUTABLE = /draft\/(picks|rankings)\/\d{4}|^records\/|standings\/\d{4}-\d{2}-\d{2}/;
   const ALWAYS_FRESH = /scoreboard|^score\b|\/now|gamecenter\/.*\/(boxscore|play-by-play)/;
+  // ---- durable browser cache for immutable historical data (localStorage) ----
+  const LS_PREFIX = 'thl:imm:';
+  function lsGet(path) {
+    try { const v = localStorage.getItem(LS_PREFIX + path); return v == null ? undefined : JSON.parse(v); } catch (_) { return undefined; }
+  }
+  function lsPut(path, data) {
+    let s; try { s = JSON.stringify(data); } catch (_) { return; }
+    if (s.length > 1500000) return; // don't persist huge payloads to localStorage
+    try { localStorage.setItem(LS_PREFIX + path, s); }
+    catch (_) { // quota hit: drop our oldest immutable entries and retry once
+      try { Object.keys(localStorage).filter((k) => k.indexOf(LS_PREFIX) === 0).slice(0, 24).forEach((k) => localStorage.removeItem(k)); localStorage.setItem(LS_PREFIX + path, s); } catch (__) {}
+    }
+  }
   async function rawGet(path) {
     const ac = new AbortController();
     const to = setTimeout(() => ac.abort(), 9000);
@@ -52,16 +83,19 @@
   }
   async function get(path) {
     const fresh = ALWAYS_FRESH.test(path);
+    const immutable = !fresh && IMMUTABLE.test(path);
     if (!fresh) {
       const c = _cache.get(path);
-      const ttl = IMMUTABLE.test(path) ? LONG_TTL : TTL;
+      const ttl = immutable ? LONG_TTL : TTL;
       if (c && Date.now() - c.t < ttl) return c.data;
+      // durable browser copy of immutable historical data — survives reloads/visits
+      if (immutable) { const ls = lsGet(path); if (ls !== undefined) { _cache.set(path, { t: Date.now(), data: ls }); return ls; } }
     }
     const existing = _inflight.get(path);
     if (existing) return existing;            // join a concurrent identical request
     const p = rawGet(path);
     _inflight.set(path, p);
-    p.then((d) => { if (!fresh) _cache.set(path, { t: Date.now(), data: d }); })
+    p.then((d) => { if (!fresh) _cache.set(path, { t: Date.now(), data: d }); if (immutable && d !== undefined) lsPut(path, d); })
       .catch(() => {})
       .finally(() => { _inflight.delete(path); });
     return p;
@@ -298,7 +332,7 @@
     const ab = normTeam(d.currentTeamAbbrev);
     const nhlRows = (d.seasonTotals || []).filter((s) => s.gameTypeId === 2 && s.leagueAbbrev === 'NHL');
     const history = nhlRows.slice().reverse().slice(0, 8).map((s) => {
-      const team = s.teamAbbrev ? dflt(s.teamAbbrev) : (dflt(s.teamCommonName) || dflt(s.teamName) || ab);
+      const team = normTeam(s.teamAbbrev) || teamByName(dflt(s.teamCommonName) || dflt(s.teamName) || dflt(s.teamPlaceName)) || ab;
       return isG
         ? { s: fmtSeason(s.season), team, gp: s.gamesPlayed ?? 0, w: s.wins ?? 0, l: s.losses ?? 0,
             svp: ((s.savePctg ?? s.savePct) != null ? (+(s.savePctg ?? s.savePct)).toFixed(3).slice(1) : '—'), gaa: ((s.goalsAgainstAvg ?? s.goalsAgainstAverage) != null ? (+(s.goalsAgainstAvg ?? s.goalsAgainstAverage)).toFixed(2) : '—') }
@@ -714,6 +748,13 @@
     ymd, ordinal,
     activeSeason, liveEdgeOK,
     standings: async () => { const d = await get('standings'); if (d && d.currentSeason) window.NHL._season = String(d.currentSeason); return mapStandings(d); },
+    // Standings for a SPECIFIC season WITHOUT mutating any global state — lets the
+    // Standings page switch years on its own without changing data for the rest of the app.
+    standingsForSeason: async (s) => {
+      const cur = (window.NHL && window.NHL._season) ? String(window.NHL._season) : null;
+      const path = (!s || String(s) === cur) ? 'standings/now' : `standings/${String(s).slice(4, 8)}-04-15`;
+      return mapStandings(await get(path));
+    },
     scores: scoreSlate,
     schedule: async (offset) => (await get(`schedule?date=${ymd(offset)}`)),
     boxscore: (id) => get(`gamecenter/${id}/boxscore`),
