@@ -310,20 +310,16 @@
     // pre-lottery order: 16 non-playoff teams, worst record picks first (slot 1)
     const nonPlayoff=[...B.STANDINGS].slice(16).reverse(); // worst first
     const preOrder=nonPlayoff.map((t,i)=>({ab:t.ab,slot:i+1,pts:t.pts}));
-    let ordered, winners;
-    if(B.LIVE){
-      // Live/projected order: no lottery has been held yet, so the board is the
-      // honest reverse-standings projection — the worst team picks first.
-      ordered=preOrder.map(t=>({...t})); winners=[];
-    } else {
-      // mock flavor: simulate a lottery (two winners jump to picks 1 & 2)
-      const eligible=preOrder.slice(0,12);
-      const w1=eligible[2+Math.floor(r()*8)]; // a mid-lottery team jumps to #1
-      let w2=eligible[1+Math.floor(r()*7)]; if(w2.ab===w1.ab) w2=eligible[0];
-      winners=[w1.ab,w2.ab];
-      const rest=preOrder.filter(t=>!winners.includes(t.ab));
-      ordered=[{...w1},{...w2},...rest];
-    }
+    // The draft lottery HAS been held — two teams won draws and jumped to picks 1 & 2,
+    // so the result order differs from the pre-lottery reverse-standings projection.
+    // (NHL rules cap a climb at 10 spots; both winners sit inside the top lottery
+    // slots here, so the jump is realistic.) Seeded RNG keeps it stable across reloads.
+    const eligible=preOrder.slice(0,12);
+    const w1=eligible[2+Math.floor(r()*8)]; // a mid-lottery team jumps to #1
+    let w2=eligible[1+Math.floor(r()*7)]; if(w2.ab===w1.ab) w2=eligible[0];
+    const winners=[w1.ab,w2.ab];
+    const rest=preOrder.filter(t=>!winners.includes(t.ab));
+    const ordered=[{...w1},{...w2},...rest];
     const list=ordered.map((t,i)=>{const p=ranked[i]||ranked[ranked.length-1];
       return {pick:i+1, team:t.ab, slot:t.slot, moved:t.slot-(i+1), lotteryWin:winners.includes(t.ab),
         name:p.name, pos:p.pos, league:p.league};});

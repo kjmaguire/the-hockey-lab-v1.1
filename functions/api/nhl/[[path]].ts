@@ -160,7 +160,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('goalie/summary', {
-            isAggregate: 'false', isGame: 'false', start: 0, limit: 1000,
+            // isAggregate:true collapses a traded goalie's multiple team stints into
+            // ONE season-total row (otherwise each partial stint is its own low row).
+            isAggregate: 'true', isGame: 'false', start: 0, limit: 1000,
+            sort: '[{"property":"wins","direction":"DESC"},{"property":"savePct","direction":"DESC"}]',
             cayenneExp: `seasonId=${season} and gameTypeId=${gameType}`,
           });
           return json(data);
@@ -175,7 +178,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('skater/summary', {
-            isAggregate: 'false', isGame: 'false', start: 0, limit: 1000,
+            // isAggregate:true collapses a traded skater's multiple team stints into
+            // ONE season-total row, so points/goals/assists are the true season total
+            // (with isAggregate:false a traded player split into low partial rows —
+            // that was the "some players show 1 point" ranking bug).
+            isAggregate: 'true', isGame: 'false', start: 0, limit: 1000,
+            sort: '[{"property":"points","direction":"DESC"},{"property":"goals","direction":"DESC"},{"property":"gamesPlayed","direction":"ASC"}]',
             cayenneExp: `seasonId=${season} and gameTypeId=${gameType}`,
           });
           return json(data);
