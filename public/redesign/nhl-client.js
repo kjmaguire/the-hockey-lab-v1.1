@@ -410,18 +410,23 @@
   }
   function mapEdgeSkater(payload) {
     if (!payload) return null;
-    const top = edgeMetric(payload, ['topskat', 'maxskat', 'topspeed', 'skatingspeed']);
-    const shot = edgeMetric(payload, ['shotspeed', 'topshot', 'hardestshot']);
-    const dist = edgeMetric(payload, ['skatingdistance', 'totaldistance', 'distance']);
-    const b20 = edgeMetric(payload, ['burst', 'speedburst', 'over20', 'speedbursts']);
-    const oz = edgeMetric(payload, ['offensivezone', 'ozone', 'o-zone', 'zonetimeoff']);
+    // name-key scans broadened — EDGE category labels drift by season/build (see edgeDebug)
+    const top = edgeMetric(payload, ['topskat', 'maxskat', 'topspeed', 'skatingspeed', 'maxskatingspeed', 'topskatingspeed', 'maxspeed', 'skatspeed']);
+    const shot = edgeMetric(payload, ['shotspeed', 'topshot', 'hardestshot', 'maxshotspeed', 'topshotspeed', 'hardestshotspeed', 'fastestshot']);
+    const avgshot = edgeMetric(payload, ['avgshotspeed', 'averageshotspeed', 'meanshotspeed', 'avgshot', 'averageshot']);
+    const dist = edgeMetric(payload, ['skatingdistance', 'totaldistance', 'distance', 'milesskated', 'skatdist', 'distskated']);
+    const b20 = edgeMetric(payload, ['burst', 'speedburst', 'over20', 'speedbursts', 'bursts20', 'speedburstsover20', 'numbursts']);
+    const b22 = edgeMetric(payload, ['over22', 'burst22', 'speedbursts22', 'bursts22', 'speedburstsover22']);
+    const oz = edgeMetric(payload, ['offensivezone', 'ozone', 'o-zone', 'zonetimeoff', 'offzone', 'ozonetime', 'timeonoffense', 'offensivezonetime']);
     if (!top && !shot && !dist && !oz) return null; // nothing recognizable → keep mock
     const speed = [];
     const row = (l, m, fmt) => { if (m) speed.push([l, fmt(m.val), m.pct != null ? Math.round(m.pct) : '—', m.avg != null ? fmt(m.avg) : '—']); };
     row('Top shot speed', shot, (v) => `${(+v).toFixed(1)} mph`);
+    row('Avg shot speed', avgshot, (v) => `${(+v).toFixed(1)} mph`);
     row('Max skating speed', top, (v) => `${(+v).toFixed(1)} mph`);
     row('Total distance', dist, (v) => `${(+v).toFixed(1)} mi`);
     row('Speed bursts 20+', b20, (v) => `${Math.round(v)}`);
+    row('Speed bursts 22+', b22, (v) => `${Math.round(v)}`);
     if (oz) speed.push(['O-zone time', `${(+oz.val).toFixed(0)}%`, oz.pct != null ? Math.round(oz.pct) : '—', oz.avg != null ? `${(+oz.avg).toFixed(0)}%` : '—']);
     const out = {};
     if (speed.length) out.speed = speed;
@@ -430,14 +435,21 @@
   }
   function mapEdgeGoalie(payload) {
     if (!payload) return null;
-    const hd = edgeMetric(payload, ['highdanger', 'high-danger', 'hidanger']);
-    const md = edgeMetric(payload, ['middanger', 'mid-danger', 'mediumdanger']);
-    const ld = edgeMetric(payload, ['lowdanger', 'low-danger']);
-    if (!hd && !md && !ld) return null;
+    const hd = edgeMetric(payload, ['highdanger', 'high-danger', 'hidanger', 'hdsavepct', 'highdangersave']);
+    const md = edgeMetric(payload, ['middanger', 'mid-danger', 'mediumdanger', 'mdsavepct', 'middangersave']);
+    const ld = edgeMetric(payload, ['lowdanger', 'low-danger', 'ldsavepct', 'lowdangersave']);
+    // richer goalie EDGE — goals saved above expected, rebound control, HD shots faced
+    const gsax = edgeMetric(payload, ['goalssavedabove', 'gsax', 'gsaa', 'savedaboveexpected', 'goalssavedaboveexpected']);
+    const reb = edgeMetric(payload, ['reboundcontrol', 'reboundrate', 'rebound', 'freeze', 'freezerate']);
+    const hf = edgeMetric(payload, ['highdangershotsfaced', 'hdshotsfaced', 'hdshotsagainst', 'highdangeragainst']);
+    if (!hd && !md && !ld && !gsax && !reb && !hf) return null;
     const pctStr = (v) => (v <= 1 ? v.toFixed(3).slice(1) : (v / 100).toFixed(3).slice(1));
     const saveQ = [];
     const row = (l, m, avg) => { if (m) saveQ.push([l, pctStr(m.val), m.pct != null ? Math.round(m.pct) : '—', avg, m.avg != null ? Math.round(m.avg) : '—']); };
     row('High-danger SV%', hd, '.812'); row('Mid-danger SV%', md, '.910'); row('Low-danger SV%', ld, '.975');
+    if (gsax) saveQ.push(['Goals saved a.e.', ((+gsax.val) >= 0 ? '+' : '') + (+gsax.val).toFixed(1), gsax.pct != null ? Math.round(gsax.pct) : '—', '+2.4', '—']);
+    if (reb) saveQ.push(['Rebound control', `${(+reb.val).toFixed(0)}%`, reb.pct != null ? Math.round(reb.pct) : '—', '78%', '—']);
+    if (hf) saveQ.push(['HD shots faced/60', `${(+hf.val).toFixed(1)}`, hf.pct != null ? Math.round(hf.pct) : '—', '11.2', '—']);
     return saveQ.length ? { saveQ } : null;
   }
 
@@ -603,9 +615,17 @@
     return made.length ? made : null;
   }
 
+  // The season the UI is currently VIEWING (set by the season switcher via
+  // BC._seasonId); defaults to the league's current season.
+  function activeSeason(){ return (window.BC && window.BC._seasonId) ? String(window.BC._seasonId) : curSeason(); }
+  // EDGE puck/player tracking is only fetchable for the current season (and only
+  // exists league-wide from 2021-22), so live EDGE overlays gate on this.
+  function liveEdgeOK(){ return activeSeason() === curSeason(); }
+
   window.NHL = {
     BASE, get,
     ymd, ordinal,
+    activeSeason, liveEdgeOK,
     standings: async () => { const d = await get('standings'); if (d && d.currentSeason) window.NHL._season = String(d.currentSeason); return mapStandings(d); },
     scores: scoreSlate,
     schedule: async (offset) => (await get(`schedule?date=${ymd(offset)}`)),
@@ -621,11 +641,11 @@
       return mapGameLive(l, b);
     },
     gamePbp: async (id) => mapGamePbp(await get(`gamecenter/${id}/play-by-play`)),
-    teamSeasonStats: async () => mapTeamSeasonStats(await window.NHL.statsTeam('summary', ('seasonId='+curSeason()+' and gameTypeId=2'))),
+    teamSeasonStats: async (season) => mapTeamSeasonStats(await window.NHL.statsTeam('summary', ('seasonId='+(season||activeSeason())+' and gameTypeId=2'))),
     shotMap: async (id) => mapShots(await get(`gamecenter/${id}/play-by-play`)),
-    shotZones: (scope, id) => fetchZones(scope, id),
+    shotZones: (scope, id) => liveEdgeOK() ? fetchZones(scope, id) : Promise.resolve(null),
     rightRail: (id) => get(`gamecenter/${id}/right-rail`),
-    roster: async (team) => mapRoster(await get(`roster/${team}`)),
+    roster: async (team, season) => mapRoster(await get('roster/' + team + (season ? '/' + season : ''))),
     rosterRaw: (team) => get(`roster/${team}`),
     clubStats: (team) => get(`club-stats/${team}`),
     clubSchedule: (team) => get(`club-schedule-view/${team}?view=month`),
@@ -633,8 +653,21 @@
     prospects: (team) => get(`prospects/${team}`),
     playerLanding: (id) => get(`player/${id}/landing`),
     playerGameLog: (id) => get(`player/${id}/game-log`),
-    skaterLeaders: async () => mapSkaterLeaders(await get('skater-leaders?season=' + curSeason())),
-    goalieLeaders: async () => mapGoalieLeaders(await get('goalie-leaders?season=' + curSeason())),
+    // per-game EDGE: real game identity (date/opponent) from the game-log + any live
+    // per-game tracking it exposes; the player page overlays this on the projection.
+    edgeGameLog: async (id) => { if (!liveEdgeOK()) return null; try {
+      const d = await get(`player/${id}/game-log`);
+      const games = (d && (d.gameLog || d.games)) || [];
+      if (!games.length) return null;
+      const numF = (g, keys) => { for (const k of Object.keys(g)) { if (keys.some((w) => k.toLowerCase().includes(w))) { const v = num(g[k]); if (v != null) return v; } } return null; };
+      return games.slice(0, 6).map((g) => ({
+        date: fmtDate(g.gameDate), opp: dflt(g.opponentAbbrev) || dflt(g.opponentCommonName) || '', home: (g.homeRoadFlag || g.homeRoad) === 'H',
+        topSpd: numF(g, ['topskat', 'maxspeed', 'topspeed', 'maxskatingspeed', 'skatingspeed']), topShot: numF(g, ['shotspeed', 'topshot', 'maxshotspeed', 'hardestshot']),
+        dist: numF(g, ['distance', 'skatingdistance', 'milesskated']), b20: numF(g, ['burst', 'over20', 'speedburst', 'bursts20']),
+      }));
+    } catch (_) { return null; } },
+    skaterLeaders: async (season) => mapSkaterLeaders(await get('skater-leaders?season=' + (season || activeSeason()))),
+    goalieLeaders: async (season) => mapGoalieLeaders(await get('goalie-leaders?season=' + (season || activeSeason()))),
     edgeSkater: (id) => get(`edge/skater-detail/${id}`),
     edgeGoalie: (id) => get(`edge/goalie-detail/${id}`),
     edgeSkaterLanding: () => get('edge/skater-landing'),
@@ -650,11 +683,41 @@
     edgeTeamShotLoc: (teamId) => get(`edge/team-shot-location-detail/${teamId}`),
     // any edge endpoint at all (generic escape hatch):
     edge: (path) => get(`edge/${path}`),
+    // DIAGNOSTIC — dump recognized vs raw EDGE keys for one player so the scans above
+    // can be tuned against real payloads on deploy: await NHL.edgeDebug(id,'skater'|'goalie')
+    edgeDebug: async (id, type) => { try {
+      const isG = type === 'goalie';
+      const p = await get(`edge/${isG ? 'goalie' : 'skater'}-detail/${id}`);
+      const mapped = isG ? mapEdgeGoalie(p) : mapEdgeSkater(p);
+      const topLevelKeys = p && typeof p === 'object' ? Object.keys(p) : [];
+      return { ok: !!p, recognized: mapped ? Object.keys(mapped) : [], rows: mapped, topLevelKeys, sample: p };
+    } catch (e) { return { ok: false, error: String(e) }; } },
+    // LIVE league EDGE leaderboard from the real top-10 endpoints (defensive scan → null keeps mock):
+    edgeBoardLive: async (metric) => { if (!liveEdgeOK()) return null; try {
+      const PATHS = {
+        top: 'skater-skating-speed-top-10/all/all', shot: 'skater-shot-speed-top-10/all/all',
+        savg: 'skater-shot-speed-top-10/all/all', dist: 'skater-skating-distance-top-10/all/all',
+        b20: 'skater-skating-speed-top-10/all/all', b22: 'skater-skating-speed-top-10/all/all',
+        oz: 'skater-zone-time-top-10/all/all',
+      };
+      const path = PATHS[metric]; if (!path) return null;
+      const d = await get(`edge/${path}`);
+      let arr = Array.isArray(d) ? d : null;
+      if (!arr && d && typeof d === 'object') { for (const k of Object.keys(d)) { if (Array.isArray(d[k]) && d[k].length && typeof d[k][0] === 'object') { arr = d[k]; break; } } }
+      if (!arr) return null;
+      const rows = arr.slice(0, 20).map((o) => {
+        const name = dflt(o.fullName) || [dflt(o.firstName), dflt(o.lastName)].filter(Boolean).join(' ') || dflt(o.name) || dflt(o.skaterFullName) || '';
+        const team = dflt(o.teamAbbrev) || dflt(o.teamAbbrevs) || dflt(o.team) || '';
+        let v = null; for (const k of Object.keys(o)) { if (/value|speed|distance|burst|zone|max|top/i.test(k)) { const n = num(o[k]); if (n != null) { v = n; break; } } }
+        return name ? { id: dflt(o.playerId) || name, name, team, pos: dflt(o.positionCode) || dflt(o.position) || '', _v: v != null ? +(+v).toFixed(1) : '—' } : null;
+      }).filter(Boolean);
+      return rows.length ? rows : null;
+    } catch (_) { return null; } },
 
     // ---- LIVE OVERLAYS (mock-fallback handled by each caller) ----
     // Player-detail EDGE tracking (partial overlay; page merges over mock):
-    edgeSkaterMapped: async (id) => { try { return mapEdgeSkater(await get(`edge/skater-detail/${id}`)); } catch (_) { return null; } },
-    edgeGoalieMapped: async (id) => { try { return mapEdgeGoalie(await get(`edge/goalie-detail/${id}`)); } catch (_) { return null; } },
+    edgeSkaterMapped: async (id) => { if (!liveEdgeOK()) return null; try { return mapEdgeSkater(await get(`edge/skater-detail/${id}`)); } catch (_) { return null; } },
+    edgeGoalieMapped: async (id) => { if (!liveEdgeOK()) return null; try { return mapEdgeGoalie(await get(`edge/goalie-detail/${id}`)); } catch (_) { return null; } },
     // Full playoff bracket from the series carousel, seeded against live standings:
     playoffFull: async () => {
       const season = (window.BC && window.BC._seasonId) || curSeason();
@@ -815,6 +878,78 @@
 
     // ---- stats config (self-documents every report + filter field) ----
     config: () => get('config'),
-    _map: { mapStandings, mapGame, mapRoster, mapSkaterLeaders, mapGoalieLeaders, mapShots, mapZones },
+    // ---- #1 milestone watch (stats API milestones → progress rows) ----
+    milestonesMapped: async () => { try {
+      const [sk, go] = await Promise.all([window.NHL.statsMilestonesSkater().catch(() => null), window.NHL.statsMilestonesGoalie().catch(() => null)]);
+      const rows = [];
+      const eat = (d, defStat, defPos) => { const arr = (d && (d.data || d.milestones || (Array.isArray(d) ? d : null))) || null; if (!arr) return;
+        arr.forEach((m) => { const name = dflt(m.skaterFullName) || dflt(m.goalieFullName) || dflt(m.playerName) || [dflt(m.firstName), dflt(m.lastName)].filter(Boolean).join(' '); if (!name) return;
+          const career = num(m.currentValue) != null ? num(m.currentValue) : (num(m.value) != null ? num(m.value) : num(m.career));
+          const target = num(m.milestone) != null ? num(m.milestone) : (num(m.target) != null ? num(m.target) : num(m.nextMilestone));
+          if (career == null || target == null || target <= 0 || career > target) return;
+          const stat = (dflt(m.milestoneType) || dflt(m.statName) || defStat || 'points').toLowerCase();
+          rows.push({ id: dflt(m.playerId) || name, name, team: dflt(m.teamAbbrev) || dflt(m.teamAbbrevs) || '', pos: dflt(m.positionCode) || dflt(m.position) || defPos || '', num: num(m.sweaterNumber) || null, stat, target, career, remaining: Math.max(0, target - career), pct: Math.min(100, Math.round(career / target * 100)) }); }); };
+      eat(sk, 'points', ''); eat(go, 'wins', 'G');
+      rows.sort((a, b) => a.remaining - b.remaining);
+      return rows.length ? rows.slice(0, 8) : null;
+    } catch (_) { return null; } },
+    // ---- #6 awards / trophies (records.nhl.com award winners → trophy cards) ----
+    awardsMapped: async () => { try {
+      const d = await get('records/award-details?include=trophy.name');
+      const arr = (d && (d.data || (Array.isArray(d) ? d : null))) || null; if (!arr || !arr.length) return null;
+      const by = {}; arr.forEach((a) => { const tn = dflt(a.trophyName) || (a.trophy && dflt(a.trophy.name)) || dflt(a.award); if (!tn) return;
+        const yr = num(a.seasonId) ? String(num(a.seasonId)).slice(0, 4) : (dflt(a.season) || '');
+        const win = dflt(a.playerName) || [dflt(a.firstName), dflt(a.lastName)].filter(Boolean).join(' ') || dflt(a.fullName); if (!win) return;
+        (by[tn] = by[tn] || []).push({ yr: +yr || yr, name: win }); });
+      const names = Object.keys(by); if (!names.length) return null;
+      return names.slice(0, 12).map((tn) => { const hist = by[tn].sort((a, b) => (b.yr || 0) - (a.yr || 0)).slice(0, 5);
+        return { name: tn, desc: '', winner: hist[0] ? hist[0].name : '', year: hist[0] ? String(hist[0].yr) : '', history: hist }; });
+    } catch (_) { return null; } },
+    // ---- #3 shift charts (per-player TOI aggregation) ----
+    shiftChartMapped: async (gameId, awayAb, homeAb) => { try {
+      const d = await get(`shift-charts/${gameId}`);
+      const arr = (d && (d.data || (Array.isArray(d) ? d : null))) || null; if (!arr || !arr.length) return null;
+      const agg = {};
+      arr.forEach((s) => { const team = dflt(s.teamAbbrev); const name = [dflt(s.firstName), dflt(s.lastName)].filter(Boolean).join(' ') || dflt(s.playerName); if (!name) return;
+        const dur = (() => { const t = s.duration; if (!t) return 0; const p = String(t).split(':'); return p.length === 2 ? (+p[0] * 60 + +p[1]) : (+t || 0); })();
+        const k = team + '|' + name; (agg[k] = agg[k] || { team, name, sec: 0, shifts: 0, pos: dflt(s.position) || '' }); if (dur > 0) { agg[k].sec += dur; agg[k].shifts++; } });
+      const all = Object.values(agg); if (!all.length) return null;
+      const maxSec = Math.max.apply(null, all.map((p) => p.sec).concat(1));
+      const side = (ab) => all.filter((p) => p.team === ab).sort((a, b) => b.sec - a.sec).slice(0, 6).map((p) => ({ name: p.name, pos: p.pos, toi: `${Math.floor(p.sec / 60)}:${String(p.sec % 60).padStart(2, '0')}`, shifts: p.shifts, pct: Math.round(p.sec / maxSec * 100) }));
+      const away = side(awayAb), home = side(homeAb); if (!away.length && !home.length) return null;
+      return { away, home };
+    } catch (_) { return null; } },
+    // ---- #2 game recap (WSC narrative game story) ----
+    gameRecapMapped: async (id) => { try {
+      const d = await get(`wsc/game-story/${id}`);
+      const t = d && (d.summary || d.story || d.recap || (d.gameStory && d.gameStory.summary) || (d.gameVideo && dflt(d.gameVideo.threeMinRecap)));
+      return (typeof t === 'string' && t.length > 20) ? t : null;
+    } catch (_) { return null; } },
+    // ---- #8 playoff series schedule (game-by-game within a series) ----
+    playoffSeriesScheduleMapped: async (season, letter) => { try {
+      const d = await get(`schedule/playoff-series/${season || activeSeason()}/${letter}`);
+      const games = (d && (d.games || (d.gameWeek && d.gameWeek.reduce((a, w) => a.concat(w.games || []), [])))) || null; if (!games || !games.length) return null;
+      return games.map((g) => ({ date: fmtDate(g.gameDate || g.startTimeUTC), away: dflt(g.awayTeam && g.awayTeam.abbrev), home: dflt(g.homeTeam && g.homeTeam.abbrev), as: num(g.awayTeam && g.awayTeam.score), hs: num(g.homeTeam && g.homeTeam.score), st: dflt(g.gameState) || '' }));
+    } catch (_) { return null; } },
+    // ---- #9 live player search ----
+    playerSearchMapped: async (term) => { if (!term || term.length < 2) return null; try {
+      const d = await get(`search/player?q=${encodeURIComponent(term)}&limit=8&active=true&culture=en-us`);
+      const arr = Array.isArray(d) ? d : ((d && d.data) || null); if (!arr || !arr.length) return null;
+      return arr.map((p) => ({ id: dflt(p.playerId) || dflt(p.id), name: dflt(p.name) || [dflt(p.firstName), dflt(p.lastName)].filter(Boolean).join(' '), team: dflt(p.teamAbbrev) || dflt(p.lastTeamAbbrev) || '', pos: dflt(p.positionCode) || dflt(p.position) || '' })).filter((p) => p.name && p.id);
+    } catch (_) { return null; } },
+    // ---- #7 national TV schedule ----
+    tvScheduleMapped: async (date) => { try {
+      const d = await get(date ? `network/tv-schedule/${date}` : 'network/tv-schedule');
+      const arr = (d && (d.games || d.broadcasts)) || (Array.isArray(d) ? d : null); if (!arr || !arr.length) return null;
+      return arr.map((g) => ({ time: dflt(g.startTime) || dflt(g.gameTime) || '', away: dflt(g.awayTeam && g.awayTeam.abbrev) || dflt(g.away), home: dflt(g.homeTeam && g.homeTeam.abbrev) || dflt(g.home), networks: (g.tvBroadcasts || g.networks || []).map((b) => dflt(b.network) || dflt(b)).filter(Boolean) })).filter((g) => g.away && g.home);
+    } catch (_) { return null; } },
+    // ---- #5 team EDGE detail (best-effort scan; null keeps mock) ----
+    edgeTeamDetailMapped: async (teamId) => { try {
+      const d = await get(`edge/team-detail/${teamId}`); if (!d || typeof d !== 'object') return null;
+      const find = (keys) => { for (const k of Object.keys(d)) { if (keys.some((w) => k.toLowerCase().includes(w))) { const v = num(d[k]); if (v != null) return v; } } return null; };
+      const rows = [['Top skating speed', find(['topskat', 'maxspeed']), 'mph'], ['Skating distance', find(['distance', 'milesskated']), 'mi/gm'], ['20+ mph bursts', find(['burst', 'over20']), '/gm'], ['Max shot speed', find(['shotspeed', 'hardest']), 'mph'], ['O-zone time', find(['ozone', 'offensivezone']), '%']].filter((r) => r[1] != null);
+      return rows.length ? rows : null;
+    } catch (_) { return null; } },
+    _map: { mapStandings, mapGame, mapRoster, mapSkaterLeaders, mapGoalieLeaders, mapShots, mapZones, mapEdgeSkater, mapEdgeGoalie },
   };
 })();

@@ -51,7 +51,7 @@
   B.prospects=ab=>PROS[ab];
 
   // ---- player game log + extras ----
-  const TROPHIES=['Art Ross','Hart','Rocket Richard','Norris','Selke','Lady Byng','Calder'];
+  const TROPHIES=['Vanguard','Keystone','Marksman','Bastion','Backcheck','Fair Play','Newcomer'];
   B.gameLog=p=>{const r=rng('log'+p.id);return Array.from({length:10},()=>{const opp=pick(r,B.ABBR.filter(a=>a!==p.team));const g=r()<.4?ri(r,1,2):0,a=r()<.45?ri(r,1,2):0,home=r()<.5,tf=ri(r,1,5),ta=ri(r,0,5);return{date:`${pick(r,['Jan','Feb'])} ${ri(r,1,28)}`,opp,home,result:`${tf>ta?'W':'L'} ${tf}-${ta}`,g,a,p:g+a,sog:ri(r,1,7),toi:`${ri(r,11,24)}:${String(ri(r,0,59)).padStart(2,'0')}`,pm:ri(r,-3,3)};});};
   B.seasonLog=p=>{const r=rng('slog'+p.id);const isG=p.type==='goalie';const MOS=['Oct','Nov','Dec','Jan','Feb','Mar'];const N=p.gp?Math.min(p.gp,32):28;
     return Array.from({length:N},(_,i)=>{const opp=pick(r,B.ABBR.filter(a=>a!==p.team));const home=r()<.5,tf=ri(r,1,6),ta=ri(r,0,5);const won=tf>ta;
@@ -65,8 +65,8 @@
     const star=p.p>=55||(isG&&p.gp>=24);
     const awards=star?Array.from({length:ri(r,1,3)},()=>({yr:`20${ri(r,18,24)}`,name:pick(r,TROPHIES)})):[];
     // structured honors: trophies grouped w/ years + count, all-star selections, career milestones
-    const TROPHY_DESC={'Art Ross':'Scoring leader','Hart':'League MVP','Rocket Richard':'Goal-scoring leader','Norris':'Top defenseman','Selke':'Top defensive forward','Lady Byng':'Sportsmanship','Calder':'Rookie of the year','Vezina':'Top goaltender','Conn Smythe':'Playoff MVP'};
-    const poolT=isG?['Vezina','Hart','Conn Smythe']:(p.pos==='D'?['Norris','Hart','Art Ross','Conn Smythe']:['Art Ross','Hart','Rocket Richard','Selke','Lady Byng','Conn Smythe']);
+    const TROPHY_DESC={'Vanguard':'Scoring leader','Keystone':'League MVP','Marksman':'Goal-scoring leader','Bastion':'Top defenseman','Backcheck':'Top defensive forward','Fair Play':'Sportsmanship','Newcomer':'Rookie of the year','Sentinel':'Top goaltender','Crucible':'Playoff MVP'};
+    const poolT=isG?['Sentinel','Keystone','Crucible']:(p.pos==='D'?['Bastion','Keystone','Vanguard','Crucible']:['Vanguard','Keystone','Marksman','Backcheck','Fair Play','Crucible']);
     const won={};if(star){const n=ri(r,1,3);for(let i=0;i<n;i++){const t=pick(r,poolT);(won[t]=won[t]||[]).push(2018+ri(r,0,7));}}
     const trophies=Object.entries(won).map(([name,yrs])=>({name,desc:TROPHY_DESC[name]||'',years:[...new Set(yrs)].sort((a,b)=>b-a),count:[...new Set(yrs)].length}));
     const allStar=star?ri(r,1,8):(r()<.3?ri(r,1,2):0);
@@ -82,15 +82,22 @@
   const epct=r=>Math.round(40+r()*59);
   function rawSkater(p){const r=rng('se'+p.id);return{top:+(20.5+r()*3.6).toFixed(2),shot:+(70+r()*28).toFixed(1),savg:+(55+r()*18).toFixed(1),b20:ri(r,8,140),b22:ri(r,0,42),dist:+(120+r()*70).toFixed(1),oz:+(40+r()*22).toFixed(1)};}
   B.edgeSkaterRaw=rawSkater;
+  // league-wide EDGE leaderboard — top 20 skaters by a raw tracking metric
+  const _eb={};
+  B.edgeBoard=metric=>{ if(_eb[metric])return _eb[metric]; const arr=B.allPlayers.map(p=>({...p,_v:rawSkater(p)[metric]})).sort((a,b)=>b._v-a._v).slice(0,20); _eb[metric]=arr; return arr; };
+  // per-game EDGE breakdown — last 6 games of skating/shot tracking for a skater
+  B.edgeGameLog=p=>{const r=rng('egl'+p.id);const base=rawSkater(p);return B.gameLog(p).slice(0,6).map(g=>({date:g.date,opp:g.opp,home:g.home,topSpd:+(base.top-r()*1.6).toFixed(1),topShot:+(base.shot-r()*8).toFixed(1),dist:+(2.6+r()*1.7).toFixed(1),b20:ri(r,1,8)}));};
   B.skaterEdge=p=>{const e=rawSkater(p);const r=rng('sepct'+p.id);
     const oz=e.oz,dz=+((100-oz)*0.46).toFixed(1),nz=+(100-oz-dz).toFixed(1);
     return{seasons:['2024-25 (Regular)','2023-24 (Regular)','2022-23 (Regular)'],
       summary:[['Top skating speed',`${e.top} mph`],['Bursts 20+',e.b20],['Bursts 22+',e.b22],['Top shot speed',`${e.shot} mph`],['Avg shot speed',`${e.savg} mph`],['O-zone time',`${oz}%`]],
-      speed:[['Top shot speed',`${e.shot} mph`,epct(r),`${(e.shot*0.84).toFixed(1)} mph`],['Max skating speed',`${e.top} mph`,epct(r),`${(e.top*0.92).toFixed(1)} mph`],['Total distance',`${e.dist} mi`,epct(r),`${(e.dist*0.9).toFixed(0)} mi`],['Bursts over 20',e.b20,epct(r),Math.round(e.b20*0.8)],['Bursts over 22',e.b22,epct(r),Math.round(e.b22*0.7)],['O-zone time',`${oz}%`,epct(r),`${(oz*0.9).toFixed(0)}%`]],
+      speed:[['Top shot speed',`${e.shot} mph`,epct(r),`${(e.shot*0.84).toFixed(1)} mph`],['Avg shot speed',`${e.savg} mph`,epct(r),`${(e.savg*0.9).toFixed(1)} mph`],['Max skating speed',`${e.top} mph`,epct(r),`${(e.top*0.92).toFixed(1)} mph`],['Total distance',`${e.dist} mi`,epct(r),`${(e.dist*0.9).toFixed(0)} mi`],['Bursts over 20',e.b20,epct(r),Math.round(e.b20*0.8)],['Bursts over 22',e.b22,epct(r),Math.round(e.b22*0.7)],['O-zone time',`${oz}%`,epct(r),`${(oz*0.9).toFixed(0)}%`]],
       zones:[['Offensive',oz],['Neutral',nz],['Defensive',dz]]};};
-  B.goalieEdge=g=>{const r=rng('ge'+g.id);return{seasons:['2024-25 (Regular)','2023-24 (Regular)'],
+  B.goalieEdge=g=>{const r=rng('ge'+g.id);
+    const gsax=+((r()*3-0.8)*5).toFixed(1),reb=Math.round(70+r()*22),hf=+(9+r()*5).toFixed(1);
+    return{seasons:['2024-25 (Regular)','2023-24 (Regular)'],
     summary:[['Overall SV%',g.svp],['GAA',g.gaa],['Shutouts',g.so],['Record',`${g.w}-${g.l}`]],
-    saveQ:[['High-danger SV%',(0.80+r()*0.09).toFixed(3).slice(1),epct(r),'.812',ri(r,120,260)],['Mid-danger SV%',(0.88+r()*0.07).toFixed(3).slice(1),epct(r),'.910',ri(r,300,520)],['Low-danger SV%',(0.96+r()*0.03).toFixed(3).slice(1),epct(r),'.975',ri(r,400,700)]]};};
+    saveQ:[['High-danger SV%',(0.80+r()*0.09).toFixed(3).slice(1),epct(r),'.812',ri(r,120,260)],['Mid-danger SV%',(0.88+r()*0.07).toFixed(3).slice(1),epct(r),'.910',ri(r,300,520)],['Low-danger SV%',(0.96+r()*0.03).toFixed(3).slice(1),epct(r),'.975',ri(r,400,700)],['Goals saved a.e.',(gsax>=0?'+':'')+gsax,epct(r),'+2.4',ri(r,40,82)],['Rebound control',reb+'%',epct(r),'78%',ri(r,300,520)],['HD shots faced/60',hf,epct(r),'11.2',ri(r,12,30)]]};};
 
   // ---- edge leaderboards (skater tracking + goalie high-danger) ----
   B.goalieHD=g=>{const r=rng('ge'+g.id);return +(0.80+r()*0.09).toFixed(3);};
@@ -102,6 +109,10 @@
   B.edgeTeamDistance=()=>{ if(_el._dist)return _el._dist;
     const arr=B.ABBR.map(ab=>{const r=rng('td'+ab);return{ab,mi:+(58+r()*14).toFixed(1),top:+(21.5+r()*2.4).toFixed(1)};}).sort((a,b)=>b.mi-a.mi).slice(0,6);
     _el._dist=arr; return arr; };
+  // team top skating speed (mph) leaderboard
+  B.edgeTeamSpeed=()=>{ if(_el._tspd)return _el._tspd;
+    const arr=B.ABBR.map(ab=>{const r=rng('ts'+ab);return{ab,top:+(22.4+r()*1.6).toFixed(1),mph20:ri(r,9,26)};}).sort((a,b)=>b.top-a.top).slice(0,6);
+    _el._tspd=arr; return arr; };
   // head-to-head skater comparison on edge metrics
   B.edgeCompare=(idA,idB)=>{const A=B.allPlayers.find(p=>p.id===idA)||B.allPlayers[0];const B2=B.allPlayers.find(p=>p.id===idB)||B.allPlayers[1];
     const ea=rawSkater(A),eb=rawSkater(B2);
@@ -186,9 +197,20 @@
 
   // ---- season series + play-by-play ----
   B.seasonSeries=g=>{const r=rng('ss'+g.a+g.h);return Array.from({length:3},(_,i)=>{const home=i%2===0?g.h:g.a,away=i%2===0?g.a:g.h;const hs=ri(r,1,5),as=ri(r,0,4)+(hs===0?1:0);return{date:`${pick(r,['Oct','Nov','Dec'])} ${ri(r,1,28)}`,away,home,as,hs};});};
-  const EVT=['Goal','Shot','Penalty','Hit','Faceoff','Giveaway','Takeaway','Block'];
   const INFRACTIONS=['Tripping','Hooking','Slashing','Interference','Roughing','High-sticking','Holding','Cross-checking','Boarding','Delay of game','Too many men','Goaltender interference'];
-  B.playByPlay=g=>{if(g.st==='pre')return[];const r=rng('pbp'+g.id);const out=[];['1st','2nd','3rd'].forEach(per=>{let sec=0;const n=ri(r,9,16);for(let i=0;i<n;i++){sec+=ri(r,25,80);if(sec>1200)break;const team=r()<.5?g.a:g.h;const type=pick(r,EVT);const pl=pick(r,B.teamRoster(team).slice(0,12));const mm=String(Math.floor(sec/60)).padStart(2,'0'),ss=String(sec%60).padStart(2,'0');const infraction=type==='Penalty'?pick(r,INFRACTIONS):null;out.push({per,time:`${mm}:${ss}`,team,type,infraction,desc:edesc(type,pl.name,team,infraction)});}});return out;};
+  const NGEVT=['Shot','Penalty','Hit','Faceoff','Giveaway','Takeaway','Block']; // non-goal events; goals come from the shared box score
+  B.playByPlay=g=>{if(g.st==='pre')return[];const r=rng('pbp'+g.id);
+    // canonical goals from BC.detail — same scorers/assists/times the Scoring summary & replays use
+    const byPer={'1st':[],'2nd':[],'3rd':[]};
+    B.detail(g).goals.forEach(go=>{(byPer[go.per]||byPer['1st']).push(go);});
+    const out=[];
+    ['1st','2nd','3rd'].forEach(per=>{let sec=0;const evs=[];const n=ri(r,9,16);
+      for(let i=0;i<n;i++){sec+=ri(r,25,80);if(sec>1200)break;const team=r()<.5?g.a:g.h;const type=pick(r,NGEVT);const pl=pick(r,B.teamRoster(team).slice(0,12));const mm=String(Math.floor(sec/60)).padStart(2,'0'),ss=String(sec%60).padStart(2,'0');const infraction=type==='Penalty'?pick(r,INFRACTIONS):null;evs.push({per,time:`${mm}:${ss}`,team,type,infraction,desc:edesc(type,pl.name,team,infraction)});}
+      (byPer[per]||[]).forEach(go=>{const aTxt=go.assists&&go.assists.length?` (${go.assists.join(', ')})`:' (unassisted)';const sTxt=go.str&&go.str!=='EV'?' '+go.str:'';evs.push({per,time:go.time,team:go.team,type:'Goal',infraction:null,scorer:go.scorer,desc:`GOAL — ${go.scorer}${sTxt} (${go.team})${aTxt}`});});
+      evs.sort((a,b)=>a.time.localeCompare(b.time));
+      out.push(...evs);
+    });
+    return out;};
   function edesc(t,n,tm,inf){switch(t){case'Goal':return`GOAL — ${n} (${tm})`;case'Shot':return`${n} shot on goal`;case'Penalty':return`${n} — 2 min, ${inf}`;case'Hit':return`${n} hit`;case'Faceoff':return`Faceoff won by ${tm}`;case'Giveaway':return`Giveaway by ${n}`;case'Takeaway':return`Takeaway by ${n}`;default:return`Blocked shot — ${n}`;}}
 
   // ---- scores expandable extras ----
@@ -274,8 +296,9 @@
   B.strengthOfSchedule=()=>{const c=Object.fromEntries(B.ABBR.map(a=>[a,0]));for(let o=1;o<=5;o++)B.slate(o).forEach(g=>{c[g.a]++;c[g.h]++;});return Object.entries(c).map(([ab,n])=>({ab,n})).sort((a,b)=>b.n-a.n).slice(0,6);};
 
   // ---- DRAFT ----
-  const PFN=['Gavin','Michael','Cole','Porter','Berkly','Cayden','Roger','James','Malcolm','Trevor','Lukas','Ivan','Anton','Viktor','Emil','Sascha','Carter','Brady','Will','Beckett'];
-  const PLN=['McKenna','Misa','Hagens','Martone','Catton','Lin','McQueen','Hagens','Spence','Connelly','Frondell','Ryabkin','Eklund','Reschny','Mrtka','Boumedienne','Aitcheson','Smith','Horcoff','OByrne'];
+  // Fictional draft-prospect names — not real prospects, avoids reproducing actual names.
+  const PFN=['Gavin','Beckett','Porter','Cayden','Hudson','Maddox','Rowan','Jasper','Nico','Theo','Sawyer','Finn','Luca','Oskar','Bode','Cruz','Knox','Dax','Remy','Soren'];
+  const PLN=['Ackerley','Vanchuk','Sutcliffe','Norquist','Delacroix','Hammond','Kovalenko','Brisbois','Tantalo','Wexler','Aittola','Strandberg','Maleski','Fontaine','Drummond','Pesonen','Vrabel','Lindahl','Carrick','Oswald'];
   const PLEAGUES=['WHL','OHL','QMJHL','USHL','NCAA','Liiga','SHL','J20 Nationell'];
   const DRAFT_POS=['C','LW','RW','D','D','G'];
   B.draftRankings=()=>{ if(B._dr)return B._dr;
@@ -336,11 +359,53 @@
     const out={year,picks,rounds}; B._dpy[year]=out; return out; };
 
   // ---- game detail extras: recap, broadcasts, shift chart, goal replays ----
-  B.gameRecap=g=>{const r=rng('rec'+g.id);const w=g.as>g.hs?g.a:g.h,wn=B.city(w);const star=pick(r,B.teamRoster(w).slice(0,4));
-    return `${wn} ${g.as>g.hs?'held off':'edged'} ${B.city(g.as>g.hs?g.h:g.a)} ${Math.max(g.as,g.hs)}-${Math.min(g.as,g.hs)} behind ${star.name}'s multi-point night and ${ri(r,24,38)} saves. The result moves ${B.nick(w)} in a tight ${B.standBy(w)?B.standBy(w).conf:'conference'} race.`;};
+  B.gameRecap=g=>{const aw=g.as>g.hs,w=aw?g.a:g.h,wn=B.city(w);
+    const det=B.detail(g);
+    // headline performer = winning-team player with the most points in THIS game's goals
+    const tally={};det.goals.filter(go=>go.team===w).forEach(go=>{tally[go.scorer]=(tally[go.scorer]||0)+1;(go.assists||[]).forEach(a=>{tally[a]=(tally[a]||0)+1;});});
+    const top=Object.entries(tally).sort((a,b)=>b[1]-a[1])[0];
+    const perf=top?`${top[0]}'s ${top[1]>=2?top[1]+'-point night':'goal'}`:'a balanced attack';
+    // winning goalie's saves = opponent's shots on goal − goals allowed (consistent with the box score)
+    const wShotsAgainst=aw?g.sh:g.sa,goalsAllowed=Math.min(g.as,g.hs);const saves=Math.max(0,wShotsAgainst-goalsAllowed);
+    return `${wn} ${aw?'held off':'edged'} ${B.city(aw?g.h:g.a)} ${Math.max(g.as,g.hs)}-${Math.min(g.as,g.hs)} behind ${perf} and ${saves} saves. The result moves ${B.nick(w)} in a tight ${B.standBy(w)?B.standBy(w).conf:'conference'} race.`;};
   B.broadcasts=g=>{const r=rng('bx'+g.id);const tv=['ESPN','TNT','SN','NESN','MSG','BSSO','TVAS'];return{tv:[pick(r,tv),r()<.4?pick(r,tv):null].filter(Boolean),stream:['ESPN+','Max'].slice(0,ri(r,1,2)),radio:`${g.a} Radio · ${g.h} Radio`,odds:`${g.a} ${r()<.5?'-':'+'}${ri(r,110,180)} · ${g.h} ${r()<.5?'-':'+'}${ri(r,110,180)}`};};
   B.shiftChart=g=>{const r=rng('sh'+g.id);const mk=team=>B.teamRoster(team).slice(0,6).map(p=>({name:p.name,pos:p.pos,toi:`${ri(r,11,24)}:${String(ri(r,0,59)).padStart(2,'0')}`,shifts:ri(r,18,32),pct:ri(r,28,62)}));return{away:mk(g.a),home:mk(g.h)};};
   B.goalReplays=g=>{const goals=B.detail(g).goals;return goals.map((go,i)=>({...go,id:i,clip:`Goal ${i+1}`}));};
+
+  // ---- #7 national TV schedule (mock; live overlay via NHL.tvScheduleMapped) ----
+  B.tvSchedule=()=>{ if(B._tvs)return B._tvs; const r=rng('natv');
+    const nets=['ESPN','TNT','ABC','SN','TVAS','ESPN+','Max'];
+    const teams=[...B.ABBR]; for(let i=teams.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[teams[i],teams[j]]=[teams[j],teams[i]];}
+    const out=[]; for(let i=0;i+1<teams.length&&out.length<7;i+=2){ out.push({away:teams[i],home:teams[i+1],time:`${ri(r,7,10)}:${pick(r,['00','30'])} PM ET`,networks:[pick(r,nets),r()<.45?pick(r,nets):null].filter((v,idx,s)=>v&&s.indexOf(v)===idx)}); }
+    B._tvs=out; return out; };
+
+  // ---- #5 team EDGE profile + head-to-head (mock; live via NHL.edgeTeamDetailMapped) ----
+  B._etf={};
+  B.edgeTeamFull=ab=>{ if(B._etf[ab])return B._etf[ab]; const r=rng('etf'+ab); const pc=()=>ri(r,18,99);
+    const rows=[['Top skating speed',+(22.6+r()*1.8).toFixed(1),'mph',pc()],['Avg skating speed',+(16.4+r()*1.2).toFixed(1),'mph',pc()],
+      ['Skating distance',+(54+r()*12).toFixed(1),'mi/gm',pc()],['20+ mph bursts',ri(r,42,96),'/gm',pc()],
+      ['Max shot speed',+(92+r()*8).toFixed(1),'mph',pc()],['High-danger shots',ri(r,9,17),'/gm',pc()],['O-zone time',+(38+r()*12).toFixed(1),'%',pc()]];
+    B._etf[ab]={ab,rows}; return B._etf[ab]; };
+  B.edgeTeamCompare=(a,b)=>{const A=B.edgeTeamFull(a),Bb=B.edgeTeamFull(b);
+    return A.rows.map((row,i)=>({label:row[0],unit:row[2],a:row[1],b:Bb.rows[i][1],aPct:row[3],bPct:Bb.rows[i][3]}));};
+
+  // ---- #8 playoff series game-by-game (mock; live via NHL.playoffSeriesScheduleMapped) ----
+  B._sg={};
+  B.seriesGames=(hiAb,loAb,hiW,loW)=>{const key=hiAb+'|'+loAb+'|'+hiW+'|'+loW;if(B._sg[key])return B._sg[key];
+    const r=rng('srg'+key); const seq=[]; for(let i=0;i<hiW;i++)seq.push('hi'); for(let i=0;i<loW;i++)seq.push('lo');
+    for(let i=seq.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[seq[i],seq[j]]=[seq[j],seq[i]];}
+    const venues=[hiAb,hiAb,loAb,loAb,hiAb,loAb,hiAb];
+    const games=seq.map((w,i)=>{const host=venues[i]||(i%2?loAb:hiAb);const hostHi=host===hiAb;
+      const wG=ri(r,2,5),lG=ri(r,0,Math.max(0,wG-1));const ot=(wG-lG===1)&&r()<.28;const hiG=w==='hi'?wG:lG,loG=w==='hi'?lG:wG;
+      return {g:i+1,date:`${pick(r,['Apr','May'])} ${ri(r,11,29)}`,host,away:hostHi?loAb:hiAb,home:host,as:hostHi?loG:hiG,hs:hostHi?hiG:loG,winner:w==='hi'?hiAb:loAb,ot};});
+    B._sg[key]=games; return games; };
+
+  // ---- #10 extra leaderboard categories (deterministic per player) ----
+  B._lex={};
+  B.leaderEx=p=>{ if(B._lex[p.id])return B._lex[p.id]; const r=rng('lex'+(p.id||p.name)); const gp=p.gp||60;
+    const ex={hits:Math.round(ri(r,gp*0.4,gp*3.2)),blk:Math.round(p.pos==='D'?ri(r,gp*1.1,gp*2.6):ri(r,gp*0.3,gp*1.3)),
+      toiPg:+(((p.pos==='D'?20:15)+r()*6).toFixed(1)),fo:p.pos==='C'?+((44+r()*14).toFixed(1)):0};
+    B._lex[p.id]=ex; return ex; };
 
   // ---- live NHL Edge snapshot for a single game (second-screen) ----
   B._le={};
@@ -395,7 +460,7 @@
   B.officials=g=>{ if(B._off[g.id])return B._off[g.id];
     const r=rng('off'+g.id);
     const FN=['Wes','Chris','Kelly','Garrett','Dan','Steve','Gord','Trevor','Brad','Jean','Frederick','Pierre'];
-    const LN=['McCauley','Rooney','Sutherland','Pollock','Marchand','Devorski','Walsh','Hanson','Murray','Cormier','Nicholson','Schlenker'];
+    const LN=['Halverson','Pruitt','Garrity','Brennan','Mercer','Ostroski','Whitfield','Langlois','Kerrigan','Nadeau','Schramm','Delaney'];
     const nm=()=>`${pick(r,FN)} ${pick(r,LN)}`;
     B._off[g.id]={refs:[nm(),nm()],linesmen:[nm(),nm()]}; return B._off[g.id]; };
 
@@ -425,8 +490,9 @@
 
 
   // ---- records.nhl.com (all-time records / awards) mock ----
-  const HFN=['Wayne','Gordie','Mario','Bobby','Mark','Steve','Jaromir','Sidney','Alex','Nicklas','Ray','Patrick','Connor','Joe','Mike'];
-  const HLN=['Gretzky','Howe','Lemieux','Orr','Messier','Yzerman','Jagr','Crosby','Ovechkin','Lidstrom','Bourque','Roy','McDavid','Sakic','Bossy'];
+  // Fictional all-time greats — keeps the records page a demo, not real player records.
+  const HFN=['Reginald','Maurice','Gordon','Howard','Vance','Clark','Errol','Sterling','Lionel','Bernard','Cecil','Wendell','Floyd','Marcel','Roald'];
+  const HLN=['Thornbury','Vandermeer','Beauregard','Halloran','Strickland','Mortensen','Bellerose','Kallenbach','Whitcombe','Ravenscroft','Dubicki','Macklin','Stahl','Cormier','Ekberg'];
   B.recordSkaters=()=>{ if(B._rs)return B._rs; const r=rng('recsk');
     const cats=[['Goals',894],['Assists',1963],['Points',2857],['Games',1779],['Power-play goals',274],['Game-winning goals',135]];
     B._rs=cats.map(([cat,top])=>({cat,rows:Array.from({length:5},(_,i)=>({name:`${pick(r,HFN)} ${pick(r,HLN)}`,v:Math.round(top*(1-i*0.07)-ri(r,0,40))}))})); return B._rs; };
@@ -441,7 +507,7 @@
     const recs=[['Goals, one season',92,'skater'],['Assists, one season',163,'skater'],['Points, one season',215,'skater'],['Points, defenseman',139,'skater'],['Goals, rookie',76,'skater'],['Wins, goalie',48,'goalie'],['Shutouts, one season',22,'goalie'],['Save %, qualified','.940','goalie']];
     B._rsn=recs.map(([label,v,kind])=>({label,v:typeof v==='number'?v:v,holder:`${pick(r,kind==='goalie'?GFN:HFN)} ${pick(r,kind==='goalie'?GLN:HLN)}`,season:pick(r,SEASONS),kind})); return B._rsn; };
   B.recordTrophiesList=()=>{ if(B._rt)return B._rt; const r=rng('rectr');
-    const tro=[['Hart','MVP'],['Art Ross','Scoring'],['Rocket Richard','Goals'],['Norris','Top D'],['Vezina','Top G'],['Selke','Defensive F'],['Conn Smythe','Playoff MVP'],['Calder','Rookie']];
+    const tro=[['Keystone','MVP'],['Vanguard','Scoring'],['Marksman','Goals'],['Bastion','Top D'],['Sentinel','Top G'],['Backcheck','Defensive F'],['Crucible','Playoff MVP'],['Newcomer','Rookie']];
     B._rt=tro.map(([name,desc])=>({name,desc,winner:`${pick(r,HFN)} ${pick(r,HLN)}`,year:'2025',
       history:Array.from({length:5},(_,i)=>({yr:2025-i,name:`${pick(r,HFN)} ${pick(r,HLN)}`}))})); return B._rt; };
   // active players chasing career milestones — progress to next round number
@@ -681,7 +747,7 @@
       body:`Coach confirms ${ln(pl('EDM',0))} is "day-to-day," but he was in a walking boot leaving the rink. Read between the lines. ${ln(pl('EDM',2))} likely bumps up to 1C tonight.`,
       replies:210,reposts:520,likes:4800,teams:['EDM']});
     tw({name:'Crease & Cup',handle:'CreaseAndCup',verified:true,role:'Fan media',team:'NYR',ago:'2h',
-      body:`${ln(go('NYR'))} since the calendar flipped: .941 SV%, 3 shutouts, a .500 team somehow in a playoff spot because of him. Where is the Vezina noise?`,
+      body:`${ln(go('NYR'))} since the calendar flipped: .941 SV%, 3 shutouts, a .500 team somehow in a playoff spot because of him. Where is the Sentinel buzz?`,
       replies:140,reposts:610,likes:5200,teams:['NYR']});
     tw({name:'The Fourth Line',handle:'TheFourthLine',verified:false,role:'Analytics',team:'DAL',ago:'3h',
       body:`Power Rankings dropped. Dallas to No. 1 — and the underlying numbers back it up: best xGA/60 in the league over the last month. This is not a fluke run.`,

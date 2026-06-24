@@ -52,7 +52,8 @@
     inflightRoster[ab] = true;
     if (cb) (rosterWaiters[ab] = rosterWaiters[ab] || []).push(cb);
     const done = () => { inflightRoster[ab] = false; (rosterWaiters[ab] || []).forEach((f) => { try { f(); } catch (_) {} }); rosterWaiters[ab] = []; };
-    Promise.resolve().then(() => NHL.roster(ab)).then((rows) => {
+    const seas = (BC._seasonId && window.NHL && String(BC._seasonId) !== String(window.NHL._season)) ? BC._seasonId : undefined;
+    Promise.resolve().then(() => NHL.roster(ab, seas)).then((rows) => {
       if (rows && rows.length) {
         const skBy = {}; (BC.allPlayers || []).forEach((p) => { skBy[p.id] = p; });
         const goBy = {}; (BC.goalies || []).forEach((g) => { goBy[g.id] = g; });
@@ -173,18 +174,36 @@
   BC.onError = (cb) => { BC._errCbs.push(cb); return () => { BC._errCbs = BC._errCbs.filter(x=>x!==cb); }; };
   BC.notifyError = (msg) => BC._errCbs.forEach(cb => { try { cb(msg); } catch(_){} });
 
-  // re-fetch standings for a chosen season (live only; mock ignores season)
+  // re-fetch standings for a chosen season (live only; mock ignores season).
+  // Current season → standings/now; a past season → standings as of that season's
+  // regular-season end (April of the end year), which the API returns as final.
   BC.hydrateSeason = async (season, onReady) => {
     if (!BC.LIVE) return; // preview/mock: season switch is a no-op visually
+    const cur = (window.NHL && window.NHL._season) ? String(window.NHL._season) : null;
+    const s = String(season || cur || '');
+    BC._seasonId = s; // set FIRST so activeSeason()/liveEdgeOK() resolve to the chosen season
     try {
-      const data = await NHL.get(`standings/${NHL.ymd(0)}`); // season-scoped via date works live
-      const rows = NHL._map.mapStandings(data);
+      // ---- standings (current → now; past → as of that season's reg-season end) ----
+      const path = (!s || s === cur) ? 'standings/now' : `standings/${s.slice(4, 8)}-04-15`;
+      const rows = NHL._map.mapStandings(await NHL.get(path));
       if (rows && rows.length) {
+        rows.forEach((r) => ensureTeam(r.ab, r._name, r._city));
         BC.STANDINGS.length = 0; rows.forEach((r) => BC.STANDINGS.push(r));
         const rank = {}; BC.STANDINGS.forEach((t, i) => (rank[t.ab] = i + 1)); BC.rankOf = rank;
-        try { if (BC.resetDerived) BC.resetDerived(); } catch (_) {}
-        onReady && onReady();
+        BC.standBy = (ab) => BC.STANDINGS.find((t) => t.ab === ab);
       }
-    } catch (_) {}
+      // ---- league player pool + goalies + team stats FOR THIS SEASON ----
+      await Promise.all([
+        (async () => { try { const sk = await NHL.skaterLeaders(s); if (sk && sk.length && Array.isArray(BC.allPlayers)) { sk.forEach((p) => ensureTeam(p.team)); BC.allPlayers.length = 0; sk.forEach((p) => BC.allPlayers.push(p)); } } catch (_) {} })(),
+        (async () => { try { const go = await NHL.goalieLeaders(s); if (go && go.length && Array.isArray(BC.goalies)) { go.forEach((g) => ensureTeam(g.team)); BC.goalies.length = 0; go.forEach((g) => BC.goalies.push(g)); } } catch (_) {} })(),
+        (async () => { try { const ts = await NHL.teamSeasonStats(s); if (ts) BC._liveTeamStats = ts; } catch (_) {} })(),
+      ]);
+      // drop cached rosters so Team pages refetch for THIS season
+      Object.keys(liveRosters).forEach((k) => delete liveRosters[k]);
+      Object.keys(inflightRoster).forEach((k) => delete inflightRoster[k]);
+      // recompute every standings/player-derived cache (leaders, rosters, seeding, draft, news, team stats)
+      try { if (BC.resetDerived) BC.resetDerived(); } catch (_) {}
+      onReady && onReady();
+    } catch (_) { onReady && onReady(); }
   };
 })();

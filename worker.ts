@@ -17,10 +17,45 @@ import {
   errorJson,
   json,
   currentSeason,
+  isRefererAllowed,
+  rateLimit,
+  sanitizeRest,
+  SECURITY_HEADERS,
 } from './functions/api/nhl/_lib';
 
 interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
+  // Optional KV namespace for soft per-IP rate limiting (see wrangler.toml / README).
+  RATE_LIMIT?: { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: any) => Promise<void> };
+  // Optional comma-separated extra browser hosts allowed to call /api/nhl/* (same-origin always allowed).
+  ALLOWED_HOSTS?: string;
+}
+
+// Content-Security-Policy for the HTML app. `strict` (Babel-free) is used when we
+// serve a precompiled *.prod.html; the build-free app.html needs 'unsafe-eval'
+// for in-browser Babel. cloudflareinsights.* is allowed for optional CF Web Analytics.
+function cspFor(strict: boolean): string {
+  const script = strict
+    ? "script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://static.cloudflareinsights.com";
+  return [
+    "default-src 'self'",
+    script,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "connect-src 'self' https://cloudflareinsights.com",
+    "frame-ancestors 'self'",
+    "base-uri 'self'",
+  ].join('; ');
+}
+
+/** Attach security headers to a static-asset response (CSP only on HTML; strict for prod builds). */
+function withAppHeaders(resp: Response, strict = false): Response {
+  const h = new Headers(resp.headers);
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) h.set(k, v);
+  if ((h.get('content-type') || '').includes('text/html')) h.set('content-security-policy', cspFor(strict));
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }
 
 // --- /api/nhl/* router (ported from functions/api/nhl/[[path]].ts) ----------
@@ -54,8 +89,10 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'teams':
         return teams();
-      case 'standings':
-        return proxyWeb('standings/now');
+      case 'standings': {
+        const date = (b && /^\d{4}-\d{2}-\d{2}$/.test(b)) ? b : q('date');
+        return proxyWeb(date ? `standings/${date}` : 'standings/now');
+      }
       case 'roster': {
         if (!b) break;
         const season = q('season', currentSeason())!;
@@ -145,6 +182,7 @@ async function handleNhl(url: URL): Promise<Response> {
         if (kind === 'skater-comparison' && c) return proxyWeb(`edge/skater-comparison/${c}/${season}/${group}`);
         const rest = segments.slice(1).join('/');
         if (rest) {
+          if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
           const endsWithSeason = /\/\d{8}(\/\d+)?$/.test(rest) || /\/now$/.test(rest);
           const full = endsWithSeason ? `edge/${rest}` : `edge/${rest}/${season}/${group}`;
           return proxyWeb(full);
@@ -201,6 +239,7 @@ async function handleNhl(url: URL): Promise<Response> {
       case 'stats': {
         const rest = segments.slice(1).join('/');
         if (!rest) break;
+        if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
         try {
           const data = await statsRequest(rest, Object.fromEntries(url.searchParams.entries()));
           return json(data);
@@ -220,6 +259,7 @@ async function handleNhl(url: URL): Promise<Response> {
       case 'ppt-replay': {
         const rest = segments.slice(1).join('/');
         if (!rest) break;
+        if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
         return proxyWeb(`ppt-replay/${rest}`);
       }
       case 'wsc-pbp':
@@ -237,6 +277,7 @@ async function handleNhl(url: URL): Promise<Response> {
       case 'records': {
         const rest = segments.slice(1).join('/');
         if (!rest) break;
+        if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
         try {
           const data = await recordsRequest(rest, Object.fromEntries(url.searchParams.entries()));
           return json(data);
@@ -271,21 +312,40 @@ export default {
     // API routes → live NHL proxy
     if (url.pathname === '/api/nhl' || url.pathname.startsWith('/api/nhl/')) {
       if (request.method !== 'GET') return errorJson('Method not allowed.', 405);
+      // Hotlink guard: browser callers must come from an allow-listed host.
+      const allowed = (env.ALLOWED_HOSTS ? env.ALLOWED_HOSTS.split(',') : [])
+        .map((s) => s.trim()).filter(Boolean).concat(url.host);
+      if (!isRefererAllowed(request.headers.get('origin'), request.headers.get('referer'), allowed)) {
+        return errorJson('Forbidden.', 403);
+      }
+      // Soft per-IP rate limit (no-op unless a RATE_LIMIT KV namespace is bound).
+      const ip = request.headers.get('cf-connecting-ip') || '';
+      if (!(await rateLimit(env.RATE_LIMIT, ip, 120))) return errorJson('Too many requests.', 429);
       return handleNhl(url);
     }
 
-    // Everything else → static assets.
-    let resp = await env.ASSETS.fetch(request);
-
-    // Clean/extensionless route that didn't match (e.g. /app) → retry as .html
-    // so /app serves app.html regardless of the platform's html-handling mode.
-    if (resp.status === 404 && !/\.[a-z0-9]+$/i.test(url.pathname)) {
-      const path = url.pathname.replace(/\/$/, '') || '/index';
-      const htmlReq = new Request(new URL(path + '.html' + url.search, url), request);
-      const htmlResp = await env.ASSETS.fetch(htmlReq);
-      if (htmlResp.status !== 404) resp = htmlResp;
+    // Everything else → static assets. Prefer a precompiled *.prod.html for the app
+    // route (faster first paint, no runtime Babel → stricter CSP). Falls back to the
+    // build-free app.html when no prod build is present, so this is always safe.
+    let resp: Response | undefined;
+    let servedProd = false;
+    if (url.pathname === '/app' || url.pathname === '/app.html') {
+      const prodReq = new Request(new URL('/app.prod.html' + url.search, url), request);
+      const prodResp = await env.ASSETS.fetch(prodReq);
+      if (prodResp.status !== 404) { resp = prodResp; servedProd = true; }
+    }
+    if (!resp) {
+      resp = await env.ASSETS.fetch(request);
+      // Clean/extensionless route that didn't match (e.g. /app) → retry as .html
+      // so /app serves app.html regardless of the platform's html-handling mode.
+      if (resp.status === 404 && !/\.[a-z0-9]+$/i.test(url.pathname)) {
+        const path = url.pathname.replace(/\/$/, '') || '/index';
+        const htmlReq = new Request(new URL(path + '.html' + url.search, url), request);
+        const htmlResp = await env.ASSETS.fetch(htmlReq);
+        if (htmlResp.status !== 404) resp = htmlResp;
+      }
     }
 
-    return resp;
+    return withAppHeaders(resp, servedProd);
   },
 };

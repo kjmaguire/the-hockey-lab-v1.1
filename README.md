@@ -27,6 +27,46 @@ cloudflare/
 └── wrangler.toml
 ```
 
+## Security & rate limiting
+
+The proxy is a public, unauthenticated GET passthrough, so it's hardened against
+abuse and being used to overload the NHL API:
+
+| Layer | What it does | Where |
+|---|---|---|
+| **Referer/Origin allow-list** | Browser callers must come from the site's own host (plus any `ALLOWED_HOSTS`); blocks hotlinking from other sites. Header-less callers fall through to rate limiting. | `worker.ts` / `[[path]].ts` via `isRefererAllowed()` |
+| **Soft per-IP rate limit** | 120 req/min/IP fixed window, **if** a `RATE_LIMIT` KV namespace is bound (else no-op). | `rateLimit()` |
+| **Cloudflare WAF rate-limit rule** | The recommended, platform-native limiter — atomic, per-IP, no code. Add a rule on path `/api/nhl/*`. | Cloudflare dashboard |
+| **Path sanitisation** | Generic passthroughs (`edge/*`, `stats/*`, `records/*`, `ppt-replay/*`) reject traversal / non-URL chars / overlong paths. Upstream hosts are fixed (no SSRF). | `sanitizeRest()` |
+| **GET-only** | Non-GET → 405. | `worker.ts` |
+| **Security headers** | `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy` on every response; **CSP** on HTML. | `SECURITY_HEADERS` + `withAppHeaders()` / `public/_headers` |
+
+**Enable the KV limiter** — the `[[kv_namespaces]]` binding is now live in
+`wrangler.toml` with placeholder ids, so create the namespace and paste the real
+ids in (until you do, `wrangler deploy` will reject the placeholder):
+```bash
+cd cloudflare
+npx wrangler kv:namespace create RATE_LIMIT            # → id          (paste into `id`)
+npx wrangler kv:namespace create RATE_LIMIT --preview  # → preview_id  (paste into `preview_id`)
+```
+Prefer a Cloudflare WAF rate-limit rule as well — it's atomic and needs no KV.
+
+**CSP note:** the policy allows in-browser Babel (`'unsafe-eval'`) because
+`app.html` transpiles JSX at runtime. If you deploy `app.prod.html` (precompiled,
+no Babel) you can drop `'unsafe-eval'` from `script-src` for a stricter policy.
+
+## Performance
+
+- **stale-while-revalidate / stale-if-error:** API `Cache-Control` now carries
+  `stale-while-revalidate` (CDN serves the cached copy instantly and refreshes in
+  the background) and `stale-if-error=7d` (serve cached data through an upstream
+  blip). Fewer synchronous origin hits, smoother for users.
+- **Composed-response memoisation:** `teamStats` assembles ~24 upstream stat
+  reports; the assembled blob is now memoised at the edge (`edgeMemo`) so the
+  composition isn't re-run on every hit (the sub-reports were already cached
+  individually).
+- See **Edge caching** above for the tiered per-resource TTLs.
+
 ## Edge caching (tiered by volatility)
 
 `_lib.ts` caches every upstream response at the edge (`caches.default`), but the
@@ -55,6 +95,24 @@ brief upstream outage shows slightly-stale **real** data rather than dropping th
 client to bundled mock. Only a cold load with *no* cached copy at all falls back
 to mock.
 
+## Testing
+
+`tests/mappers.test.html` (project root) is a zero-dependency, no-network unit
+runner for the NHL field mappers. It loads the real `nhl-client.js` and asserts
+that `window.NHL._map.*` turns captured-shape payloads into the right view-models
+(EDGE skater/goalie, standings, zones) — including the defensive null fallbacks.
+Open it in a browser; green = all pass. This is the safety net for the silent
+field-drift the EDGE/records feeds are prone to.
+
+## Analytics & error reporting
+
+`redesign/editorial-analytics.js` (loaded by the app) adds, cookie-free:
+- **Uncaught-error capture** — `window.onerror` + `unhandledrejection` → console,
+  plus ONE subtle toast per session via `BC.notifyError` (deduped; never loops).
+- **Optional Cloudflare Web Analytics** — enabled only when you set a token
+  (`window.__CF_BEACON_TOKEN` or `<meta name="cf-beacon" content="…">`); no-op
+  otherwise, so nothing loads/tracks by default. No personal data, no cookies.
+
 ## Deploy
 
 This repo deploys as a **Cloudflare Worker with Static Assets** (`worker.ts` +
@@ -69,6 +127,18 @@ npm run deploy     # = wrangler deploy
 ```
 
 First time, `wrangler` will prompt you to log in (`npx wrangler login`).
+
+### Production build (optional, faster load)
+
+```bash
+cd cloudflare
+npm install        # now also installs esbuild
+npm run build      # compiles JSX → public/*.compiled.js + public/app.prod.html
+```
+
+`app.prod.html` is a drop-in replacement for `app.html` with no in-browser Babel
+(JSX precompiled) and production React. Point your deploy at it for the fastest
+first paint; `app.html` still works build-free for local iteration.
 
 > **If you see "demo data" after deploying:** the Worker isn't running the
 > proxy. Confirm `wrangler.toml` is present and that `wrangler deploy` reported
@@ -110,9 +180,14 @@ Three upstream bases, all reachable:
 
 ## ⚠️ Production notes
 
-1. **Runtime Babel:** `app.html` transpiles JSX in-browser via CDN Babel. It
-   works as-is, but for production speed you'd precompile the `.jsx` to JS
-   (e.g. esbuild) and drop the Babel script. Not required to ship.
+1. **Runtime Babel → optional precompile:** `app.html` transpiles JSX in-browser
+   via CDN Babel, which works with zero build step. For a faster production load,
+   run `npm run build` — it compiles every `.jsx` to a minified `*.compiled.js`,
+   drops the Babel transformer, switches React/ReactDOM to their production
+   builds, and writes `public/app.prod.html`. Deploy `app.prod.html` (or rename
+   it over `app.html`) for production; keep `app.html` for zero-build local work.
+   The compile is a plain per-file JSX transform — modules still share one global
+   script scope, so load order and behaviour are unchanged.
 2. **EDGE / records field paths:** these upstream feeds are undocumented and can
    drift. The mappers in `nhl-client.js` are defensive (optional chaining +
    mock fallback) — verify field paths against live payloads on first deploy.

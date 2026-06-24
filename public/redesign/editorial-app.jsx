@@ -131,7 +131,7 @@ function ProvTag({kind}){
 }
 function Star({on,onClick}){return <button onClick={e=>{e.stopPropagation();onClick();}} style={{background:'none',border:'none',cursor:'pointer',padding:3,lineHeight:0,color:on?T.red:T.faint}} aria-label="follow"><svg width="14" height="14" viewBox="0 0 24 24" fill={on?T.red:'none'} stroke="currentColor" strokeWidth="2"><polygon points="12 2 15 9 22 9 16 14 18 22 12 17 6 22 8 14 2 9 9 9"/></svg></button>;}
 
-function GameCard({g,fav,toggleFav,onOpen}){
+function GameCard({g,favs,toggleFav,onOpen}){
   const s=useLive(g);
   const le=useLiveEdge(g);
   const [exp,setExp]=useState(false);
@@ -142,13 +142,12 @@ function GameCard({g,fav,toggleFav,onOpen}){
   const Row=({ab,sc,won})=>(<div style={{display:'flex',alignItems:'center',gap:11,padding:'7px 0'}}>
     <span style={{width:3,height:26,borderRadius:2,background:col(ab)}}/><Badge ab={ab} size={28}/>
     <div style={{flex:1,minWidth:0}}><div style={{fontWeight:won?700:600,fontSize:14,color:T.ink}}>{city(ab)}</div><div style={{fontSize:11.5,color:T.mut}}>{nick(ab)}</div></div>
-    {g.st!=='pre'?<Roll n={sc} size={24}/>:<span style={{color:T.faint,fontSize:18}}>–</span>}</div>);
+    {g.st!=='pre'?<Roll n={sc} size={24}/>:<span style={{color:T.faint,fontSize:18}}>–</span>}<Star on={favs.includes(ab)} onClick={()=>toggleFav(ab)}/></div>);
   return(<div className="ec" style={{...card,overflow:'hidden'}}>
     {live&&<div style={{height:2,background:T.line}}><div style={{height:'100%',width:`${clkPct}%`,background:T.red,transition:'width .6s linear'}}/></div>}
     <div onClick={()=>onOpen(g)} style={{padding:'13px 16px 4px',cursor:'pointer'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
         <span style={{fontFamily:MONO,fontSize:11,letterSpacing:'.08em',textTransform:'uppercase',color:live?T.red:final?T.faint:'#1a8a4f',display:'inline-flex',alignItems:'center',gap:6}}>{live&&<span className="ed-pulse" style={{width:6,height:6,borderRadius:99,background:T.red,display:'inline-block'}}/>}{live?`Live · ${g.per} ${s.clk}`:final?(g.ot?'Final/OT':'Final'):g.start}</span>
-        <Star on={fav} onClick={toggleFav}/>
       </div>
       <Row ab={g.a} sc={s.as} won={aw}/><Row ab={g.h} sc={s.hs} won={hw}/>
     </div>
@@ -191,7 +190,8 @@ function GameDetail({g,onBack,onTeam}){
   const series=useMemo(()=>BC.seasonSeries(g),[g.id]);
   const pbpMock=useMemo(()=>BC.playByPlay(g),[g.id]);
   const pbp=window.E_useLive(pbpMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gamePbp?window.NHL.gamePbp(g.id):null,[g.id]);
-  const recap=useMemo(()=>g.st.startsWith('final')?BC.gameRecap(g):'',[g.id]);
+  const recapMock=useMemo(()=>g.st.startsWith('final')?BC.gameRecap(g):'',[g.id]);
+  const recap=window.E_useLive(recapMock,()=>g.st.startsWith('final')&&window.NHL&&window.NHL.gameRecapMapped?window.NHL.gameRecapMapped(g.id):null,[g.id]);
   const bxMock=useMemo(()=>BC.broadcasts(g),[g.id]);
   // overlay real TV networks from the game landing when deployed
   const bx=window.E_useLive(bxMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gameBroadcasts?window.NHL.gameBroadcasts(g.id).then(b=>b?{...bxMock,...b}:null):null,[g.id]);
@@ -199,7 +199,10 @@ function GameDetail({g,onBack,onTeam}){
   // overlay real referees + linesmen from the game landing when deployed
   const off=window.E_useLive(offMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gameOfficials?window.NHL.gameOfficials(g.id):null,[g.id]);
   const replays=useMemo(()=>g.st!=='pre'?BC.goalReplays(g):[],[g.id]);
-  const shifts=useMemo(()=>g.st!=='pre'?BC.shiftChart(g):{away:[],home:[]},[g.id]);
+  const [replayId,setReplayId]=useState(null);
+  const [replayKey,setReplayKey]=useState(0);
+  const shiftsMock=useMemo(()=>g.st!=='pre'?BC.shiftChart(g):{away:[],home:[]},[g.id]);
+  const shifts=window.E_useLive(shiftsMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.shiftChartMapped?window.NHL.shiftChartMapped(g.id,g.a,g.h):null,[g.id]);
   const shotData=useMemo(()=>g.st!=='pre'&&BC.shotMap?BC.shotMap(g):[],[g.id]);
   const boxMock=useMemo(()=>g.st!=='pre'&&BC.boxStats?BC.boxStats(g):null,[g.id]);
   const box=(()=>{
@@ -222,6 +225,8 @@ function GameDetail({g,onBack,onTeam}){
   // safe team-stat accessor — never throws if a side is missing from the box
   const bt=ab=>(box&&box.team&&box.team[ab])||null;
   const [ev,setEv]=useState('All');
+  const [shared,setShared]=useState(false);
+  const copyLink=()=>{const url=location.href;const done=()=>{setShared(true);setTimeout(()=>setShared(false),1800);};try{navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(url).then(done,done):done();}catch(e){done();}};
   const feed=pbp.filter(e=>ev==='All'||e.type===ev);
   const final=g.st.startsWith('final');
   const live=g.st==='live', pre=g.st==='pre';
@@ -443,19 +448,35 @@ function GameDetail({g,onBack,onTeam}){
       <p style={{fontFamily:SERIF,fontSize:17,lineHeight:1.5,color:T.ink,margin:0}}>{recap}</p>
     </div>}
     {replays.length>0&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
-      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Goal replays</div>
+      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}><span>Goal replays</span><span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>tap to replay the puck path</span></div>
       <div style={{display:'flex',gap:12,overflowX:'auto',padding:'14px 16px'}}>
-        {replays.map(go=><div key={go.id} style={{flexShrink:0,width:150,border:`1px solid ${T.line}`,borderRadius:11,overflow:'hidden',cursor:'pointer'}} className="ec">
+        {replays.map(go=>{const on=replayId===go.id;return <div key={go.id} onClick={()=>{setReplayId(go.id);setReplayKey(k=>k+1);}} style={{flexShrink:0,width:150,border:`1.5px solid ${on?col(go.team):T.line}`,borderRadius:11,overflow:'hidden',cursor:'pointer'}} className="ec">
           <div style={{height:84,background:`linear-gradient(135deg, ${col(go.team)}, ${col(go.team)}aa)`,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{width:0,height:0,borderLeft:'16px solid #fff',borderTop:'10px solid transparent',borderBottom:'10px solid transparent',marginLeft:4}}/></div>
           <div style={{padding:'9px 11px'}}><div style={{fontSize:12.5,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{go.scorer}</div><div style={{fontFamily:MONO,fontSize:10.5,color:T.mut}}>{go.per} {go.time} · {go.str}</div></div>
-        </div>)}
+        </div>;})}
       </div>
+      {replayId!=null&&(()=>{const go=replays.find(x=>x.id===replayId)||replays[0];if(!go)return null;const seed=(go.id*37+(go.time?go.time.length:0)*7)%100;const oy=18+seed%64;const my=oy<50?oy+28:oy-28;return(
+        <div style={{borderTop:`1px solid ${T.line}`,padding:'14px 16px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}><span style={{fontWeight:600,color:T.ink,fontSize:13.5}}>{go.scorer}<span style={{fontFamily:MONO,fontSize:11,fontWeight:400,color:T.mut}}>{' · '}{go.assists&&go.assists.length?`assists: ${go.assists.join(', ')}`:'unassisted'}</span></span><span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>{go.per} {go.time} · {go.str}</span></div>
+          <div style={{position:'relative',width:'100%',maxWidth:540,margin:'0 auto'}}>
+            <svg key={replayKey} viewBox="0 0 200 100" style={{width:'100%',height:'auto',display:'block'}}>
+              <rect x="1" y="1" width="198" height="98" rx="14" fill={T.bg} stroke={T.line2}/>
+              <line x1="100" y1="4" x2="100" y2="96" stroke={T.red} strokeOpacity=".22" strokeWidth="1"/>
+              <line x1="170" y1="6" x2="170" y2="94" stroke={T.red} strokeOpacity=".4" strokeWidth="1.5"/>
+              <path d="M170 40 a18 18 0 0 1 0 20" fill="none" stroke={T.red} strokeOpacity=".3" strokeWidth="1"/>
+              <rect x="183" y="42" width="7" height="16" fill="none" stroke={col(go.team)} strokeWidth="2"/>
+              <path d={`M20 ${oy} Q 118 ${my} 182 50`} fill="none" stroke={col(go.team)} strokeOpacity=".45" strokeWidth="2" strokeDasharray="3 3"/>
+              <circle r="4" fill={col(go.team)}><animateMotion dur="1.15s" repeatCount="1" fill="freeze" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.3 0 0.5 1" path={`M20 ${oy} Q 118 ${my} 181 50`}/></circle>
+              <circle cx="186" cy="50" r="3" fill={col(go.team)} opacity="0"><animate attributeName="opacity" values="0;0;1;0.2" keyTimes="0;0.82;0.9;1" dur="1.15s" repeatCount="1" fill="freeze"/><animate attributeName="r" values="3;3;10" keyTimes="0;0.85;1" dur="1.15s" repeatCount="1" fill="freeze"/></circle>
+            </svg>
+          </div>
+        </div>);})()}
     </div>}
     {g.st!=='pre'&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Shift chart · time on ice</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}} className="g2">
         {[['away',g.a],['home',g.h]].map(([side,ab])=><div key={side} style={{padding:'12px 16px',borderRight:side==='away'?`1px solid ${T.line}`:'none'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><Badge ab={ab} size={18}/><span style={{fontSize:12.5,fontWeight:600}}>{ct(ab)}</span></div>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><Badge ab={ab} size={18}/><span style={{fontSize:12.5,fontWeight:600}}>{city(ab)}</span></div>
           {shifts[side].map((p,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{fontSize:12,width:96,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',color:T.ink}}>{p.name}</span><div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{height:'100%',width:`${p.pct}%`,background:col(ab)}}/></div><span style={{fontFamily:MONO,fontSize:11,color:T.mut,width:42,textAlign:'right'}}>{p.toi}</span></div>)}
         </div>)}
       </div>
@@ -468,7 +489,10 @@ function GameDetail({g,onBack,onTeam}){
     </div>}
   </div>);
   return(<div>
-    <button onClick={onBack} className="el" style={{background:'none',border:'none',color:T.mut,cursor:'pointer',fontFamily:MONO,fontSize:12,padding:'0 0 18px'}}>← back to scores</button>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,paddingBottom:18}}>
+      <button onClick={onBack} className="el" style={{background:'none',border:'none',color:T.mut,cursor:'pointer',fontFamily:MONO,fontSize:12,padding:0}}>← back to scores</button>
+      <button onClick={copyLink} className="el" aria-label="Share this game" style={{display:'inline-flex',alignItems:'center',gap:6,background:'none',border:`1px solid ${shared?'#1a8a4f':T.line2}`,borderRadius:8,color:shared?'#1a8a4f':T.mut,cursor:'pointer',fontFamily:MONO,fontSize:11,letterSpacing:'.04em',textTransform:'uppercase',padding:'6px 11px'}}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>{shared?'Link copied':'Share'}</button>
+    </div>
     <div style={{...card,padding:0,overflow:'hidden',marginBottom:16,background:`linear-gradient(110deg, ${col(g.a)}0e, ${col(g.h)}0e)`}}>
       {live&&<div style={{height:2,background:T.line}}><div style={{height:'100%',width:`${(()=>{const[m,sec]=(s.clk||'20:00').split(':').map(Number);return Math.max(2,Math.min(100,(1-(m*60+sec)/1200)*100));})()}%`,background:T.red,transition:'width .6s linear'}}/></div>}
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:30,maxWidth:560,margin:'0 auto',padding:'30px 20px'}}>
@@ -494,28 +518,52 @@ function GameDetail({g,onBack,onTeam}){
   </div>);
 }
 
+/* national TV schedule — tonight's nationally-broadcast slate (mock; live via NHL.tvScheduleMapped) */
+function NationalTV(){
+  const mock=useMemo(()=>BC.tvSchedule?BC.tvSchedule():[],[]);
+  const tv=window.E_useLive(mock,()=>window.NHL&&window.NHL.tvScheduleMapped?window.NHL.tvScheduleMapped():null,[]);
+  if(!tv||!tv.length)return null;
+  return(<div style={{...card,overflow:'hidden',margin:'4px 0 16px'}}>
+    <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.line}`,flexWrap:'wrap'}}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.mut} strokeWidth="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 3l4 4 4-4"/></svg>
+      <span style={ML}>On national TV</span>
+      <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:T.faint}}>tonight</span>
+    </div>
+    <div style={{display:'flex',gap:10,overflowX:'auto',padding:'12px 16px'}}>
+      {tv.map((g,i)=><div key={i} style={{flexShrink:0,minWidth:152,border:`1px solid ${T.line}`,borderRadius:10,padding:'10px 12px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><Badge ab={g.away} size={20}/><span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>@</span><Badge ab={g.home} size={20}/></div>
+        <div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{g.time}</div>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>{g.networks.map(n=><span key={n} style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.05em',padding:'2px 6px',borderRadius:5,background:T.invBg,color:T.invFg}}>{n}</span>)}</div>
+      </div>)}
+    </div>
+  </div>);
+}
+
 /* command palette */
 function Palette({open,onClose,onTeam,onPlayer,onGame}){
-  const [q,setQ]=useState(''); const inp=useRef(null);
+  const [q,setQ]=useState(''); const inp=useRef(null); const [ai,setAi]=useState(0);
+  const [liveP,setLiveP]=useState([]);
   useEffect(()=>{if(open){setQ('');setTimeout(()=>inp.current&&inp.current.focus(),40);}},[open]);
+  useEffect(()=>{let on=true;const t=q.trim();if(t.length<2||!(window.NHL&&window.NHL.playerSearchMapped&&window.BC&&BC.LIVE)){setLiveP([]);return;}const id=setTimeout(()=>{window.NHL.playerSearchMapped(t).then(rows=>{if(on&&rows&&rows.length)setLiveP(rows.map(p=>({type:'player',...p})));}).catch(()=>{});},220);return()=>{on=false;clearTimeout(id);};},[q]);
   const res=useMemo(()=>{const t=q.trim().toLowerCase();if(!t)return BC.ABBR.slice(0,6).map(a=>({type:'team',ab:a}));
     const mt=a=>`${city(a)} ${nick(a)} ${a}`.toLowerCase().includes(t);
     const teams=BC.ABBR.filter(mt).map(a=>({type:'team',ab:a}));
     const pool=(BC.allPlayers||BC.PLAYERS||[]);
-    const players=pool.filter(p=>p.name.toLowerCase().includes(t)).slice(0,6).map(p=>({type:'player',...p}));
+    const players=(liveP.length?liveP:pool.filter(p=>p.name.toLowerCase().includes(t)).slice(0,6).map(p=>({type:'player',...p})));
     const gpool=[...slate(-1),...slate(0),...slate(1)];
     const games=gpool.filter(g=>mt(g.a)||mt(g.h)).slice(0,4).map(g=>({type:'game',g}));
-    return[...teams.slice(0,4),...players,...games].slice(0,12);},[q]);
+    return[...teams.slice(0,4),...players,...games].slice(0,12);},[q,liveP]);
   if(!open)return null;
   const Tag=({children})=><span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.08em',textTransform:'uppercase',color:T.faint,border:`1px solid ${T.line2}`,borderRadius:5,padding:'1px 5px',flexShrink:0}}>{children}</span>;
   const act=r=>{if(r.type==='player'&&onPlayer)onPlayer(r);else if(r.type==='game'&&onGame)onGame(r.g);else onTeam(r.ab||r.team);onClose();};
+  const onKey=e=>{if(e.key==='ArrowDown'){e.preventDefault();setAi(a=>Math.min(res.length-1,a+1));}else if(e.key==='ArrowUp'){e.preventDefault();setAi(a=>Math.max(0,a-1));}else if(e.key==='Enter'){e.preventDefault();const r=res[ai];if(r)act(r);}};
   return(<div onClick={onClose} style={{position:'fixed',inset:0,zIndex:80,background:'rgba(8,9,12,.5)',backdropFilter:'blur(3px)',display:'flex',justifyContent:'center',alignItems:'flex-start',paddingTop:'12vh'}}>
     <div onClick={e=>e.stopPropagation()} style={{width:'min(540px,92vw)',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:16,overflow:'hidden',boxShadow:'0 30px 80px rgba(0,0,0,.35)'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderBottom:`1px solid ${T.line}`}}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.faint} strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input ref={inp} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search teams, players, games…" style={{flex:1,background:'none',border:'none',outline:'none',color:T.ink,fontSize:15,fontFamily:'inherit'}}/>
+        <input ref={inp} value={q} onChange={e=>{setQ(e.target.value);setAi(0);}} onKeyDown={onKey} aria-label="Search teams, players and games" placeholder="Search teams, players, games…" style={{flex:1,background:'none',border:'none',outline:'none',color:T.ink,fontSize:15,fontFamily:'inherit'}}/>
         <kbd style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:5,background:T.bg,color:T.mut}}>Esc</kbd></div>
-      <div style={{maxHeight:360,overflowY:'auto',padding:6}}>{res.length===0?<div style={{padding:'18px',fontFamily:MONO,fontSize:12.5,color:T.mut,textAlign:'center'}}>No matches for “{q}”.</div>:res.map((r,i)=>(<button key={i} onClick={()=>act(r)} className="epr" style={{display:'flex',alignItems:'center',gap:11,width:'100%',padding:'9px 11px',borderRadius:9,background:'none',border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit'}}>
+      <div role="listbox" aria-label="Search results" style={{maxHeight:360,overflowY:'auto',padding:6}}>{res.length===0?<div style={{padding:'18px',fontFamily:MONO,fontSize:12.5,color:T.mut,textAlign:'center'}}>No matches for “{q}”.</div>:res.map((r,i)=>(<button key={i} role="option" aria-selected={i===ai} onMouseEnter={()=>setAi(i)} onClick={()=>act(r)} className="epr" style={{display:'flex',alignItems:'center',gap:11,width:'100%',padding:'9px 11px',borderRadius:9,background:i===ai?T.bg:'none',border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit'}}>
         {r.type==='player'?<PlayerAvatar pos={r.pos} team={r.team} name={r.name} size={26}/>:r.type==='game'?<span style={{display:'inline-flex',gap:2}}><Badge ab={r.g.a} size={22}/><Badge ab={r.g.h} size={22}/></span>:<Badge ab={r.ab} size={26}/>}
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:T.ink,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.type==='player'?r.name:r.type==='game'?`${r.g.a} @ ${r.g.h}`:`${city(r.ab)} ${nick(r.ab)}`}</div><div style={{fontFamily:MONO,fontSize:11,color:T.faint}}>{r.type==='player'?`${r.team} · ${r.pos||'player'}${r.p!=null?` · ${r.p}P`:''}`:r.type==='game'?(r.g.st==='live'?`live · ${r.g.per} ${r.g.clk}`:r.g.st.startsWith('final')?`final · ${r.g.as}–${r.g.hs}`:r.g.start||'upcoming'):'team'}</div></div>
         <Tag>{r.type}</Tag></button>))}</div>
@@ -523,15 +571,109 @@ function Palette({open,onClose,onTeam,onPlayer,onGame}){
   </div>);
 }
 
+/* first-visit onboarding — pick favourite teams, persisted to localStorage (no account needed) */
+function Onboarding({favs,onDone}){
+  const [sel,setSel]=useState(()=>favs.slice());
+  const teams=useMemo(()=>[...BC.ABBR].sort((a,b)=>city(a).localeCompare(city(b))),[]);
+  const tog=ab=>setSel(s=>s.includes(ab)?s.filter(x=>x!==ab):[...s,ab]);
+  return(<div style={{position:'fixed',inset:0,zIndex:100,background:'rgba(8,9,12,.55)',backdropFilter:'blur(4px)',display:'flex',justifyContent:'center',alignItems:'flex-start',padding:'6vh 16px',overflowY:'auto'}}>
+    <div style={{width:'min(620px,96vw)',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:18,overflow:'hidden',boxShadow:'0 30px 80px rgba(0,0,0,.4)'}}>
+      <div style={{padding:'22px 24px 16px',borderBottom:`1px solid ${T.line}`}}>
+        <div style={{fontFamily:MONO,fontSize:11,letterSpacing:'.16em',textTransform:'uppercase',color:T.red,marginBottom:8}}>Welcome</div>
+        <div style={{fontFamily:SERIF,fontSize:26,color:T.ink,letterSpacing:'-.01em'}}>Follow your teams</div>
+        <div style={{fontSize:14,color:T.mut,marginTop:6,lineHeight:1.5,maxWidth:460}}>Pick the clubs you care about and we’ll surface their games, news and schedule first. Change anytime with the ★ on any team.</div>
+      </div>
+      <div style={{padding:'16px 24px',maxHeight:'44vh',overflowY:'auto'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:8}}>
+          {teams.map(ab=>{const on=sel.includes(ab);return <button key={ab} onClick={()=>tog(ab)} aria-pressed={on} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 11px',borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:'inherit',background:on?`${col(ab)}1a`:T.bg,border:`1.5px solid ${on?col(ab):T.line}`,transition:'background .12s, border-color .12s'}}>
+            <Badge ab={ab} size={24}/><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:on?700:500,color:T.ink,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{city(ab)}</span>
+            {on&&<span style={{color:col(ab),fontSize:13,flexShrink:0}}>✓</span>}
+          </button>;})}
+        </div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,padding:'16px 24px',borderTop:`1px solid ${T.line}`,flexWrap:'wrap'}}>
+        <button onClick={()=>onDone(null)} style={{fontFamily:'inherit',background:'none',border:'none',color:T.mut,fontSize:13,cursor:'pointer',fontWeight:600}}>Skip for now</button>
+        <div style={{display:'flex',alignItems:'center',gap:14}}>
+          <span style={{fontFamily:MONO,fontSize:11.5,color:T.faint}}>{sel.length} selected</span>
+          <button onClick={()=>onDone(sel)} style={{fontFamily:'inherit',background:T.invBg,color:T.invFg,border:'none',borderRadius:10,padding:'11px 20px',fontWeight:700,fontSize:14,cursor:'pointer'}}>{sel.length?`Follow ${sel.length} team${sel.length>1?'s':''}`:'Get started'}</button>
+        </div>
+      </div>
+    </div>
+  </div>);
+}
 const NAV=['Highlights','News','Scores','Standings','Teams','Players','Stats','Hockey IQ','Playoffs','Draft','Records'];
 const NK={'Highlights':'highlights','News':'news','Scores':'scores','Standings':'standings','Teams':'teams','Players':'players','Stats':'stats','Hockey IQ':'iq','Playoffs':'playoffs','Draft':'draft','Records':'records'};
+/* priority+ nav: fits as many tabs inline as the width allows, the rest collapse into a "More" menu */
+function PriorityNav({active,onGo}){
+  const GAP=2, MOREW=92;
+  const wrapRef=useRef(null), measRef=useRef(null);
+  const [vis,setVis]=useState(NAV.length);
+  const [open,setOpen]=useState(false);
+  useEffect(()=>{
+    const wrap=wrapRef.current, meas=measRef.current; if(!wrap||!meas) return;
+    const compute=()=>{
+      const avail=wrap.clientWidth; if(!avail) return;
+      const ws=[...meas.children].map(el=>el.getBoundingClientRect().width);
+      const sumAll=ws.reduce((a,b)=>a+b,0)+GAP*Math.max(0,ws.length-1);
+      if(sumAll<=avail+0.5){ setVis(NAV.length); return; }
+      let t=0,c=0;
+      for(let i=0;i<ws.length;i++){ const add=ws[i]+(c>0?GAP:0); if(t+add<=avail-MOREW){ t+=add; c++; } else break; }
+      setVis(Math.max(1,c));
+    };
+    compute();
+    let ro; try{ro=new ResizeObserver(compute); ro.observe(wrap);}catch(e){}
+    window.addEventListener('resize',compute);
+    return ()=>{ro&&ro.disconnect(); window.removeEventListener('resize',compute);};
+  },[]);
+  useEffect(()=>{
+    if(!open) return;
+    const onDoc=e=>{ if(!wrapRef.current||!wrapRef.current.contains(e.target)) setOpen(false); };
+    const onKey=e=>{ if(e.key==='Escape') setOpen(false); };
+    document.addEventListener('mousedown',onDoc); document.addEventListener('keydown',onKey);
+    return ()=>{document.removeEventListener('mousedown',onDoc); document.removeEventListener('keydown',onKey);};
+  },[open]);
+  const btn=on=>({fontFamily:'inherit',background:on?T.invBg:'none',color:on?T.invFg:T.mut,border:'none',fontWeight:600,fontSize:13.5,padding:'6px 12px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0});
+  const visItems=NAV.slice(0,vis), overflow=NAV.slice(vis), overflowActive=overflow.some(n=>NK[n]===active);
+  return(<nav ref={wrapRef} className="ed-nav" style={{display:'flex',gap:GAP,flex:1,minWidth:0,alignItems:'center',position:'relative'}}>
+    <div ref={measRef} aria-hidden="true" style={{position:'absolute',left:0,top:0,height:0,overflow:'hidden',display:'flex',gap:GAP,visibility:'hidden',pointerEvents:'none'}}>
+      {NAV.map(n=><button key={n} tabIndex={-1} style={btn(false)}>{n}</button>)}
+    </div>
+    {visItems.map(n=>{const on=NK[n]===active;return <button key={n} onClick={()=>onGo(NK[n])} style={btn(on)}>{n}</button>;})}
+    {overflow.length>0&&<div style={{position:'relative',flexShrink:0}}>
+      <button onClick={()=>setOpen(o=>!o)} aria-haspopup="true" aria-expanded={open} style={{...btn(overflowActive),display:'inline-flex',alignItems:'center',gap:5,position:'relative'}}>More
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="m6 9 6 6 6-6"/></svg>
+        {overflowActive&&<span style={{width:5,height:5,borderRadius:99,background:T.red,position:'absolute',top:3,right:3}}/>}
+      </button>
+      {open&&<div role="menu" style={{position:'absolute',top:'calc(100% + 8px)',right:0,minWidth:184,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:12,boxShadow:'0 16px 44px -14px rgba(0,0,0,.32)',padding:6,zIndex:50,display:'flex',flexDirection:'column',gap:2}}>
+        {overflow.map(n=>{const on=NK[n]===active;return <button key={n} role="menuitem" onClick={()=>{onGo(NK[n]);setOpen(false);}} style={{fontFamily:'inherit',textAlign:'left',background:on?T.invBg:'none',color:on?T.invFg:T.ink,border:'none',fontWeight:600,fontSize:14,padding:'9px 12px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap'}}>{n}</button>;})}
+      </div>}
+    </div>}
+  </nav>);
+}
+/* error boundary — a render error in any one page falls back here instead of blanking the whole shell */
+class EB extends React.Component{
+  constructor(p){super(p);this.state={err:false};}
+  static getDerivedStateFromError(){return {err:true};}
+  componentDidCatch(err,info){try{console.error('Route render error:',err,info&&info.componentStack);}catch(e){}}
+  componentDidUpdate(prev){if(prev.routeKey!==this.props.routeKey&&this.state.err)this.setState({err:false});}
+  render(){
+    if(this.state.err)return(<div style={{...card,padding:'44px 24px',textAlign:'center',maxWidth:520,margin:'30px auto'}}>
+      <div style={{fontFamily:SERIF,fontSize:25,color:T.ink,marginBottom:8}}>This view hit a snag</div>
+      <div style={{fontSize:14,color:T.mut,lineHeight:1.55,marginBottom:20}}>Something went wrong rendering this page. The rest of the app is unaffected — head back and try another section.</div>
+      <button onClick={()=>{this.setState({err:false});this.props.onReset&&this.props.onReset();}} style={{fontFamily:'inherit',background:T.invBg,color:T.invFg,border:'none',borderRadius:9,padding:'10px 18px',fontWeight:600,fontSize:13.5,cursor:'pointer'}}>← Back to Highlights</button>
+    </div>);
+    return this.props.children;
+  }
+}
 function App(){
   const [offset,setOffset]=useState(0);
-  const [season,setSeason]=useState('20252026');
+  const [season,setSeason]=useState('cur'); // 'cur' = league's current season; otherwise an 8-digit season id
   const [favs,setFavs]=useState(loadF);
   const [followOnly,setFollowOnly]=useState(false);
   const [pal,setPal]=useState(false);
   const [menu,setMenu]=useState(false);
+  const [onboard,setOnboard]=useState(()=>{try{return !localStorage.getItem('e_onboarded');}catch(e){return false;}});
+  const finishOnboard=sel=>{if(sel&&sel.length){setFavs(sel);saveF(sel);}try{localStorage.setItem('e_onboarded','1');}catch(e){}setOnboard(false);};
   const [theme,setTheme]=useState(()=>{try{return localStorage.getItem('e_theme')||'light';}catch(e){return 'light';}});
   const toggleTheme=()=>{const n=theme==='dark'?'light':'dark';window.E_applyTheme&&window.E_applyTheme(n);try{localStorage.setItem('e_theme',n);}catch(e){}setTheme(n);};
   useEffect(()=>{try{document.documentElement.setAttribute('data-theme',theme);}catch(e){}},[theme]);
@@ -541,6 +683,10 @@ function App(){
   const [toast,setToast]=useState(null);
   const [loading,setLoading]=useState(false);
   const [isLive,setIsLive]=useState(false); // true once live NHL feeds hydrate (flips the header badge)
+  const curId=(window.NHL&&window.NHL._season)?String(window.NHL._season):'20252026';
+  const SEASONS=useMemo(()=>{const top=parseInt(curId.slice(0,4),10)||2025;const a=[];for(let y=top;y>=2010;y--)a.push(`${y}${y+1}`);return a;},[curId]);
+  const seasonLabel=v=>v==='cur'?`${curId.slice(0,4)}\u2013${curId.slice(6,8)}`:`${v.slice(0,4)}\u2013${v.slice(6,8)}`;
+  const changeSeason=v=>{ setSeason(v); const id=v==='cur'?curId:v; if(window.BC&&BC.LIVE&&BC.hydrateSeason){ setLoading(true); BC.hydrateSeason(id,()=>{setHv(x=>x+1);setLoading(false);}); } window.scrollTo(0,0); };
   const [legalDoc,setLegalDoc]=useState('terms');
   const [statusF,setStatusF]=useState('all');
   const games=useMemo(()=>slate(offset),[offset,hv]);
@@ -599,12 +745,13 @@ function App(){
       </div>
     </div>
     <SchedCal offset={offset} setOffset={setOffset} favs={favs} view="week"/>
+    {offset===0&&<NationalTV/>}
     <div style={{display:'flex',gap:6,margin:'4px 0 16px',flexWrap:'wrap'}}>
       {[['all','All',baseGames.length],['live','Live',stN.live],['final','Final',stN.final],['pre','Upcoming',stN.pre]].map(([k,lab,n])=><button key={k} onClick={()=>setStatusF(k)} style={{fontFamily:MONO,fontSize:11,letterSpacing:'.04em',textTransform:'uppercase',padding:'6px 13px',borderRadius:999,border:`1px solid ${statusF===k?T.invBg:T.line2}`,background:statusF===k?T.invBg:'transparent',color:statusF===k?T.invFg:T.mut,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>{k==='live'&&n>0&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:statusF===k?T.invFg:T.red,display:'inline-block'}}/>}{lab}<span style={{opacity:.55}}>{n}</span></button>)}
     </div>
     {loading&&shown.length===0?<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:14}}>{Array.from({length:6},(_,i)=><div key={i} style={{...card,padding:'14px 16px'}}><div className="ed-skel" style={{height:12,width:'40%',marginBottom:14}}/><div className="ed-skel" style={{height:18,width:'72%',marginBottom:9}}/><div className="ed-skel" style={{height:18,width:'64%'}}/></div>)}</div>
     :shown.length===0?<div style={{textAlign:'center',padding:'70px 0',color:T.mut,fontFamily:MONO,fontSize:13}}>{followOnly?'no followed teams play in this slate.':'no games scheduled.'}</div>:
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:14}}>{shown.map(g=><GameCard key={g.id} g={g} fav={isFav(g)} toggleFav={()=>toggleFav(g.h)} onOpen={openGame}/>)}</div>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:14}}>{shown.map(g=><GameCard key={g.id} g={g} favs={favs} toggleFav={toggleFav} onOpen={openGame}/>)}</div>}
     <SchedCal offset={offset} setOffset={setOffset} favs={favs} view="month"/>
     <p style={{textAlign:'center',marginTop:30,fontFamily:MONO,fontSize:11.5,color:T.faint}}>scores update live · ⌘K to search · ★ a team to follow</p>
   </div>);
@@ -613,12 +760,15 @@ function App(){
     {loading&&<div style={{position:'fixed',top:0,left:0,right:0,height:2,zIndex:90,background:`linear-gradient(90deg,transparent,${T.red},transparent)`,backgroundSize:'40% 100%',animation:'edload 1s linear infinite'}}/>}
     {toast&&<div onClick={()=>setToast(null)} style={{position:'fixed',bottom:18,left:'50%',transform:'translateX(-50%)',zIndex:90,background:T.invBg,color:T.invFg,fontSize:13,padding:'10px 16px',borderRadius:10,boxShadow:'0 8px 30px rgba(0,0,0,.25)',cursor:'pointer',fontFamily:MONO}}>{toast} · tap to dismiss</div>}
     <header style={{position:'sticky',top:0,zIndex:40,background:T.glass,backdropFilter:'blur(10px)',borderBottom:`1px solid ${T.line}`}}>
-      <div style={{maxWidth:1080,margin:'0 auto',padding:'0 18px',height:58,display:'flex',alignItems:'center',gap:14}}>
+      <div style={{maxWidth:1600,margin:'0 auto',padding:'0 24px',height:58,display:'flex',alignItems:'center',gap:14}}>
         <div onClick={()=>go('highlights')} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',flexShrink:0}}><span style={{width:28,height:28,borderRadius:7,background:T.invBg,color:T.invFg,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flexShrink:0}}>H</span><span style={{fontWeight:700,whiteSpace:'nowrap'}}>The Hockey Lab</span></div>
-        <a href="The Hockey Lab - Landing.html" title="Lab home" style={{color:T.faint,fontSize:17,textDecoration:'none'}}>⌂</a>
+        <a href="The Hockey Lab - Landing.html" title="Lab home" aria-label="Lab home" style={{color:T.faint,fontSize:17,textDecoration:'none'}}>⌂</a>
         <span className="ed-demo" title={isLive?"Live NHL feeds connected — updating in real time":"Projected/sample data for demo — live NHL feeds fill in on deploy"} style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.08em',textTransform:'uppercase',color:isLive?'#1a8a4f':T.mut,background:T.bg,border:`1px solid ${isLive?'#1a8a4f55':T.line2}`,borderRadius:999,padding:'3px 8px',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5}}>{isLive&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:'#1a8a4f',display:'inline-block'}}/>}{isLive?'live · NHL':'demo data'}</span>
-        <nav className="ed-nav" style={{display:'flex',gap:2,flex:1}}>{NAV.map(n=>{const k=NK[n];const on=route===k&&!team&&!player&&!game;return <button key={n} onClick={()=>go(k)} style={{fontFamily:'inherit',background:on?T.invBg:'none',color:on?T.invFg:T.mut,border:'none',fontWeight:600,fontSize:13.5,padding:'6px 12px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap'}}>{n}</button>;})}</nav>
-        <div className="ed-spacer" style={{flex:1}}></div>
+        <PriorityNav active={(!team&&!player&&!game)?route:null} onGo={go}/>
+        <select value={season} onChange={e=>changeSeason(e.target.value)} aria-label="Season" title={isLive?'Pick a season \u2014 historical standings, stats, rosters & leaders':'Historical seasons load when live NHL feeds are connected'} className="ed-season" style={{fontFamily:MONO,fontSize:12,fontWeight:600,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'7px 8px',color:T.ink,cursor:'pointer',flexShrink:0,maxWidth:130}}>
+          <option value="cur">{seasonLabel('cur')} · Current</option>
+          {SEASONS.slice(1).map(s=><option key={s} value={s}>{seasonLabel(s)}</option>)}
+        </select>
         <button onClick={toggleTheme} aria-label="Toggle theme" title="Toggle light/dark" style={{fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',width:34,height:34,borderRadius:9,background:T.paper,border:`1px solid ${T.line2}`,color:T.mut,cursor:'pointer',flexShrink:0}}>
           {theme==='dark'
             ?<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
@@ -630,15 +780,29 @@ function App(){
         </button>
       </div>
     </header>
+    {season!=='cur'&&<div style={{maxWidth:1080,margin:'0 auto',padding:'12px 24px 0'}}>
+      <div style={{display:'flex',alignItems:'center',gap:11,flexWrap:'wrap',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:11,padding:'10px 14px'}}>
+        <span style={{fontFamily:MONO,fontSize:10.5,letterSpacing:'.07em',textTransform:'uppercase',color:T.invFg,background:T.invBg,borderRadius:999,padding:'4px 9px',flexShrink:0}}>{seasonLabel(season)} season</span>
+        <span style={{fontSize:12.5,color:T.mut,flex:1,minWidth:180}}>Historical standings, stats, rosters &amp; leaders.{!isLive&&' Live data loads on deploy.'} EDGE tracking reflects the current season only — league-wide tracking began 2021–22. The scoreboard stays on today.</span>
+        <button onClick={()=>changeSeason('cur')} style={{fontFamily:'inherit',fontSize:12,fontWeight:600,color:T.invFg,background:T.invBg,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',flexShrink:0}}>Back to current</button>
+      </div>
+    </div>}
     {menu&&<div onClick={()=>setMenu(false)} style={{position:'fixed',inset:0,zIndex:60,background:'rgba(20,21,26,.4)',backdropFilter:'blur(2px)'}}>
       <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:0,right:0,bottom:0,width:'min(280px,80vw)',background:T.paper,borderLeft:`1px solid ${T.line2}`,padding:'18px',display:'flex',flexDirection:'column',gap:6,boxShadow:'-12px 0 40px rgba(0,0,0,.12)'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}><span style={{...ML}}>Menu</span><button onClick={()=>setMenu(false)} aria-label="Close" style={{background:'none',border:'none',fontSize:22,color:T.mut,cursor:'pointer',lineHeight:1}}>×</button></div>
         {NAV.map(n=>{const k=NK[n];const on=route===k&&!team&&!player&&!game;return <button key={n} onClick={()=>go(k)} style={{fontFamily:'inherit',textAlign:'left',background:on?T.invBg:'none',color:on?T.invFg:T.ink,border:'none',fontWeight:600,fontSize:16,padding:'12px 14px',borderRadius:10,cursor:'pointer'}}>{n}</button>;})}
+        <div style={{marginTop:8,paddingTop:12,borderTop:`1px solid ${T.line}`}}>
+          <label style={{...ML,display:'block',marginBottom:6}}>Season</label>
+          <select value={season} onChange={e=>{changeSeason(e.target.value);}} aria-label="Season" style={{fontFamily:MONO,fontSize:14,fontWeight:600,background:T.bg,border:`1px solid ${T.line2}`,borderRadius:10,padding:'11px 12px',color:T.ink,cursor:'pointer',width:'100%'}}>
+            <option value="cur">{seasonLabel('cur')} · Current</option>
+            {SEASONS.slice(1).map(s=><option key={s} value={s}>{seasonLabel(s)}</option>)}
+          </select>
+        </div>
         <button onClick={()=>{setMenu(false);setPal(true);}} style={{fontFamily:'inherit',textAlign:'left',marginTop:8,display:'flex',alignItems:'center',gap:10,background:T.bg,color:T.mut,border:`1px solid ${T.line2}`,fontWeight:600,fontSize:15,padding:'12px 14px',borderRadius:10,cursor:'pointer'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search</button>
         <a href="The Hockey Lab - Landing.html" style={{textAlign:'left',marginTop:4,color:T.faint,fontFamily:MONO,fontSize:12,textDecoration:'none',padding:'8px 14px'}}>⌂ Lab home</a>
       </div>
     </div>}
-    <main style={{maxWidth:1080,margin:'0 auto',padding:'30px 24px 50px'}}>{content}</main>
+    <main style={{maxWidth:1080,margin:'0 auto',padding:'30px 24px 50px'}}><EB routeKey={route+'|'+(team||'')+'|'+(player&&player.id||'')+'|'+(game&&game.id||'')} onReset={()=>go('highlights')}>{content}</EB></main>
     <footer style={{borderTop:`1px solid ${T.line}`,marginTop:20}}>
       <div style={{maxWidth:1080,margin:'0 auto',padding:'26px 24px 36px'}}>
         <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:14}}><span style={{width:24,height:24,borderRadius:6,background:T.invBg,color:T.invFg,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12}}>H</span><span style={{fontWeight:700,fontSize:14}}>The Hockey Lab</span></div>
@@ -649,6 +813,7 @@ function App(){
       </div>
     </footer>
     <Palette open={pal} onClose={()=>setPal(false)} onTeam={openTeam} onPlayer={openPlayer} onGame={openGame}/>
+    {onboard&&<Onboarding favs={favs} onDone={finishOnboard}/>}
   </div>);
 }
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);

@@ -54,9 +54,23 @@ window.BC = (function () {
   function dateLabel(o){ const d=new Date(); d.setDate(d.getDate()+o); return `${DOW[d.getDay()]} · ${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`; }
 
   // scoring summary + skater lines for a game (for detail)
-  const FN=['Connor','Auston','David','Mitch','Nathan','Cale','Jack','Elias','Mika','Sidney','Brad','Roman','Jason','Sebastian','Adam','Brady','Mark','Tim','Clayton','Anze'];
-  const LN=['McDavid','Matthews','Pastrnak','Marner','MacKinnon','Makar','Hughes','Pettersson','Zibanejad','Crosby','Marchand','Josi','Robertson','Aho','Fox','Tkachuk','Stone','Stützle','Keller','Kopitar'];
-  function roster(team,key){ const r=rng('ros'+team+key); return Array.from({length:12},(_,i)=>({name:`${pick(r,FN)} ${pick(r,LN)}`,pos:pick(r,['C','LW','RW','C','LW','RW','D','D','D']),num:ri(r,9,97)})); }
+  // Fictional, nationality-flavoured name pools — each player draws a coherent first+last from one
+  // origin, weighted to rough NHL demographics. Deliberately NOT real NHL players (no real names/likenesses).
+  const NAMES={
+    na:{f:['Tanner','Brayden','Reid','Cole','Easton','Casey','Declan','Kieran','Mason','Dane','Beck','Sawyer','Quinn','Holden','Rory','Cody','Brett','Nolan','Logan','Tyson'],
+        l:['Holloway','Brannigan','Beaumont','Ostrander','Whitlock','Bellamy','Kerrigan','Hartwell','Brisbane','Calloway','Renner','Ackerman','Drummond','Thibault','Renaud','Provost','Veasey','Marchetti','Castellano','Bellerose']},
+    swe:{f:['Mattias','Linus','Niklas','Emil','Calle','Jesper','Hugo','Nils','Elias','Otto','Viktor','Anton'],
+         l:['Vesterlund','Halvorsen','Granholm','Nyberg','Dahlberg','Lindqvist','Forsell','Sundby','Norquist','Stahl','Bergstrom','Hedlund']},
+    fin:{f:['Aleksi','Joonas','Aaro','Teemu','Sten','Rasmus','Eetu','Miro','Kasper','Lauri'],
+         l:['Korhonen','Kallio','Makinen','Rautio','Lehto','Salo','Heikkila','Niemi','Koskela','Ahonen']},
+    rus:{f:['Dmitri','Nikita','Artyom','Yegor','Maxim','Pavel','Kirill','Ilya','Andrei','Vadim'],
+         l:['Sokolov','Volkov','Morozov','Antipov','Yegorov','Lebedev','Belov','Zhukov','Pankov','Davydov']},
+    cze:{f:['Marek','Tobias','Lukas','Patrik','Radek','Ondrej','Filip','Jan','Petr','Vojtech'],
+         l:['Hladik','Novotny','Cermak','Kolar','Stransky','Benes','Vrabel','Kovac','Zeman','Dolezal']},
+  };
+  const ORIGINS=['na','na','na','na','na','na','na','na','swe','fin','rus','cze']; // ~67% NA, rest Euro
+  const fullName=r=>{const g=NAMES[pick(r,ORIGINS)];return `${pick(r,g.f)} ${pick(r,g.l)}`;};
+  function roster(team,key){ const r=rng('ros'+team+key); return Array.from({length:12},(_,i)=>({name:fullName(r),pos:pick(r,['C','LW','RW','C','LW','RW','D','D','D']),num:ri(r,9,97)})); }
   function detail(g){
     const r=rng('det'+g.id);
     const lines=team=>roster(team,g.id).map(p=>{const gl=r()<.22?ri(r,1,2):0,a=r()<.3?ri(r,1,2):0;return{...p,g:gl,a,p:gl+a,pm:ri(r,-2,3),sog:ri(r,0,6),hits:ri(r,0,5),toi:`${ri(r,9,23)}:${String(ri(r,0,59)).padStart(2,'0')}`};});
@@ -66,7 +80,7 @@ window.BC = (function () {
     const stars=g.st.startsWith('final')?[1,2,3].map(n=>{const w=g.as>g.hs?g.a:g.h;const p=pick(r,roster(w,g.id).slice(0,6));return{n,name:p.name,team:w,line:`${ri(r,0,2)}G ${ri(r,0,2)}A`};}):[];
     const ts=(sog)=>({sog,fo:`${(45+r()*12).toFixed(1)}%`,pp:`${ri(r,0,4)}/${ri(r,2,6)}`,hits:ri(r,12,32),blk:ri(r,8,22),pim:ri(r,4,16)});
     return {away:{lines:lines(g.a),team:ts(g.sa)},home:{lines:lines(g.h),team:ts(g.sh)},goals,stars,
-      refs:[pick(r,['Wes McCauley','Kelly Sutherland','Chris Rooney','Garrett Rank']),pick(r,['Marc Joannette','Steve Kozari','Jean Hebert'])],
+      refs:[pick(r,['Wes Halverson','Kelly Pruitt','Chris Garrity','Garrett Brennan']),pick(r,['Marc Mercer','Steve Ostroski','Jean Langlois'])],
       venue:`${city(g.h)} Arena`, attendance:(16500+ri(r,0,3000)).toLocaleString()};
   }
 
@@ -92,14 +106,14 @@ window.BC = (function () {
   const allPlayers=[];
   ABBR.forEach(a=>{const r=rng('pl'+a);const tier=(33-rankOf[a])/33;
     for(let i=0;i<10;i++){const g=Math.max(0,Math.round((20-i*1.4)*(0.5+tier*0.7)+r()*7)),as=Math.max(0,Math.round((24-i)*(0.5+tier*0.6)+r()*8));
-      allPlayers.push({id:`${a}${i}`,name:`${pick(r,FN)} ${pick(r,LN)}`,team:a,pos:i<6?pick(r,['C','LW','RW']):'D',num:ri(r,9,97),gp:ri(r,38,41),g,a:as,p:g+as,pm:ri(r,-18,28),sog:g*ri(r,5,8)+ri(r,10,30),toi:`${ri(r,12,22)}:${String(ri(r,0,59)).padStart(2,'0')}`});}});
+      allPlayers.push({id:`${a}${i}`,name:fullName(r),team:a,pos:i<6?pick(r,['C','LW','RW']):'D',num:ri(r,9,97),gp:ri(r,38,41),g,a:as,p:g+as,pm:ri(r,-18,28),sog:g*ri(r,5,8)+ri(r,10,30),toi:`${ri(r,12,22)}:${String(ri(r,0,59)).padStart(2,'0')}`});}});
   const goalies=[];
-  ABBR.forEach(a=>{const r=rng('go'+a);goalies.push({id:a+'g',name:`${pick(r,FN)} ${pick(r,LN)}`,team:a,gp:ri(r,20,38),w:ri(r,12,28),l:ri(r,6,18),svp:(0.895+r()*0.035).toFixed(3).slice(1),gaa:(2.1+r()*1.1).toFixed(2),so:ri(r,0,5)});});
+  ABBR.forEach(a=>{const r=rng('go'+a);goalies.push({id:a+'g',name:fullName(r),team:a,gp:ri(r,20,38),w:ri(r,12,28),l:ri(r,6,18),svp:(0.895+r()*0.035).toFixed(3).slice(1),gaa:(2.1+r()*1.1).toFixed(2),so:ri(r,0,5)});});
   const skaterLeaders=k=>[...allPlayers].sort((x,y)=>y[k]-x[k]);
   const goalieLeaders=()=>[...goalies].sort((x,y)=>y.svp.localeCompare(x.svp));
   const teamRoster=a=>allPlayers.filter(p=>p.team===a).sort((x,y)=>y.p-x.p);
 
-  const PLAYERS = LN.map((l,i)=>({name:`${FN[i]} ${l}`, team:ABBR[i%ABBR.length]}));
+  const PLAYERS = Array.from({length:24},(_,i)=>{const r=rng('pl0'+i);return {name:fullName(r), team:ABBR[i%ABBR.length]};});
   return { TEAMS, col, nick, city, ABBR, slate, dateLabel, detail, PLAYERS,
     DIV, conf, STANDINGS, rankOf, standBy, allPlayers, goalies, skaterLeaders, goalieLeaders, teamRoster };
 })();

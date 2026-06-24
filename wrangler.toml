@@ -26,3 +26,20 @@ not_found_handling = "none"
 
 [observability]
 enabled = true
+
+# ---------------------------------------------------------------------------
+# Per-IP rate limiting for /api/nhl/* (worker.ts: 120 req/min/IP, soft window).
+# Create the namespace once, then paste the printed id below:
+#   npx wrangler kv:namespace create RATE_LIMIT
+#   npx wrangler kv:namespace create RATE_LIMIT --preview
+# Until a real id is set, `wrangler deploy` will reject this binding — replace
+# the placeholder(s) before deploying. (Prefer a Cloudflare WAF rule too — README.)
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+
+# Optional: extra browser hosts allowed to call /api/nhl/* (comma-separated).
+# Same-origin is always allowed; this only matters if another origin must call it.
+# [vars]
+# ALLOWED_HOSTS = "the-hockey-lab.pages.dev"

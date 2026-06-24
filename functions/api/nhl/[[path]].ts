@@ -16,15 +16,30 @@ import {
   errorJson,
   json,
   currentSeason,
+  isRefererAllowed,
+  rateLimit,
+  sanitizeRest,
 } from './_lib';
 
-interface Env {}
+interface Env {
+  RATE_LIMIT?: { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: any) => Promise<void> };
+  ALLOWED_HOSTS?: string;
+}
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const { params, request } = context;
+  const { params, request, env } = context;
   const segments = (Array.isArray(params.path) ? params.path : [params.path]).filter(Boolean) as string[];
   const url = new URL(request.url);
   const q = (key: string, fallback?: string) => url.searchParams.get(key) ?? fallback;
+
+  // Hotlink guard + soft per-IP rate limit (KV-backed; no-op unless RATE_LIMIT is bound).
+  const allowed = (env.ALLOWED_HOSTS ? env.ALLOWED_HOSTS.split(',') : [])
+    .map((s) => s.trim()).filter(Boolean).concat(url.host);
+  if (!isRefererAllowed(request.headers.get('origin'), request.headers.get('referer'), allowed)) {
+    return errorJson('Forbidden.', 403);
+  }
+  const ip = request.headers.get('cf-connecting-ip') || '';
+  if (!(await rateLimit(env.RATE_LIMIT, ip, 120))) return errorJson('Too many requests.', 429);
 
   const [a, b, c] = segments;
 
@@ -61,9 +76,11 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       case 'teams':
         return teams();
 
-      // GET /api/nhl/standings
-      case 'standings':
-        return proxyWeb('standings/now');
+      // GET /api/nhl/standings  (now, or /standings/{YYYY-MM-DD} | ?date= for a past season)
+      case 'standings': {
+        const date = (b && /^\d{4}-\d{2}-\d{2}$/.test(b)) ? b : q('date');
+        return proxyWeb(date ? `standings/${date}` : 'standings/now');
+      }
 
       // GET /api/nhl/roster/{teamAbbrev}
       case 'roster': {
@@ -197,6 +214,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         // If it doesn't already end with a season segment, append season/group.
         const rest = segments.slice(1).join('/'); // everything after "edge"
         if (rest) {
+          if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
           const endsWithSeason = /\/\d{8}(\/\d+)?$/.test(rest) || /\/now$/.test(rest);
           const full = endsWithSeason ? `edge/${rest}` : `edge/${rest}/${season}/${group}`;
           return proxyWeb(full);
@@ -284,6 +302,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         // generic passthrough to the stats API: /api/nhl/stats/<path>?<query>
         const rest = segments.slice(1).join('/');
         if (!rest) break;
+        if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
         try {
           const data = await statsRequest(rest, Object.fromEntries(url.searchParams.entries()));
           return json(data);
@@ -308,6 +327,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         // ppt-replay/goal/{id}/{event}  or  ppt-replay/{id}/{event}
         const rest = segments.slice(1).join('/');
         if (!rest) break;
+        if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
         return proxyWeb(`ppt-replay/${rest}`);
       }
       case 'wsc-pbp':
@@ -329,6 +349,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       case 'records': {
         const rest = segments.slice(1).join('/');
         if (!rest) break;
+        if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
         try {
           const data = await recordsRequest(rest, Object.fromEntries(url.searchParams.entries()));
           return json(data);

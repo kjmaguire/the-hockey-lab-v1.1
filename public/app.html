@@ -12,6 +12,9 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:#f5f4f0;color:#15161b;font-family:'Geist',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  /* keyboard focus rings (a11y) — visible for keyboard users, suppressed on mouse click */
+  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2.5px solid #15161b;outline-offset:2px;border-radius:4px;}
+  html[data-theme="dark"] a:focus-visible,html[data-theme="dark"] button:focus-visible,html[data-theme="dark"] input:focus-visible,html[data-theme="dark"] select:focus-visible,html[data-theme="dark"] [tabindex]:focus-visible{outline-color:#ecedf0;}
   ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#d8d6ce;border-radius:99px}
   table{font-family:inherit;}
   .ed-col{transition:transform .5s cubic-bezier(.16,1,.3,1);}
@@ -33,27 +36,31 @@
   .ed-skel{background:linear-gradient(90deg,#e6e4de33 25%,#cfccc255 37%,#e6e4de33 63%);background-size:300% 100%;animation:edshim 1.3s ease-in-out infinite;border-radius:8px;}
   html[data-theme="dark"] .ed-skel{background:linear-gradient(90deg,#2a2c3355 25%,#3b3d4688 37%,#2a2c3355 63%);background-size:300% 100%;}
   .ed-burger{display:none!important;}
+  .ed-tabscroll::-webkit-scrollbar{display:none;}
+  /* header nav: priority+ layout fits tabs inline; overflow goes to a More menu, so keep overflow visible for the dropdown */
+  .ed-nav{min-width:0;}
+  .ed-spacer{display:none!important;}
   @keyframes news-tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
   .news-tick-track{display:inline-flex;gap:28px;white-space:nowrap;animation:news-tick 42s linear infinite;will-change:transform;}
   .news-tick:hover .news-tick-track{animation-play-state:paused;}
   @media(prefers-reduced-motion:reduce){.news-tick-track{animation:none;}}
-  /* tablet */
-  @media(max-width:900px){
-    .ed-nav button{font-size:13px!important;padding:6px 9px!important;}
-  }
-  /* mobile: hamburger replaces inline nav */
-  @media(max-width:720px){
+  /* tablets & below: the full hamburger menu replaces the inline nav (cleaner than a cramped scroller for 11 items) */
+  @media(max-width:1024px){
     .ed-nav{display:none!important;}
-    .ed-spacer{display:none!important;}
-    .ed-season{display:none!important;}
     .ed-burger{display:flex!important;}
     .ed-searchlabel,.ed-kbd{display:none!important;}
-    main{padding-left:14px!important;padding-right:14px!important;padding-top:20px!important;}
-    h1{font-size:30px!important;}
   }
-  @media(max-width:480px){
-    h1{font-size:26px!important;}
+  /* phones */
+  @media(max-width:640px){
+    .ed-season{display:none!important;}
     .ed-demo{display:none!important;}
+    main{padding-left:16px!important;padding-right:16px!important;padding-top:20px!important;}
+    h1{font-size:28px!important;}
+    .g2{grid-template-columns:1fr!important;}
+    header button{min-height:42px;min-width:42px;}
+  }
+  @media(max-width:400px){
+    h1{font-size:24px!important;}
   }
 </style>
 </head>
@@ -64,6 +71,7 @@
 <script src="redesign/editorial-ext.js?v=20260602k"></script>
 <script src="redesign/nhl-client.js?v=20260602k"></script>
 <script src="redesign/editorial-live.js?v=20260602k"></script>
+<script src="redesign/editorial-analytics.js?v=20260602k"></script>
 <script type="text/babel" src="redesign/editorial-pages.jsx?v=20260602k"></script>
 <script type="text/babel" src="redesign/shot-map.jsx?v=20260602k"></script>
 <script type="text/babel" src="redesign/editorial-news.jsx?v=20260602k"></script>

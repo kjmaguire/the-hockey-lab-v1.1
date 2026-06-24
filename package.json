@@ -5,10 +5,12 @@
   "description": "The Hockey Lab — editorial NHL analytics app on Cloudflare Workers (static assets + live /api/nhl proxy).",
   "scripts": {
     "dev": "wrangler dev",
+    "build": "node build.mjs",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail"
   },
   "devDependencies": {
+    "esbuild": "^0.23.0",
     "wrangler": "^4.20.0"
   }
 }

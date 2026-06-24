@@ -6,6 +6,29 @@
   const ML = { fontFamily: MONO, fontSize: 10.5, letterSpacing: '.06em', textTransform: 'uppercase', color: T.faint };
   const col = BC.col;
 
+  // export any rink <svg> to a branded PNG — no external libs (serialise SVG → canvas → download)
+  function svgToPng(svgEl, opts){ const o=opts||{}; try{
+    const xml=new XMLSerializer().serializeToString(svgEl);
+    const src='data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(xml)));
+    const img=new Image();
+    img.onload=()=>{ const vb=svgEl.viewBox.baseVal; const ar=(vb&&vb.width&&vb.height)?vb.width/vb.height:200/85;
+      const s=2, W=700*s, padX=24*s, padTop=(o.title?52:18)*s, padBot=34*s;
+      const innerW=W-padX*2, innerH=innerW/ar, H=padTop+innerH+padBot;
+      const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
+      x.fillStyle=o.bg||'#ffffff'; x.fillRect(0,0,W,H);
+      if(o.title){ x.fillStyle=o.fg||'#15161b'; x.font=`600 ${17*s}px Geist, system-ui, sans-serif`; x.fillText(o.title, padX, 26*s);
+        if(o.sub){ x.fillStyle=o.mut||'#62636a'; x.font=`400 ${11*s}px 'Geist Mono', monospace`; x.fillText(o.sub, padX, 42*s); } }
+      x.drawImage(img, padX, padTop, innerW, innerH);
+      x.fillStyle=o.mut||'#9b9ca3'; x.font=`500 ${10*s}px 'Geist Mono', monospace`;
+      x.fillText('THE HOCKEY LAB', padX, H-14*s);
+      c.toBlob((b)=>{ if(!b)return; const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=o.filename||'hockey-lab.png'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1500); });
+    };
+    img.onerror=()=>{};
+    img.src=src;
+  }catch(e){} }
+
+  function ExpBtn({ onClick }){ return <button onClick={onClick} aria-label="Save as image" title="Save as image" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 7, border: `1px solid ${T.line2}`, background: 'transparent', color: T.mut, cursor: 'pointer' }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>Save</button>; }
+
   // marker styles per shot type
   const TYPE_LABEL = { goal: 'Goal', on: 'Shot on goal', miss: 'Missed', block: 'Blocked' };
   const FILTERS = [['all', 'All'], ['goal', 'Goals'], ['on', 'On net'], ['miss', 'Missed'], ['block', 'Blocked']];
@@ -69,14 +92,18 @@
     };
 
     const dot = (c) => ({ width: 8, height: 8, borderRadius: 99, background: c, display: 'inline-block' });
+    const exportImg = () => { const svg = wrap.current && wrap.current.querySelector('svg'); if (svg) svgToPng(svg, { filename: `shot-map-${g.a}-${g.h}.png`, title: `${BC.city(g.a)} @ ${BC.city(g.h)} · Shot locations`, sub: `${g.st.startsWith('final') ? 'Final' : g.st === 'live' ? 'Live' : 'Upcoming'}${g.as != null && g.st !== 'pre' ? ` · ${g.a} ${g.as}–${g.hs} ${g.h}` : ''}`, bg: T.mode === 'dark' ? '#10131a' : '#fbfaf7', fg: T.mode === 'dark' ? '#ecedf0' : '#15161b' }); };
 
     return (
       <div style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 14, padding: '16px 18px', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
           <span style={ML}>Shot locations</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {shots.length > 0 && <ExpBtn onClick={exportImg} />}
           <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 6, color: source === 'live' ? '#1a8a4f' : T.faint }}>
             <span style={{ width: 6, height: 6, borderRadius: 99, background: source === 'live' ? '#1a8a4f' : T.line2 }} />
             {source === 'live' ? 'live coordinates' : 'sample data'}
+          </span>
           </span>
         </div>
 
@@ -203,6 +230,7 @@
     const pctLabel = goalie ? 'Save %' : 'Shooting %';
     const c = (window.BC.col && teamAb) ? BC.col(teamAb) : T.ink;
     const fmtPct = (v) => goalie ? `.${String(Math.round(v * 10)).padStart(3, '0')}` : `${v.toFixed(1)}%`;
+    const exportImg = () => { const svg = wrap.current && wrap.current.querySelector('svg'); if (svg) svgToPng(svg, { filename: `shot-zones-${teamAb || id}.png`, title: `${name || teamAb || ''} · ${goalie ? 'Save zones' : 'Shot zones'} (season)`, sub: `${data.shots.toLocaleString()} ${goalie ? 'shots faced' : 'shots'} · ${fmtPct(data.pct)} ${goalie ? 'save' : 'shooting'}`, bg: T.mode === 'dark' ? '#12161d' : '#edf2fa', fg: T.mode === 'dark' ? '#ecedf0' : '#15161b' }); };
     const delta = (z) => +(z.pct - z.lg).toFixed(1);
     // for shooting, above league = good (green); for goalie, above league save% = good
     const deltaGood = (d) => d >= 0;
@@ -217,9 +245,12 @@
       <div style={{ background: T.paper, border: `1px solid ${T.line}`, borderRadius: 14, padding: '16px 18px', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
           <span style={ML}>{goalie ? 'Save zones · season' : 'Shot zones · season'}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <ExpBtn onClick={exportImg} />
           <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 6, color: source === 'live' ? '#1a8a4f' : T.faint }}>
             <span style={{ width: 6, height: 6, borderRadius: 99, background: source === 'live' ? '#1a8a4f' : T.line2 }} />
             {source === 'live' ? 'live · NHL Edge' : 'sample data'}
+          </span>
           </span>
         </div>
         <div style={{ fontFamily: MONO, fontSize: 11.5, color: T.mut, marginBottom: 12 }}>

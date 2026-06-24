@@ -24,7 +24,7 @@ window.E_useLive = function(mock, fetchLive, deps){
 };
 const c2=D.col, nk=D.nick, ct=D.city;
 const LIGHT={mode:'light',ink:'#15161b',mut:'#62636a',faint:'#9b9ca3',line:'#e6e4de',line2:'#dad8d0',red:'#e5341f',paper:'#fff',bg:'#f5f4f0',glass:'rgba(245,244,240,.85)',invBg:'#15161b',invFg:'#fff',posBg:'#e7f5ec',posFg:'#1a8a4f',negBg:'#fdecea',negFg:'#c0392b',goldBg:'#fdf6e6',goldFg:'#9a6b1a',goldLine:'#f0e2c0'};
-const DARK={mode:'dark',ink:'#ecedf0',mut:'#a2a4ad',faint:'#6d6f78',line:'#2a2c33',line2:'#3b3d46',red:'#ff5a45',paper:'#1c1d23',bg:'#141519',glass:'rgba(18,19,23,.82)',invBg:'#33343d',invFg:'#f3f3f5',posBg:'rgba(34,170,95,.18)',posFg:'#54d98c',negBg:'rgba(255,90,69,.16)',negFg:'#ff7d6d',goldBg:'rgba(202,150,70,.18)',goldFg:'#d8af68',goldLine:'rgba(202,150,70,.34)'};
+const DARK={mode:'dark',ink:'#ecedf0',mut:'#b4b6bf',faint:'#8a8c96',line:'#2a2c33',line2:'#3b3d46',red:'#ff5a45',paper:'#1c1d23',bg:'#141519',glass:'rgba(18,19,23,.82)',invBg:'#33343d',invFg:'#f3f3f5',posBg:'rgba(34,170,95,.18)',posFg:'#54d98c',negBg:'rgba(255,90,69,.16)',negFg:'#ff7d6d',goldBg:'rgba(202,150,70,.18)',goldFg:'#d8af68',goldLine:'rgba(202,150,70,.34)'};
 const T={...LIGHT};
 try{if(localStorage.getItem('e_theme')==='dark')Object.assign(T,DARK);}catch(e){}
 window.E_applyTheme=m=>{Object.assign(T,m==='dark'?DARK:LIGHT);};
@@ -53,6 +53,12 @@ const ML={fontFamily:MONO,fontSize:10.5,letterSpacing:'.06em',textTransform:'upp
 /* ---------- STANDINGS ---------- */
 function StandingsPage({onTeam}){
   const [v,setV]=uS('League');
+  const curSeasonId=(window.NHL&&window.NHL._season)?String(window.NHL._season):((window.BC&&window.BC._seasonId)||'20252026');
+  const seasonList=uM(()=>{const sy=+String(curSeasonId).slice(0,4);return Array.from({length:6},(_,i)=>{const a=sy-i;return String(a)+String(a+1);});},[curSeasonId]);
+  const [season,setSeason]=uS(curSeasonId);
+  const [,forceSeason]=uS(0);
+  const onSeason=e=>{const s=e.target.value;setSeason(s);if(window.BC&&window.BC.hydrateSeason)window.BC.hydrateSeason(s,()=>forceSeason(x=>x+1));};
+  const seasSel={fontFamily:MONO,fontSize:12,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:8,padding:'6px 9px',color:T.ink,cursor:'pointer'};
   const [sortK,setSortK]=uS(null);const [sortDir,setSortDir]=uS('desc');
   const views=['League','Wild Card','Atlantic','Metro','Central','Pacific'];
   const baseRows=uM(()=>v==='League'?D.STANDINGS:D.STANDINGS.filter(t=>t.div===v),[v]);
@@ -81,7 +87,7 @@ function StandingsPage({onTeam}){
     <div style={{padding:'11px 14px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}><span style={ML}>{label}</span>{sub&&<span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>{sub}</span>}</div>
     {children}</div>;
   return(<div>
-    <PageHead k="Standings" t={v==='Wild Card'?'Wild Card':'League'} serif={v==='Wild Card'?'race':'table'} right={<div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{views.map(x=><Pill key={x} on={v===x} onClick={()=>setV(x)}>{x}</Pill>)}</div>}/>
+    <PageHead k="Standings" t={v==='Wild Card'?'Wild Card':'League'} serif={v==='Wild Card'?'race':'table'} right={<div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}><select value={season} onChange={onSeason} style={seasSel} title="Season">{seasonList.map(s=><option key={s} value={s}>{s.slice(0,4)}-{s.slice(6,8)}</option>)}</select>{views.map(x=><Pill key={x} on={v===x} onClick={()=>setV(x)}>{x}</Pill>)}</div>}/>
     {v==='Wild Card'?
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}} className="g2">
         {['East','West'].map(conf=>{const{byDiv,wc}=wildCard(conf);return(<div key={conf} style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -194,8 +200,8 @@ function TeamSchedule({ab,onGame}){
 }
 
 /* ---------- TEAM DETAIL ---------- */
-function Tabs({tabs,active,onChange}){return(<div style={{display:'flex',gap:24,borderBottom:`1px solid ${T.line}`,marginBottom:20}}>
-  {tabs.map(t=><button key={t} onClick={()=>onChange(t)} style={{fontFamily:'inherit',background:'none',border:'none',borderBottom:`2px solid ${active===t?T.ink:'transparent'}`,color:active===t?T.ink:T.mut,fontWeight:600,fontSize:14,padding:'10px 0',marginBottom:-1,cursor:'pointer'}}>{t}</button>)}</div>);}
+function Tabs({tabs,active,onChange}){return(<div className="ed-tabscroll" style={{display:'flex',gap:24,borderBottom:`1px solid ${T.line}`,marginBottom:20,overflowX:'auto',scrollbarWidth:'none'}}>
+  {tabs.map(t=><button key={t} onClick={()=>onChange(t)} style={{fontFamily:'inherit',background:'none',border:'none',borderBottom:`2px solid ${active===t?T.ink:'transparent'}`,color:active===t?T.ink:T.mut,fontWeight:600,fontSize:14,padding:'10px 0',marginBottom:-1,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>{t}</button>)}</div>);}
 function RankChip({rank}){if(!rank)return null;const tone=rank<=5?[T.posBg,T.posFg]:rank>=26?[T.negBg,T.negFg]:[T.bg,T.faint];return <span style={{fontFamily:MONO,fontSize:10.5,fontWeight:600,padding:'1px 6px',borderRadius:5,background:tone[0],color:tone[1]}}>#{rank}</span>;}
 function Metric({l,v,suf,rank}){return <div style={{border:`1px solid ${T.line}`,borderRadius:11,padding:'13px 15px'}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={ML}>{l}</div><RankChip rank={rank}/></div><div style={{fontSize:23,fontWeight:600,color:T.ink,marginTop:3,letterSpacing:'-.02em'}}>{v}{suf||''}</div></div>;}
 
@@ -382,6 +388,9 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
   // overlay real NHL EDGE tracking when deployed (partial → merged over mock)
   const edge=window.E_useLive(edgeMock,()=>(isG?window.NHL.edgeGoalieMapped(p.id):window.NHL.edgeSkaterMapped(p.id)).then(e=>e?{...edgeMock,...e}:null),[p.id]);
   const log=uM(()=>D.gameLog(p),[p.id]);
+  const eglMock=uM(()=>(!isG&&D.edgeGameLog)?D.edgeGameLog(p):[],[p.id]);
+  // overlay real game identity (date/opponent) + any live per-game EDGE from the game-log
+  const egl=window.E_useLive(eglMock,()=>(!isG&&window.NHL&&window.NHL.edgeGameLog)?window.NHL.edgeGameLog(p.id).then(rows=>(rows&&rows.length)?eglMock.map((m,i)=>{const r=rows[i];return r?{...m,date:r.date||m.date,opp:r.opp||m.opp,home:r.home,topSpd:r.topSpd!=null?r.topSpd:m.topSpd,topShot:r.topShot!=null?r.topShot:m.topShot,dist:r.dist!=null?r.dist:m.dist,b20:r.b20!=null?r.b20:m.b20}:m;}):null):null,[p.id]);
   const Stat=({l,v})=><div style={{...card,padding:16,textAlign:'center'}}><div style={ML}>{l}</div><div style={{fontSize:30,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
   const Sec=({k,children})=><div style={{...card,overflow:'hidden',marginBottom:16}}><div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>{k}</div>{children}</div>;
   return(<div>
@@ -427,6 +436,19 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
         <div style={{...ML,marginTop:16}}>Zone time</div><div style={{marginTop:10}}>{(edge.zones||[]).map(([z,pct])=><div key={z} style={{display:'flex',alignItems:'center',gap:12,marginBottom:8}}><span style={{width:90,fontSize:13,color:T.mut}}>{z}</span><div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:c2(p.team)}}/></div><span style={{width:44,textAlign:'right',fontWeight:600,fontFamily:MONO,fontSize:12}}>{pct}%</span></div>)}</div></div>
       )}
     </div>
+    {!isG&&egl.length>0&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
+      <div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>NHL Edge · by game</div>
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:440,borderCollapse:'collapse',fontSize:13}}>
+        <thead><tr>{['Game','Top speed','Top shot','Distance','20+ bursts'].map((h,i)=><th key={h} style={{padding:'9px 14px',textAlign:i?'center':'left',...ML,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+        <tbody>{egl.map((g,i)=><tr key={i} style={{borderTop:`1px solid ${T.line}`}}>
+          <td style={{padding:'8px 14px',whiteSpace:'nowrap'}}><span style={{color:T.faint,fontFamily:MONO,fontSize:11.5}}>{g.date}</span> <span style={{color:T.ink}}>{g.home?'vs':'@'} {g.opp}</span></td>
+          <td style={{padding:'8px 14px',textAlign:'center',fontFamily:MONO,color:T.ink}}>{g.topSpd}<span style={{color:T.faint,fontSize:10}}> mph</span></td>
+          <td style={{padding:'8px 14px',textAlign:'center',fontFamily:MONO,color:T.ink}}>{g.topShot}<span style={{color:T.faint,fontSize:10}}> mph</span></td>
+          <td style={{padding:'8px 14px',textAlign:'center',fontFamily:MONO,color:T.ink}}>{g.dist}<span style={{color:T.faint,fontSize:10}}> mi</span></td>
+          <td style={{padding:'8px 14px',textAlign:'center',fontFamily:MONO,fontWeight:600,color:T.ink}}>{g.b20}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </div>}
     {/* shot zones (NHL Edge season aggregate) */}
     {window.E_ShotZones&&<window.E_ShotZones scope={isG?'goalie':'skater'} id={p.id} teamAb={p.team} name={p.name}/>}
     {/* career + last5 */}
@@ -569,13 +591,19 @@ function StatsPage({onPlayer,onTeam}){
     '+/-':{disp:p=>(p.pm>0?'+':'')+p.pm,val:p=>p.pm,sub:p=>`${p.p} P · ${p.gp} GP`,label:'plus / minus'},
     Shots:{disp:p=>String(p.sog),val:p=>p.sog,sub:p=>`${p.g} G · ${(p.g/Math.max(1,p.sog)*100).toFixed(1)}% SH`,label:'shots on goal'},
     'P/GP':{disp:p=>(p.p/p.gp).toFixed(2),val:p=>p.p/p.gp,sub:p=>`${p.p} P · ${p.gp} GP`,label:'points per game'},
+    Hits:{disp:p=>String(D.leaderEx(p).hits),val:p=>D.leaderEx(p).hits,sub:p=>`${p.gp} GP`,label:'hits'},
+    Blocks:{disp:p=>String(D.leaderEx(p).blk),val:p=>D.leaderEx(p).blk,sub:p=>`${p.pos} · ${p.gp} GP`,label:'blocked shots'},
+    'TOI/GP':{disp:p=>D.leaderEx(p).toiPg.toFixed(1),val:p=>D.leaderEx(p).toiPg,sub:p=>`${p.gp} GP`,label:'minutes / game'},
+    'FO%':{disp:p=>{const f=D.leaderEx(p).fo;return f?f.toFixed(1):'–';},val:p=>D.leaderEx(p).fo,sub:p=>`${p.pos} · ${p.gp} GP`,label:'faceoff win %'},
     Goalies:{disp:g=>g.svp,val:g=>Number(g.svp),sub:g=>`${g.w}-${g.l} · ${g.gaa} GAA`,label:'save %'},
   };
   const conf=CAT[cat];
   const open=p=>onPlayer(isG?{...p,type:'goalie',pos:'G'}:p);
   const rows=uM(()=>{
     let pool=isG?D.goalieLeaders().filter(g=>g.gp>=12):D.skaterLeaders('p').filter(p=>posF==='All'||(posF==='Defense'?p.pos==='D':p.pos!=='D'));
-    return pool.map(p=>({...p,_v:conf.val(p)})).sort((a,b)=>b._v-a._v).slice(0,15);
+    let arr=pool.map(p=>({...p,_v:conf.val(p)}));
+    if(cat==='FO%')arr=arr.filter(p=>p._v>0);
+    return arr.sort((a,b)=>b._v-a._v).slice(0,15);
   },[cat,posF]);
   const top=rows.slice(0,3), list=rows.slice(3,15);
   const vMax=rows.length?rows[0]._v:1, vMin=rows.length?rows[rows.length-1]._v:0;
@@ -602,7 +630,7 @@ function StatsPage({onPlayer,onTeam}){
       </div>
       <div style={{display:'flex',alignItems:'center',gap:11,marginBottom:12}}>
         <PlayerAvatar pos={isG?'G':p.pos} team={p.team} name={p.name} size={42}/>
-        <div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:14.5,color:T.ink,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{ct(p.team)} · {isG?'G':p.pos}</div></div>
+        <div style={{minWidth:0}}><div style={{fontWeight:600,fontSize:14,color:T.ink,lineHeight:1.15,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',wordBreak:'break-word'}}>{p.name}</div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{ct(p.team)} · {isG?'G':p.pos}</div></div>
       </div>
       <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:8}}>
         <div><div style={{fontSize:32,fontWeight:600,letterSpacing:'-.03em',color:T.ink,lineHeight:1}}>{conf.disp(p)}</div><div style={{...ML,marginTop:4}}>{conf.label}</div></div>
@@ -616,7 +644,7 @@ function StatsPage({onPlayer,onTeam}){
     {mode==='Compare'&&<StatsCompare onPlayer={onPlayer}/>}
     {mode==='Leaders'&&<React.Fragment>
     <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:16}}>
-      {['Points','Goals','Assists','+/-','Shots','P/GP','Goalies'].map(x=><Pill key={x} on={cat===x} onClick={()=>setCat(x)}>{x}</Pill>)}
+      {['Points','Goals','Assists','+/-','Shots','P/GP','Hits','Blocks','TOI/GP','FO%','Goalies'].map(x=><Pill key={x} on={cat===x} onClick={()=>setCat(x)}>{x}</Pill>)}
       {!isG&&<div style={{display:'flex',gap:6,marginLeft:'auto'}}>{['All','Forwards','Defense'].map(x=><Pill key={x} on={posF===x} onClick={()=>setPosF(x)}>{x}</Pill>)}</div>}
     </div>
     <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16,alignItems:'start'}} className="sg">
@@ -663,6 +691,7 @@ function HockeyIQPage({onPlayer,onTeam}){
   const [iqTab,setIqTab]=uS('Overview');
   const teamsAZ=uM(()=>[...D.ABBR].sort((a,b)=>ct(a).localeCompare(ct(b))),[]);
   const [tcA,setTcA]=uS(D.STANDINGS[0].ab); const [tcB,setTcB]=uS(D.STANDINGS[1].ab);
+  const [etA,setEtA]=uS(D.STANDINGS[0].ab); const [etB,setEtB]=uS(D.STANDINGS[2]?D.STANDINGS[2].ab:D.STANDINGS[1].ab);
   const tcmp=D.teamCompare(tcA,tcB);
   const seeds=cf=>D.STANDINGS.filter(t=>t.conf===cf).slice(0,8);
   const skList=uM(()=>D.skaterLeaders('p').slice(0,24),[]);
@@ -684,6 +713,24 @@ function HockeyIQPage({onPlayer,onTeam}){
   const Lead=({title,list,k})=>(<div style={{...card,overflow:'hidden'}}><div style={{padding:'13px 16px',fontSize:14,fontWeight:600,color:T.ink,borderBottom:`1px solid ${T.line}`}}>{title}</div>
     {list.map((p,i)=><div key={p.id} onClick={()=>onPlayer(p)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
       <span style={{width:16,color:T.faint,fontFamily:MONO,fontSize:11}}>{i+1}</span><Badge ab={p.team} size={22}/><span style={{flex:1,color:T.ink,fontSize:13.5}}>{p.name}</span><span style={{fontWeight:700}}>{p[k]}</span></div>)}</div>);
+  const EB_M=[['top','Top skating speed','mph'],['shot','Max shot speed','mph'],['savg','Avg shot speed','mph'],['dist','Distance','mi'],['b20','20+ bursts',''],['b22','22+ bursts',''],['oz','O-zone time','%']];
+  const EdgeBoard=()=>{const [m,setM]=uS('top');const meta=EB_M.find(x=>x[0]===m)||EB_M[0];const rows=window.E_useLive(D.edgeBoard(m),()=>(window.NHL&&window.NHL.edgeBoardLive)?window.NHL.edgeBoardLive(m):Promise.resolve(null),[m]);return(
+    <div style={{...card,overflow:'hidden',marginBottom:16}}>
+      <div style={{padding:'13px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+        <span style={{fontSize:14,fontWeight:600}}>League EDGE leaderboard</span>
+        <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{EB_M.map(([k,lab])=><button key={k} onClick={()=>setM(k)} style={{fontFamily:MONO,fontSize:10.5,padding:'4px 9px',borderRadius:999,border:`1px solid ${m===k?T.invBg:T.line2}`,background:m===k?T.invBg:'transparent',color:m===k?T.invFg:T.mut,cursor:'pointer'}}>{lab}</button>)}</div>
+      </div>
+      {rows.map((p,i)=><div key={p.id} onClick={()=>onPlayer(p)} className="er" style={{display:'flex',alignItems:'center',gap:11,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
+        <span style={{width:20,fontFamily:MONO,fontSize:12,color:i<3?T.red:T.faint,fontWeight:i<3?700:400}}>{i+1}</span>
+        <Badge ab={p.team} size={22}/><span style={{flex:1,minWidth:0,fontSize:13.5,color:T.ink,fontWeight:i<3?600:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
+        <span style={{fontFamily:MONO,fontSize:11,color:T.faint,flexShrink:0}}>{p.team} · {p.pos}</span>
+        <span style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:T.ink,minWidth:60,textAlign:'right'}}>{p._v}{meta[2]?(' '+meta[2]):''}</span>
+      </div>)}
+    </div>);};
+  const EdgeTeams=()=>{const dist=D.edgeTeamDistance();const spd=D.edgeTeamSpeed?D.edgeTeamSpeed():[];const TB=({title,rows,k,unit})=>(
+    <div style={{...card,overflow:'hidden'}}><div style={{padding:'13px 16px',fontSize:14,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>{title}</div>
+      {rows.map((t,i)=><div key={t.ab} onClick={()=>onTeam(t.ab)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}><span style={{width:16,color:T.faint,fontFamily:MONO,fontSize:11}}>{i+1}</span><Badge ab={t.ab} size={22}/><span style={{flex:1,color:T.ink,fontSize:13.5}}>{ct(t.ab)}</span><span style={{fontWeight:700,fontFamily:MONO,fontSize:13}}>{t[k]}<span style={{fontSize:10,fontWeight:400,color:T.faint}}>{unit}</span></span></div>)}</div>);
+    return(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:16}} className="g2"><TB title="Team skating distance" rows={dist} k="mi" unit=" mi/gm"/><TB title="Team top skating speed" rows={spd} k="top" unit=" mph"/></div>);};
   const TList=({title,rows,fmt})=>(<div style={{...card,overflow:'hidden'}}><div style={{padding:'13px 16px',fontSize:14,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>{title}</div>
     {rows.map((t,i)=><div key={t.ab} onClick={()=>onTeam(t.ab)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}><Badge ab={t.ab} size={22}/><span style={{flex:1,color:T.ink,fontSize:13.5}}>{ct(t.ab)}</span>{fmt(t)}</div>)}</div>);
   const story=(tag,headline,sub,onClick,accent)=>(<div onClick={onClick} className="ec" style={{...card,padding:'16px 17px',cursor:'pointer'}}>
@@ -761,6 +808,7 @@ function HockeyIQPage({onPlayer,onTeam}){
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14,marginBottom:16}}>
         <EdgeCard title="Top skating speed" metric="top" unit=" mph"/><EdgeCard title="22+ mph bursts" metric="b22" unit=""/><EdgeCard title="Max shot speed" metric="shot" unit=" mph"/><EdgeCard title="O-zone time" metric="oz" unit="%"/>
       </div>
+      <EdgeBoard/>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14,marginBottom:16}}>
         <Lead title="Points leaders" list={D.skaterLeaders('p').slice(0,5)} k="p"/>
         <Lead title="Goal leaders" list={D.skaterLeaders('g').slice(0,5)} k="g"/>
@@ -777,6 +825,29 @@ function HockeyIQPage({onPlayer,onTeam}){
       <GoCompare/>
     </div>}
     {iqTab==='Teams'&&<div>
+      <div style={{...ML,marginBottom:11}}>Team tracking leaders</div>
+      <EdgeTeams/>
+      <div style={{...ML,margin:'22px 0 11px'}}>Team EDGE head-to-head</div>
+      <div style={{...card,padding:'16px 18px',marginBottom:16}}>
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
+          <select value={etA} onChange={e=>setEtA(e.target.value)} style={{...sel,fontSize:12.5,padding:'7px 10px'}}>{teamsAZ.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select>
+          <span style={{fontFamily:SERIF,fontStyle:'italic',color:T.faint}}>vs</span>
+          <select value={etB} onChange={e=>setEtB(e.target.value)} style={{...sel,fontSize:12.5,padding:'7px 10px'}}>{teamsAZ.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select>
+          <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:T.faint}}>percentile vs league</span>
+        </div>
+        {D.edgeTeamCompare(etA,etB).map((row,i)=>{const aw=row.aPct>=row.bPct;return(
+          <div key={row.label} style={{padding:'9px 0',borderTop:i?`1px solid ${T.line}`:'none'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontFamily:MONO,fontSize:12.5,marginBottom:6}}>
+              <span style={{fontWeight:aw?700:400,color:aw?c2(etA):T.mut,minWidth:60}}>{row.a}{row.unit==='%'?'%':''}</span>
+              <span style={{...ML,fontSize:10}}>{row.label}</span>
+              <span style={{fontWeight:!aw?700:400,color:!aw?c2(etB):T.mut,minWidth:60,textAlign:'right'}}>{row.b}{row.unit==='%'?'%':''}</span>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden',display:'flex',justifyContent:'flex-end'}}><div style={{width:`${row.aPct}%`,background:c2(etA),opacity:aw?1:.45}}/></div>
+              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{width:`${row.bPct}%`,background:c2(etB),opacity:!aw?1:.45}}/></div>
+            </div>
+          </div>);})}
+      </div>
       {(()=>{const Row=({r})=>{const an=r.a,bn=r.b;const aw=r.low?an<=bn:an>=bn;const tot=(Math.abs(an)+Math.abs(bn))||1;const ap=Math.round(Math.abs(an)/tot*100);
         return(<div style={{padding:'9px 0',borderTop:`1px solid ${T.line}`}}>
           <div style={{display:'flex',justifyContent:'space-between',fontFamily:MONO,fontSize:12.5,marginBottom:5}}><span style={{fontWeight:aw?700:400,color:aw?T.ink:T.mut,minWidth:54}}>{an}{r.u||''}</span><span style={{...ML,fontSize:10}}>{r.l}</span><span style={{fontWeight:!aw?700:400,color:!aw?T.ink:T.mut,minWidth:54,textAlign:'right'}}>{bn}{r.u||''}</span></div>
@@ -1186,10 +1257,10 @@ function RecordsPage({onTeam}){
   const rec=window.E_useLive(recMock,()=>window.NHL.recordsAllTime().then(r=>r?{...recMock,...r}:null),[]);
   const skaters=rec.skaters;
   const goalies=rec.goalies;
-  const trophies=D.recordTrophiesList();
+  const trophies=window.E_useLive(uM(()=>D.recordTrophiesList(),[]),()=>(window.NHL&&window.NHL.awardsMapped)?window.NHL.awardsMapped():null,[]);
   const franchise=D.recordFranchiseList();
   const season=D.recordSeason();
-  const watch=D.milestoneWatch();
+  const watch=window.E_useLive(uM(()=>D.milestoneWatch(),[]),()=>(window.NHL&&window.NHL.milestonesMapped)?window.NHL.milestonesMapped():null,[]);
   const reports=D.statsReports();
   const [scope,setScope]=uS('skater');
   const [leadScope,setLeadScope]=uS('skater');

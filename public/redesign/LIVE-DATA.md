@@ -115,6 +115,32 @@ bracket/series, and team-level EDGE tracking.
 3. Deploy. `BC.hydrate()` will reach `/api/nhl/*`, `BC.LIVE` flips true, and the
    scoreboard polls live. No code change needed between preview and prod.
 
+## Tuning & verifying EDGE on deploy
+
+EDGE detail/zone/top-10 feeds are internal and shape-drifting, so the mappers
+(`mapEdgeSkater`, `mapEdgeGoalie`, `mapZones`, `edgeBoardLive`) are **name-key
+scans**. After deploying behind the proxy, tune them against real payloads:
+
+1. **Inspect a real payload** — in the deployed console:
+   `await NHL.edgeDebug('<playerId>','skater')` (or `'goalie'`). It returns
+   `{ recognized, topLevelKeys, rows, sample }` — recognized vs. the raw key set.
+2. **Map the gaps** — for any metric that shows up in `topLevelKeys`/`sample`
+   but not in `recognized`, add that field's lowercased key fragment to the
+   corresponding `edgeMetric(payload, [...])` list in `nhl-client.js`.
+3. **Verify it lights up** — on a player page confirm `BC.LIVE===true` and the
+   EDGE cards show live values (percentile + league avg) rather than projections.
+4. **League leaderboard** — `await NHL.edgeBoardLive('top')` should return ~20
+   rows; if `null`, correct the `PATHS` map / array-scan in `edgeBoardLive`.
+   The Hockey IQ → Skaters board overlays this live via `E_useLive`.
+5. **Goalie depth** — the goalie card now carries 6 rows (HD/MD/LD SV% +
+   goals-saved-a.e., rebound control, HD shots faced/60); confirm the advanced
+   three populate or fall back cleanly.
+
+Surfaced EDGE views: player detail (7 skater tracking cards + zone split + season
+heatmap + per-game table), goalie detail (6 save-quality rows), Hockey IQ →
+Skaters (live leaderboard + tracking leaders + skater compare), → Goalies (HD
+leaders + goalie compare), → Teams (skating distance + top-speed boards).
+
 ## Caveat (from the NHL API docs)
 
 The EDGE endpoints are undocumented/internal-broadcast feeds — response shapes

@@ -1,0 +1,12 @@
+# Static-asset security headers (Cloudflare Pages _headers format).
+# The Workers Static-Assets deploy (worker.ts) is the live entrypoint and applies
+# the equivalent headers itself; this file covers the Pages alternative deploy.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+
+/*.html
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'self'; base-uri 'self'

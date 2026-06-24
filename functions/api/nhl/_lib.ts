@@ -76,13 +76,29 @@ export class UpstreamError extends Error {
   }
 }
 
+/** Security headers attached to every API response (and mirrored onto static assets in worker.ts). */
+export const SECURITY_HEADERS: Record<string, string> = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-frame-options': 'SAMEORIGIN',
+  'permissions-policy': 'geolocation=(), microphone=(), camera=()',
+};
+
+/** Cache-Control with stale-while-revalidate (serve stale instantly, refresh in bg)
+ *  + stale-if-error (tolerate an upstream outage for a week, matching our fallback copy). */
+function cacheControl(maxAge: number): string {
+  const swr = Math.max(30, maxAge);
+  return `public, max-age=${maxAge}, stale-while-revalidate=${swr}, stale-if-error=604800`;
+}
+
 /** JSON response with the same cache hint we store at the edge. */
 export function json(data: unknown, status = 200, maxAge = CACHE_SECONDS): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': `public, max-age=${maxAge}`,
+      'cache-control': cacheControl(maxAge),
+      ...SECURITY_HEADERS,
     },
   });
 }
@@ -90,8 +106,60 @@ export function json(data: unknown, status = 200, maxAge = CACHE_SECONDS): Respo
 export function errorJson(message: string, status = 502, extra: Record<string, unknown> = {}): Response {
   return new Response(JSON.stringify({ error: true, message, ...extra }), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...SECURITY_HEADERS },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Abuse / overload protection (worker.ts wires these in front of the router).
+// ---------------------------------------------------------------------------
+
+/** Validate a generic-passthrough sub-path: printable URL chars only, no traversal, bounded length. */
+export function sanitizeRest(rest: string): boolean {
+  if (!rest || rest.length > 160) return false;
+  if (rest.includes('..')) return false;
+  return /^[A-Za-z0-9._~\-\/]+$/.test(rest);
+}
+
+/** Hotlink guard: if the request carries a browser Origin/Referer, its host must be allow-listed.
+ *  Header-less callers (curl, server-to-server) are deferred to rate limiting / Cloudflare WAF. */
+export function isRefererAllowed(origin: string | null, referer: string | null, allowedHosts: string[]): boolean {
+  const hostOf = (v: string | null) => { if (!v) return null; try { return new URL(v).host; } catch { return null; } };
+  const o = hostOf(origin), r = hostOf(referer);
+  if (!o && !r) return true;
+  const ok = (h: string | null) => h == null || allowedHosts.includes(h);
+  return ok(o) && ok(r);
+}
+
+/** Soft per-IP fixed-window limiter. Uses a KV namespace if one is bound; otherwise a no-op
+ *  (deployments without KV should lean on a Cloudflare WAF rate-limit rule — see README). */
+export async function rateLimit(kv: any, ip: string, limit: number): Promise<boolean> {
+  if (!kv || !ip) return true;
+  const key = `rl:${ip}:${Math.floor(Date.now() / 60000)}`;
+  let n = 0;
+  try { n = parseInt((await kv.get(key)) || '0', 10) || 0; } catch { return true; }
+  if (n >= limit) return false;
+  try { await kv.put(key, String(n + 1), { expirationTtl: 70 }); } catch { /* best-effort */ }
+  return true;
+}
+
+/** Memoize an assembled (multi-upstream) JSON response at the edge under a synthetic key,
+ *  so composition work (e.g. teamStats' ~24 reports) isn't re-run on every hit. */
+export async function edgeMemo(key: string, ttl: number, build: () => Promise<Response>): Promise<Response> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const cacheKey = new Request(`https://memo.thehockeylab.invalid/${key}`, { method: 'GET' });
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const resp = await build();
+  if (resp.ok) {
+    const body = await resp.clone().text();
+    const stored = new Response(body, {
+      headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': cacheControl(ttl), ...SECURITY_HEADERS },
+    });
+    try { await cache.put(cacheKey, stored.clone()); } catch { /* best-effort */ }
+    return stored;
+  }
+  return resp;
 }
 
 /**
@@ -296,7 +364,13 @@ export function rankFromList(rows: any[], field: string, teamId: number, directi
 }
 
 // ----- team-stats aggregator (controller teamStats) ------------------------
+// Public entry: memoize the assembled blob at the edge (its ~24 sub-reports are
+// each cached individually too, but this skips re-composing them on every hit).
 export async function teamStats(teamAbbrev: string, season: string, gameType: string): Promise<Response> {
+  return edgeMemo(`team-stats/${teamAbbrev.toUpperCase()}/${season}/${gameType}`, TTL.medium,
+    () => buildTeamStats(teamAbbrev, season, gameType));
+}
+async function buildTeamStats(teamAbbrev: string, season: string, gameType: string): Promise<Response> {
   const teamKey = teamAbbrev.toUpperCase();
 
   let teamMap: Record<string, { id: number; name: string }>;
