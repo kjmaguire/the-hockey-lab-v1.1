@@ -4233,6 +4233,7 @@ function HockeyIQPage({
   const [cmpGA, setCmpGA] = uS(goList[0].id);
   const [cmpGB, setCmpGB] = uS(goList[1].id);
   const [boardM, setBoardM] = uS('top');
+  const [h2hMode, setH2hMode] = uS('Standard');
   const cmp = D.edgeCompare(cmpA, cmpB);
   const gcmp = D.goalieEdgeCompare(cmpGA, cmpGB);
   const teamDist = D.edgeTeamDistance();
@@ -5252,128 +5253,7 @@ function HockeyIQPage({
       ...ML,
       margin: '22px 0 11px'
     }
-  }, "Team EDGE head-to-head"), React.createElement("div", {
-    style: {
-      ...card,
-      padding: '16px 18px',
-      marginBottom: 16
-    }
-  }, React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 10,
-      alignItems: 'center',
-      flexWrap: 'wrap',
-      marginBottom: 14
-    }
-  }, React.createElement("select", {
-    value: etA,
-    onChange: e => setEtA(e.target.value),
-    style: {
-      ...sel,
-      fontSize: 12.5,
-      padding: '7px 10px'
-    }
-  }, teamsAZ.map(a => React.createElement("option", {
-    key: a,
-    value: a
-  }, ct(a), " ", nk(a)))), React.createElement("span", {
-    style: {
-      fontFamily: SERIF,
-      fontStyle: 'italic',
-      color: T.faint
-    }
-  }, "vs"), React.createElement("select", {
-    value: etB,
-    onChange: e => setEtB(e.target.value),
-    style: {
-      ...sel,
-      fontSize: 12.5,
-      padding: '7px 10px'
-    }
-  }, teamsAZ.map(a => React.createElement("option", {
-    key: a,
-    value: a
-  }, ct(a), " ", nk(a)))), React.createElement("span", {
-    style: {
-      marginLeft: 'auto',
-      fontFamily: MONO,
-      fontSize: 10,
-      color: T.faint
-    }
-  }, "percentile vs league")), D.edgeTeamCompare(etA, etB).map((row, i) => {
-    const aw = row.aPct >= row.bPct;
-    return React.createElement("div", {
-      key: row.label,
-      style: {
-        padding: '9px 0',
-        borderTop: i ? `1px solid ${T.line}` : 'none'
-      }
-    }, React.createElement("div", {
-      style: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'baseline',
-        fontFamily: MONO,
-        fontSize: 12.5,
-        marginBottom: 6
-      }
-    }, React.createElement("span", {
-      style: {
-        fontWeight: aw ? 700 : 400,
-        color: aw ? c2(etA) : T.mut,
-        minWidth: 60
-      }
-    }, row.a, row.unit === '%' ? '%' : ''), React.createElement("span", {
-      style: {
-        ...ML,
-        fontSize: 10
-      }
-    }, row.label), React.createElement("span", {
-      style: {
-        fontWeight: !aw ? 700 : 400,
-        color: !aw ? c2(etB) : T.mut,
-        minWidth: 60,
-        textAlign: 'right'
-      }
-    }, row.b, row.unit === '%' ? '%' : '')), React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8
-      }
-    }, React.createElement("div", {
-      style: {
-        flex: 1,
-        height: 6,
-        borderRadius: 3,
-        background: T.bg,
-        overflow: 'hidden',
-        display: 'flex',
-        justifyContent: 'flex-end'
-      }
-    }, React.createElement("div", {
-      style: {
-        width: `${row.aPct}%`,
-        background: c2(etA),
-        opacity: aw ? 1 : .45
-      }
-    })), React.createElement("div", {
-      style: {
-        flex: 1,
-        height: 6,
-        borderRadius: 3,
-        background: T.bg,
-        overflow: 'hidden'
-      }
-    }, React.createElement("div", {
-      style: {
-        width: `${row.bPct}%`,
-        background: c2(etB),
-        opacity: !aw ? 1 : .45
-      }
-    }))));
-  })), (() => {
+  }, "Team head-to-head"), (() => {
     const Row = ({
       r
     }) => {
@@ -5398,7 +5278,7 @@ function HockeyIQPage({
       }, React.createElement("span", {
         style: {
           fontWeight: aw ? 700 : 400,
-          color: aw ? T.ink : T.mut,
+          color: c2(tcA),
           minWidth: 54
         }
       }, an, r.u || ''), React.createElement("span", {
@@ -5409,7 +5289,7 @@ function HockeyIQPage({
       }, r.l), React.createElement("span", {
         style: {
           fontWeight: !aw ? 700 : 400,
-          color: !aw ? T.ink : T.mut,
+          color: c2(tcB),
           minWidth: 54,
           textAlign: 'right'
         }
@@ -5435,6 +5315,81 @@ function HockeyIQPage({
         }
       })));
     };
+    const EdgeRow = ({
+      row,
+      i
+    }) => {
+      const aw = row.aPct >= row.bPct;
+      return React.createElement("div", {
+        style: {
+          padding: '9px 0',
+          borderTop: i ? `1px solid ${T.line}` : 'none'
+        }
+      }, React.createElement("div", {
+        style: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          fontFamily: MONO,
+          fontSize: 12.5,
+          marginBottom: 6
+        }
+      }, React.createElement("span", {
+        style: {
+          fontWeight: aw ? 700 : 400,
+          color: c2(tcA),
+          minWidth: 60
+        }
+      }, row.a, row.unit === '%' ? '%' : ''), React.createElement("span", {
+        style: {
+          ...ML,
+          fontSize: 10
+        }
+      }, row.label), React.createElement("span", {
+        style: {
+          fontWeight: !aw ? 700 : 400,
+          color: c2(tcB),
+          minWidth: 60,
+          textAlign: 'right'
+        }
+      }, row.b, row.unit === '%' ? '%' : '')), React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }
+      }, React.createElement("div", {
+        style: {
+          flex: 1,
+          height: 6,
+          borderRadius: 3,
+          background: T.bg,
+          overflow: 'hidden',
+          display: 'flex',
+          justifyContent: 'flex-end'
+        }
+      }, React.createElement("div", {
+        style: {
+          width: `${row.aPct}%`,
+          background: c2(tcA),
+          opacity: aw ? 1 : .45
+        }
+      })), React.createElement("div", {
+        style: {
+          flex: 1,
+          height: 6,
+          borderRadius: 3,
+          background: T.bg,
+          overflow: 'hidden'
+        }
+      }, React.createElement("div", {
+        style: {
+          width: `${row.bPct}%`,
+          background: c2(tcB),
+          opacity: !aw ? 1 : .45
+        }
+      }))));
+    };
     return React.createElement("div", {
       style: {
         ...card,
@@ -5453,7 +5408,7 @@ function HockeyIQPage({
       }
     }, React.createElement("span", {
       style: ML
-    }, "Compare teams \xB7 head-to-head"), React.createElement("div", {
+    }, "Team head-to-head"), React.createElement("div", {
       style: {
         display: 'flex',
         gap: 8,
@@ -5508,7 +5463,8 @@ function HockeyIQPage({
     }, React.createElement("div", {
       style: {
         fontWeight: 700,
-        fontSize: 14
+        fontSize: 14,
+        color: T.ink
       }
     }, ct(tcA)), React.createElement("div", {
       style: {
@@ -5534,7 +5490,8 @@ function HockeyIQPage({
     }, React.createElement("div", {
       style: {
         fontWeight: 700,
-        fontSize: 14
+        fontSize: 14,
+        color: T.ink
       }
     }, ct(tcB)), React.createElement("div", {
       style: {
@@ -5547,11 +5504,33 @@ function HockeyIQPage({
       size: 30
     }))), React.createElement("div", {
       style: {
+        padding: '0 16px 12px',
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center'
+      }
+    }, ['Standard', 'NHL EDGE'].map(mm => React.createElement(Pill, {
+      key: mm,
+      on: h2hMode === mm,
+      onClick: () => setH2hMode(mm)
+    }, mm)), React.createElement("span", {
+      style: {
+        marginLeft: 'auto',
+        fontFamily: MONO,
+        fontSize: 10,
+        color: T.faint
+      }
+    }, h2hMode === 'NHL EDGE' ? 'percentile vs league' : 'season to date')), React.createElement("div", {
+      style: {
         padding: '2px 16px 14px'
       }
-    }, tcmp.rows.map((r, i) => React.createElement(Row, {
+    }, h2hMode === 'Standard' ? tcmp.rows.map((r, i) => React.createElement(Row, {
       key: i,
       r: r
+    })) : D.edgeTeamCompare(tcA, tcB).map((row, i) => React.createElement(EdgeRow, {
+      key: row.label,
+      row: row,
+      i: i
     }))), React.createElement("div", {
       style: {
         padding: '12px 16px',

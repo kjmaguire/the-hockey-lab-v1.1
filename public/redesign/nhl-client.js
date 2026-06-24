@@ -237,34 +237,55 @@
   // teamAbbrevs can be "BOS,TOR" for a traded player — take the current (last) club.
   const curTeam = (v) => normTeam(String(v ?? '').split(',').pop());
   const POS = { L: 'LW', R: 'RW', C: 'C', D: 'D', G: 'G' };
+  // The stats `summary` report is requested UN-aggregated (isAggregate:false) so each
+  // row carries its team (aggregating server-side drops teamAbbrevs → every leader went
+  // gray). We sum a traded player's stints back into one season line here, and take the
+  // club where they played the most games as their CURRENT team for the badge/color.
+  function aggByPlayer(rows, sumKeys) {
+    const by = {};
+    (rows || []).forEach((r) => {
+      const id = String(r.playerId ?? r.id); if (!id || id === 'undefined') return;
+      const gp = +(r.gamesPlayed || 0);
+      const tm = r.teamAbbrevs ?? r.teamAbbrev;
+      let o = by[id];
+      if (!o) { o = by[id] = { r: { ...r }, team: tm, teamGp: gp }; }
+      else {
+        sumKeys.forEach((k) => { o.r[k] = (+o.r[k] || 0) + (+r[k] || 0); });
+        if (gp >= o.teamGp) { o.teamGp = gp; o.team = tm; } // current = most-played club
+      }
+    });
+    return Object.values(by).map((o) => { o.r._team = o.team; return o.r; });
+  }
   function mapSkaterLeaders(payload) {
-    return (payload?.data ?? []).map((p) => ({
+    const rows = aggByPlayer(payload?.data, ['gamesPlayed','goals','assists','points','plusMinus','shots']);
+    return rows.map((p) => ({
       id: String(p.playerId ?? p.id),
       name: p.skaterFullName ?? p.playerName ?? '',
-      team: curTeam(p.teamAbbrevs ?? p.teamAbbrev),
+      team: curTeam(p._team ?? p.teamAbbrevs ?? p.teamAbbrev),
       pos: POS[p.positionCode] ?? p.positionCode ?? 'F',
       num: '', // sweater not in the summary report; rosters render it as optional
       gp: p.gamesPlayed ?? 0, g: p.goals ?? 0, a: p.assists ?? 0, p: p.points ?? 0,
       pm: p.plusMinus ?? 0, sog: p.shots ?? 0,
-    }));
+    })).sort((a, b) => b.p - a.p || b.g - a.g);
   }
   function mapGoalieLeaders(payload) {
-    return (payload?.data ?? []).map((g) => {
-      // stats-REST goalie/summary uses `savePct`; web API uses `savePctg`. Compute
-      // from saves/shots if neither is present so we never show a bogus default.
+    const rows = aggByPlayer(payload?.data, ['gamesPlayed','wins','losses','shutouts','saves','shotsAgainst','goalsAgainst','timeOnIce']);
+    return rows.map((g) => {
+      // Recompute rate stats from the SUMMED counting stats (you can't average averages).
       const sa = g.shotsAgainst, sv = g.saves ?? (sa != null && g.goalsAgainst != null ? sa - g.goalsAgainst : null);
-      const svRaw = g.savePct ?? g.savePctg ?? (sa ? (sv != null ? sv / sa : null) : null);
-      const gaaRaw = g.goalsAgainstAverage ?? g.goalsAgainstAvg;
+      const svRaw = sa ? (sv != null ? sv / sa : null) : (g.savePct ?? g.savePctg ?? null);
+      const toi = +(g.timeOnIce || 0); // seconds
+      const gaaRaw = toi > 0 ? (g.goalsAgainst * 3600 / toi) : (g.gamesPlayed ? g.goalsAgainst / g.gamesPlayed : (g.goalsAgainstAverage ?? g.goalsAgainstAvg));
       return {
         id: String(g.playerId ?? g.id),
         name: g.goalieFullName ?? g.playerName ?? '',
-        team: curTeam(g.teamAbbrevs ?? g.teamAbbrev),
+        team: curTeam(g._team ?? g.teamAbbrevs ?? g.teamAbbrev),
         gp: g.gamesPlayed ?? 0, w: g.wins ?? 0, l: g.losses ?? 0,
         svp: (svRaw != null ? (+svRaw).toFixed(3).slice(1) : '—'),
         gaa: (gaaRaw != null ? (+gaaRaw).toFixed(2) : '—'),
         so: g.shutouts ?? 0,
       };
-    });
+    }).sort((a, b) => b.w - a.w);
   }
 
   // ---- player landing -> playerExtras overlay (real career/history/awards) ----

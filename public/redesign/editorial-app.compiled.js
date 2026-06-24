@@ -4182,12 +4182,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const [booting, setBooting] = useState(!!(window.BC && window.BC.hydrate));
-  const curIdRef = React.useRef('20252026');
-  {
-    const liveS = window.NHL && window.NHL._season ? String(window.NHL._season) : null;
-    if (liveS && /^\d{8}$/.test(liveS) && liveS > curIdRef.current) curIdRef.current = liveS;
-  }
-  const curId = curIdRef.current;
+  const curIdRef = React.useRef(null);
+  const _liveS = window.NHL && window.NHL._season ? String(window.NHL._season) : null;
+  if (season === 'cur' && _liveS && /^\d{8}$/.test(_liveS)) curIdRef.current = _liveS;
+  const curId = curIdRef.current || _liveS || '20242025';
   const SEASONS = useMemo(() => {
     const top = parseInt(curId.slice(0, 4), 10) || 2025;
     const a = [];

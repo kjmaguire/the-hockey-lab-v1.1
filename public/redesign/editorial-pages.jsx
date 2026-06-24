@@ -696,6 +696,7 @@ function HockeyIQPage({onPlayer,onTeam}){
   const [cmpA,setCmpA]=uS(skList[0].id); const [cmpB,setCmpB]=uS(skList[1].id);
   const [cmpGA,setCmpGA]=uS(goList[0].id); const [cmpGB,setCmpGB]=uS(goList[1].id);
   const [boardM,setBoardM]=uS('top'); // EDGE leaderboard metric — page-level so it survives the inline EdgeBoard remounting on each live poll
+  const [h2hMode,setH2hMode]=uS('Standard'); // merged team head-to-head: 'Standard' stats vs 'NHL EDGE' tracking, one shared team pair (tcA/tcB)
   const cmp=D.edgeCompare(cmpA,cmpB);
   const gcmp=D.goalieEdgeCompare(cmpGA,cmpGB);
   const teamDist=D.edgeTeamDistance();
@@ -824,40 +825,33 @@ function HockeyIQPage({onPlayer,onTeam}){
     {iqTab==='Teams'&&<div>
       <div style={{...ML,marginBottom:11}}>Team tracking leaders</div>
       <EdgeTeams/>
-      <div style={{...ML,margin:'22px 0 11px'}}>Team EDGE head-to-head</div>
-      <div style={{...card,padding:'16px 18px',marginBottom:16}}>
-        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
-          <select value={etA} onChange={e=>setEtA(e.target.value)} style={{...sel,fontSize:12.5,padding:'7px 10px'}}>{teamsAZ.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select>
-          <span style={{fontFamily:SERIF,fontStyle:'italic',color:T.faint}}>vs</span>
-          <select value={etB} onChange={e=>setEtB(e.target.value)} style={{...sel,fontSize:12.5,padding:'7px 10px'}}>{teamsAZ.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select>
-          <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:T.faint}}>percentile vs league</span>
-        </div>
-        {D.edgeTeamCompare(etA,etB).map((row,i)=>{const aw=row.aPct>=row.bPct;return(
-          <div key={row.label} style={{padding:'9px 0',borderTop:i?`1px solid ${T.line}`:'none'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontFamily:MONO,fontSize:12.5,marginBottom:6}}>
-              <span style={{fontWeight:aw?700:400,color:aw?c2(etA):T.mut,minWidth:60}}>{row.a}{row.unit==='%'?'%':''}</span>
-              <span style={{...ML,fontSize:10}}>{row.label}</span>
-              <span style={{fontWeight:!aw?700:400,color:!aw?c2(etB):T.mut,minWidth:60,textAlign:'right'}}>{row.b}{row.unit==='%'?'%':''}</span>
-            </div>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden',display:'flex',justifyContent:'flex-end'}}><div style={{width:`${row.aPct}%`,background:c2(etA),opacity:aw?1:.45}}/></div>
-              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{width:`${row.bPct}%`,background:c2(etB),opacity:!aw?1:.45}}/></div>
-            </div>
-          </div>);})}
-      </div>
+      <div style={{...ML,margin:'22px 0 11px'}}>Team head-to-head</div>
       {(()=>{const Row=({r})=>{const an=r.a,bn=r.b;const aw=r.low?an<=bn:an>=bn;const tot=(Math.abs(an)+Math.abs(bn))||1;const ap=Math.round(Math.abs(an)/tot*100);
         return(<div style={{padding:'9px 0',borderTop:`1px solid ${T.line}`}}>
-          <div style={{display:'flex',justifyContent:'space-between',fontFamily:MONO,fontSize:12.5,marginBottom:5}}><span style={{fontWeight:aw?700:400,color:aw?T.ink:T.mut,minWidth:54}}>{an}{r.u||''}</span><span style={{...ML,fontSize:10}}>{r.l}</span><span style={{fontWeight:!aw?700:400,color:!aw?T.ink:T.mut,minWidth:54,textAlign:'right'}}>{bn}{r.u||''}</span></div>
+          <div style={{display:'flex',justifyContent:'space-between',fontFamily:MONO,fontSize:12.5,marginBottom:5}}><span style={{fontWeight:aw?700:400,color:c2(tcA),minWidth:54}}>{an}{r.u||''}</span><span style={{...ML,fontSize:10}}>{r.l}</span><span style={{fontWeight:!aw?700:400,color:c2(tcB),minWidth:54,textAlign:'right'}}>{bn}{r.u||''}</span></div>
           <div style={{display:'flex',height:5,borderRadius:3,overflow:'hidden',background:T.bg}}><div style={{width:`${ap}%`,background:c2(tcA),opacity:aw?1:.35}}/><div style={{flex:1,background:c2(tcB),opacity:!aw?1:.35}}/></div></div>);};
+        const EdgeRow=({row,i})=>{const aw=row.aPct>=row.bPct;return(
+          <div style={{padding:'9px 0',borderTop:i?`1px solid ${T.line}`:'none'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontFamily:MONO,fontSize:12.5,marginBottom:6}}>
+              <span style={{fontWeight:aw?700:400,color:c2(tcA),minWidth:60}}>{row.a}{row.unit==='%'?'%':''}</span>
+              <span style={{...ML,fontSize:10}}>{row.label}</span>
+              <span style={{fontWeight:!aw?700:400,color:c2(tcB),minWidth:60,textAlign:'right'}}>{row.b}{row.unit==='%'?'%':''}</span>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden',display:'flex',justifyContent:'flex-end'}}><div style={{width:`${row.aPct}%`,background:c2(tcA),opacity:aw?1:.45}}/></div>
+              <div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden'}}><div style={{width:`${row.bPct}%`,background:c2(tcB),opacity:!aw?1:.45}}/></div>
+            </div>
+          </div>);};
         return(<div style={{...card,overflow:'hidden',marginBottom:16}}>
-          <div style={{padding:'13px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><span style={ML}>Compare teams · head-to-head</span>
+          <div style={{padding:'13px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><span style={ML}>Team head-to-head</span>
             <div style={{display:'flex',gap:8,alignItems:'center'}}><select value={tcA} onChange={e=>setTcA(e.target.value)} style={sel}>{teamsAZ.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select><span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>vs</span><select value={tcB} onChange={e=>setTcB(e.target.value)} style={sel}>{teamsAZ.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select></div>
           </div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',gap:12}}>
-            <button onClick={()=>onTeam(tcA)} className="el" style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}><Badge ab={tcA} size={30}/><div style={{textAlign:'left'}}><div style={{fontWeight:700,fontSize:14}}>{ct(tcA)}</div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{tcmp.sa.w}-{tcmp.sa.l}-{tcmp.sa.otl}</div></div></button>
-            <button onClick={()=>onTeam(tcB)} className="el" style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}><div style={{textAlign:'right'}}><div style={{fontWeight:700,fontSize:14}}>{ct(tcB)}</div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{tcmp.sb.w}-{tcmp.sb.l}-{tcmp.sb.otl}</div></div><Badge ab={tcB} size={30}/></button>
+            <button onClick={()=>onTeam(tcA)} className="el" style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}><Badge ab={tcA} size={30}/><div style={{textAlign:'left'}}><div style={{fontWeight:700,fontSize:14,color:T.ink}}>{ct(tcA)}</div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{tcmp.sa.w}-{tcmp.sa.l}-{tcmp.sa.otl}</div></div></button>
+            <button onClick={()=>onTeam(tcB)} className="el" style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:9}}><div style={{textAlign:'right'}}><div style={{fontWeight:700,fontSize:14,color:T.ink}}>{ct(tcB)}</div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{tcmp.sb.w}-{tcmp.sb.l}-{tcmp.sb.otl}</div></div><Badge ab={tcB} size={30}/></button>
           </div>
-          <div style={{padding:'2px 16px 14px'}}>{tcmp.rows.map((r,i)=><Row key={i} r={r}/>)}</div>
+          <div style={{padding:'0 16px 12px',display:'flex',gap:8,alignItems:'center'}}>{['Standard','NHL EDGE'].map(mm=><Pill key={mm} on={h2hMode===mm} onClick={()=>setH2hMode(mm)}>{mm}</Pill>)}<span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:T.faint}}>{h2hMode==='NHL EDGE'?'percentile vs league':'season to date'}</span></div>
+          <div style={{padding:'2px 16px 14px'}}>{h2hMode==='Standard'?tcmp.rows.map((r,i)=><Row key={i} r={r}/>):D.edgeTeamCompare(tcA,tcB).map((row,i)=><EdgeRow key={row.label} row={row} i={i}/>)}</div>
           <div style={{padding:'12px 16px',borderTop:`1px solid ${T.line}`}}><div style={{...ML,marginBottom:8}}>Recent meetings</div>
             {tcmp.meet.map((m,i)=>{const aw=m.as>m.hs;return(<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',fontFamily:MONO,fontSize:12.5}}><span style={{color:T.faint,width:52}}>{m.date}</span><span style={{flex:1,display:'flex',alignItems:'center',gap:7}}><Badge ab={m.away} size={17}/><span style={{fontWeight:aw?700:400}}>{m.away}</span><span style={{color:T.faint}}>{m.as}</span><span style={{color:T.faint}}>@</span><span style={{color:T.faint}}>{m.hs}</span><span style={{fontWeight:!aw?700:400}}>{m.home}</span><Badge ab={m.home} size={17}/></span>{m.ot&&<span style={{color:T.faint,fontSize:10}}>OT</span>}</div>);})}
           </div>
