@@ -10,6 +10,23 @@
   const BASE = '/api/nhl';
   const dflt = (v) => (v && v.default !== undefined ? v.default : v);
 
+  // Normalize a team code from ANY live feed to the canonical tricode used by the
+  // color/name maps. Live feeds aren't perfectly consistent (case, stray spaces,
+  // period codes like "L.A"/"T.B", 2-letter codes, or legacy abbreviations), and a
+  // code that doesn't match drops the team to a gray fallback — which is why some
+  // teams lost their colors when live. Uppercasing + de-punctuating + an alias table
+  // maps every known variant back to the canonical code (ANA, VGK, …).
+  const TEAM_ALIAS = {
+    LA: 'LAK', NJ: 'NJD', SJ: 'SJS', TB: 'TBL', CBS: 'CBJ', CLB: 'CBJ', CJ: 'CBJ',
+    VEG: 'VGK', LV: 'VGK', WIN: 'WPG', WPJ: 'WPG', MON: 'MTL', MTI: 'MTL',
+    NAS: 'NSH', NA: 'NSH', CAL: 'CGY', ARI: 'UTA', PHX: 'UTA', UTAH: 'UTA',
+    ANH: 'ANA', VGS: 'VGK', SEA: 'SEA',
+  };
+  const normTeam = (c) => {
+    let s = String(dflt(c) ?? '').toUpperCase().replace(/[^A-Z]/g, '').trim();
+    return TEAM_ALIAS[s] || s;
+  };
+
   // Request layer: in-flight de-dup (concurrent identical GETs share one fetch),
   // a short TTL cache for non-live endpoints (instant revisits, less proxy load),
   // and a hard timeout so a hung request falls back to mock instead of spinning.
@@ -54,7 +71,7 @@
   const DIV_SHORT = { Atlantic: 'Atlantic', Metropolitan: 'Metro', Central: 'Central', Pacific: 'Pacific' };
   function mapStandings(payload) {
     const rows = (payload?.standings ?? []).map((t) => {
-      const ab = dflt(t.teamAbbrev);
+      const ab = normTeam(t.teamAbbrev);
       const div = DIV_SHORT[dflt(t.divisionName)] || dflt(t.divisionName) || '';
       const conf = (dflt(t.conferenceName) || '').startsWith('East') ? 'East' : 'West';
       const gp = t.gamesPlayed ?? 0;
@@ -93,7 +110,7 @@
       : '';
     return {
       id: String(g.id),
-      a: dflt(g.awayTeam?.abbrev), h: dflt(g.homeTeam?.abbrev),
+      a: normTeam(g.awayTeam?.abbrev), h: normTeam(g.homeTeam?.abbrev),
       as: as_, hs,
       st: status, ot,
       per: g.periodDescriptor?.number ? `${ordinal(g.periodDescriptor.number)}` : '',
@@ -207,7 +224,7 @@
       out.push({
         id: String(p.id),
         name: `${dflt(p.firstName)} ${dflt(p.lastName)}`,
-        team: dflt(payload.teamAbbrev) || '',
+        team: normTeam(payload.teamAbbrev),
         pos: p.positionCode || (grp === 'goalies' ? 'G' : grp === 'defensemen' ? 'D' : 'C'),
         num: p.sweaterNumber ?? '',
         _isGoalie: grp === 'goalies',
@@ -218,7 +235,7 @@
 
   // ---- skater/goalie leaders (stats api passthrough) ----
   // teamAbbrevs can be "BOS,TOR" for a traded player — take the current (last) club.
-  const curTeam = (v) => String(v ?? '').split(',').pop().trim();
+  const curTeam = (v) => normTeam(String(v ?? '').split(',').pop());
   const POS = { L: 'LW', R: 'RW', C: 'C', D: 'D', G: 'G' };
   function mapSkaterLeaders(payload) {
     return (payload?.data ?? []).map((p) => ({
@@ -257,7 +274,7 @@
   function mapPlayerCard(d) {
     if (!d) return null;
     const isG = (d.position || '') === 'G';
-    const ab = dflt(d.currentTeamAbbrev) || '';
+    const ab = normTeam(d.currentTeamAbbrev);
     const nhlRows = (d.seasonTotals || []).filter((s) => s.gameTypeId === 2 && s.leagueAbbrev === 'NHL');
     const history = nhlRows.slice().reverse().slice(0, 8).map((s) => {
       const team = s.teamAbbrev ? dflt(s.teamAbbrev) : (dflt(s.teamCommonName) || dflt(s.teamName) || ab);
@@ -756,7 +773,7 @@
       if (!arr) return null;
       const rows = arr.slice(0, 20).map((o) => {
         const name = dflt(o.fullName) || [dflt(o.firstName), dflt(o.lastName)].filter(Boolean).join(' ') || dflt(o.name) || dflt(o.skaterFullName) || '';
-        const team = dflt(o.teamAbbrev) || dflt(o.teamAbbrevs) || dflt(o.team) || '';
+        const team = normTeam(o.teamAbbrev || o.teamAbbrevs || o.team);
         let v = null; for (const k of Object.keys(o)) { if (/value|speed|distance|burst|zone|max|top/i.test(k)) { const n = num(o[k]); if (n != null) { v = n; break; } } }
         return name ? { id: dflt(o.playerId) || name, name, team, pos: dflt(o.positionCode) || dflt(o.position) || '', _v: v != null ? +(+v).toFixed(1) : '—' } : null;
       }).filter(Boolean);
@@ -951,7 +968,7 @@
           const target = num(m.milestone) != null ? num(m.milestone) : (num(m.target) != null ? num(m.target) : num(m.nextMilestone));
           if (career == null || target == null || target <= 0 || career > target) return;
           const stat = (dflt(m.milestoneType) || dflt(m.statName) || defStat || 'points').toLowerCase();
-          rows.push({ id: dflt(m.playerId) || name, name, team: dflt(m.teamAbbrev) || dflt(m.teamAbbrevs) || '', pos: dflt(m.positionCode) || dflt(m.position) || defPos || '', num: num(m.sweaterNumber) || null, stat, target, career, remaining: Math.max(0, target - career), pct: Math.min(100, Math.round(career / target * 100)) }); }); };
+          rows.push({ id: dflt(m.playerId) || name, name, team: normTeam(m.teamAbbrev || m.teamAbbrevs), pos: dflt(m.positionCode) || dflt(m.position) || defPos || '', num: num(m.sweaterNumber) || null, stat, target, career, remaining: Math.max(0, target - career), pct: Math.min(100, Math.round(career / target * 100)) }); }); };
       eat(sk, 'points', ''); eat(go, 'wins', 'G');
       rows.sort((a, b) => a.remaining - b.remaining);
       return rows.length ? rows.slice(0, 8) : null;

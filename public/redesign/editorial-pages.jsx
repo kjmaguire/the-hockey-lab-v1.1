@@ -303,7 +303,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
               <Banner label="Presidents' Trophy" years={ti.presidents} tone="#1f5f8a" bg="#eef4f9" bd="#cfe0ee"/>
               <Banner label="Conference title" years={ti.conference} tone={T.ink} bg={T.bg} bd={T.line2}/>
               <Banner label="Division title" years={ti.division} tone={T.mut} bg={T.bg} bd={T.line2}/>
-              {!has&&ti.conference.length===0&&ti.division.length===0&&<div style={{fontFamily:MONO,fontSize:12,color:T.mut,padding:'6px 0'}}>No major titles on record yet — {ti.playoffApps} all-time playoff appearances.</div>}
+              {!has&&<div style={{fontFamily:MONO,fontSize:12,color:T.mut,padding:'6px 0'}}>No Stanley Cups or Presidents' Trophies on record yet.</div>}
             </div>
           </div>);})()}
       </div>);})()}
@@ -312,7 +312,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
     {tab==='Schedule'&&<TeamSchedule ab={ab} onGame={onGame}/>}
     {tab==='Roster'&&<div><RT title="Forwards" rows={fwd} cols={SC}/><RT title="Defensemen" rows={def} cols={SC}/><RT title="Goalies" rows={tg} cols={GC}/></div>}
     {tab==='Prospects'&&<div>{[['Forwards',pros.forwards],['Defensemen',pros.defensemen],['Goalies',pros.goalies]].map(([lab,list])=><div key={lab} style={{marginBottom:18}}><div style={{...ML,marginBottom:8}}>{lab} · {list.length}</div><div style={{...card,overflow:'hidden'}}>{list.map((p,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'10px 16px',borderTop:i?`1px solid ${T.line}`:'none'}}><div><div style={{fontSize:13.5,fontWeight:500,color:T.ink}}>{p.name} <span style={{color:T.faint}}>{p.pos}</span></div><div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{p.league} · age {p.age} · {p.draftYr} R{p.round}</div></div><span style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{p.gp} GP · {p.pts} P</span></div>)}</div></div>)}</div>}
-    {tab==='Records'&&(()=>{const fr=D.teamFranchiseRecords(ab);const ti=D.teamTitles(ab);
+    {tab==='Records'&&(()=>{const ti=D.teamTitles(ab);const rec=D.teamRecords(ab);
       const Big=({l,v})=><div style={{...card,padding:'15px 16px'}}><div style={ML}>{l}</div><div style={{fontSize:24,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
       const Rec=({rec})=>(<div style={{...card,padding:'15px 16px'}}>
         <div style={{...ML,fontSize:9.5}}>{rec.label}</div>
@@ -334,15 +334,11 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
           <Banner label="Presidents' Trophy" years={ti.presidents} tone="#1f5f8a" bg="#eef4f9" bd="#cfe0ee"/>
           <Banner label="Conference title" years={ti.conference} tone={T.ink} bg={T.bg} bd={T.line2}/>
           <Banner label="Division title" years={ti.division} tone={T.mut} bg={T.bg} bd={T.line2}/>
-        </div>:<div style={{...card,padding:'15px 18px',marginBottom:18,fontFamily:MONO,fontSize:12,color:T.mut}}>No major banners raised yet — {ti.playoffApps} all-time playoff appearances.</div>}
-        <div style={{...ML,marginBottom:10}}>All-time</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12,marginBottom:18}}>
-          <Big l="All-time wins" v={fr.allTime.wins.toLocaleString()}/><Big l="Win %" v={fr.allTime.winPct}/><Big l="Seasons played" v={fr.allTime.seasons}/><Big l="Playoff appearances" v={fr.allTime.playoffApps}/>
+        </div>:<div style={{...card,padding:'15px 18px',marginBottom:18,fontFamily:MONO,fontSize:12,color:T.mut}}>No Stanley Cups or Presidents' Trophies on record yet.</div>}
+        <div style={{...ML,marginBottom:10}}>Franchise career leaders</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
+          {rec.career.map((c,i)=><div key={i} style={{...card,padding:'15px 16px'}}><div style={{...ML,fontSize:9.5}}>{c.cat}</div><div style={{fontSize:18,fontWeight:600,color:T.ink,marginTop:6}}>{c.rows[0]?c.rows[0].name:'—'}</div></div>)}
         </div>
-        <div style={{...ML,marginBottom:10}}>Single-season team records</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:18}}>{fr.season.map((rec,i)=><Rec key={i} rec={rec}/>)}</div>
-        <div style={{...ML,marginBottom:10}}>Single-game team records</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12}}>{fr.game.map((rec,i)=><Rec key={i} rec={rec}/>)}</div>
       </div>);})()}
   </div>);
 }
@@ -1249,108 +1245,6 @@ function PlayoffsPage({onTeam}){
   </div>);
 }
 
-/* ---------- RECORDS ---------- */
-function RecordsPage({onTeam}){
-  const [tab,setTab]=uS('All-time leaders');
-  // overlay real all-time leaders (records.nhl.com) when deployed; season/trophies stay projected
-  const recMock=uM(()=>({skaters:D.recordSkaters(),goalies:D.recordGoalies()}),[]);
-  const rec=window.E_useLive(recMock,()=>window.NHL.recordsAllTime().then(r=>r?{...recMock,...r}:null),[]);
-  const skaters=rec.skaters;
-  const goalies=rec.goalies;
-  const trophies=window.E_useLive(uM(()=>D.recordTrophiesList(),[]),()=>(window.NHL&&window.NHL.awardsMapped)?window.NHL.awardsMapped():null,[]);
-  const franchise=D.recordFranchiseList();
-  const season=D.recordSeason();
-  const watch=window.E_useLive(uM(()=>D.milestoneWatch(),[]),()=>(window.NHL&&window.NHL.milestonesMapped)?window.NHL.milestonesMapped():null,[]);
-  const reports=D.statsReports();
-  const [scope,setScope]=uS('skater');
-  const [leadScope,setLeadScope]=uS('skater');
-  const [frSort,setFrSort]=uS('wins');
-  const [recTeam,setRecTeam]=uS('TOR');
-  const teamsAZ=uM(()=>[...D.ABBR].sort((a,b)=>ct(a).localeCompare(ct(b))),[]);
-  const tRec=uM(()=>D.teamRecords(recTeam),[recTeam]);
-  const tTitles=uM(()=>D.teamTitles(recTeam),[recTeam]);
-  const streaks=D.recordStreaks();
-  const leaders=leadScope==='skater'?skaters:goalies;
-  const franchRows=uM(()=>[...franchise].sort((a,b)=>frSort==='cups'?b.cups-a.cups||b.wins-a.wins:b.wins-a.wins),[frSort]);
-  const tabs=['All-time leaders','Single season','Records by team','Streaks & feats','Trophies','Milestone watch','Franchise','Stat explorer'];
-  return(<div>
-    <PageHead k="Records" t="The record" serif="book"/>
-    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{tabs.map(s=><Pill key={s} on={tab===s} onClick={()=>setTab(s)}>{s}</Pill>)}</div>
-    {tab==='All-time leaders'&&<div>
-      <div style={{display:'flex',gap:8,marginBottom:14}}>{['skater','goalie'].map(s=><Pill key={s} on={leadScope===s} onClick={()=>setLeadScope(s)}>{s==='skater'?'Skaters':'Goalies'}</Pill>)}</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:14}}>
-      {leaders.map(c=><div key={c.cat} style={{...card,overflow:'hidden'}}><div style={{padding:'12px 15px',fontSize:13,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>{c.cat}</div>
-        {c.rows.map((p,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 15px',borderTop:i?`1px solid ${T.line}`:'none',background:i===0?T.goldBg:'transparent'}}><span style={{fontFamily:MONO,fontSize:11,color:i===0?T.goldFg:T.faint,width:14,fontWeight:i===0?700:400}}>{i+1}</span><span style={{flex:1,fontSize:13,color:T.ink,fontWeight:i===0?600:400}}>{p.name}</span><span style={{fontFamily:MONO,fontWeight:700}}>{p.v.toLocaleString()}</span></div>)}</div>)}
-      </div>
-    </div>}
-    {tab==='Single season'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14}}>
-      {season.map(rec=><div key={rec.label} style={{...card,padding:'16px 17px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}><span style={ML}>{rec.label}</span><span style={{fontFamily:MONO,fontSize:9.5,color:rec.kind==='goalie'?'#2a6f9e':'#9a6b1a',background:rec.kind==='goalie'?'#eaf2f8':'#fdf6e6',border:`1px solid ${rec.kind==='goalie'?'#cfe0ee':'#f0e2c0'}`,borderRadius:5,padding:'1px 5px'}}>{rec.kind}</span></div>
-        <div style={{fontSize:34,fontWeight:600,letterSpacing:'-.02em',color:T.ink,margin:'6px 0 2px'}}>{rec.v}</div>
-        <div style={{fontSize:14,fontWeight:600,color:T.ink}}>{rec.holder}</div>
-        <div style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{rec.season}</div>
-      </div>)}
-    </div>}
-    {tab==='Records by team'&&<div>
-      <div style={{...card,padding:16,marginBottom:16,display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
-        <span style={ML}>Club record book</span>
-        <select value={recTeam} onChange={e=>setRecTeam(e.target.value)} style={{fontFamily:'inherit',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'8px 12px',color:T.ink,fontSize:13}}>{teamsAZ.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select>
-        <span style={{flex:1}}/>
-        <span style={{display:'inline-flex',alignItems:'center',gap:9}}><Badge ab={recTeam} size={26}/>
-          <span style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{tTitles.stanleyCups.length} Cups · {tTitles.presidents.length} Presidents'</span></span>
-      </div>
-      {[['Career leaders',tRec.career],['Single season',tRec.season]].map(([lab,cats])=><div key={lab} style={{marginBottom:18}}>
-        <div style={{...ML,marginBottom:10}}>{lab}</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14}}>
-        {cats.map(c=><div key={c.cat} style={{...card,overflow:'hidden'}}><div style={{padding:'11px 15px',fontSize:13,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>{c.cat}</div>
-          {c.rows.map((p,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 15px',borderTop:i?`1px solid ${T.line}`:'none',background:i===0?`linear-gradient(90deg,${c2(recTeam)}14,transparent)`:'transparent'}}><span style={{fontFamily:MONO,fontSize:11,color:i===0?c2(recTeam):T.faint,width:13,fontWeight:i===0?700:400}}>{i+1}</span><span style={{flex:1,fontSize:13,color:T.ink,fontWeight:i===0?600:400}}>{p.name}</span><span style={{fontFamily:MONO,fontWeight:700}}>{p.v.toLocaleString()}</span></div>)}
-        </div>)}
-        </div>
-      </div>)}
-    </div>}
-    {tab==='Streaks & feats'&&<div style={{...card,overflow:'hidden'}}>
-      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between'}}><span>League streaks &amp; single-game feats</span><span style={{color:T.faint}}>all-time</span></div>
-      {streaks.map((s,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'auto 1fr auto',alignItems:'center',gap:14,padding:'13px 16px',borderTop:i?`1px solid ${T.line}`:'none'}}>
-        <div style={{textAlign:'center',width:58,flexShrink:0}}><div style={{fontFamily:SERIF,fontStyle:'italic',fontSize:26,lineHeight:1,color:T.red}}>{s.v}</div><div style={{fontFamily:MONO,fontSize:9,letterSpacing:'.05em',textTransform:'uppercase',color:T.faint}}>{s.unit}</div></div>
-        <div style={{minWidth:0}}><div style={{fontWeight:600,color:T.ink,fontSize:14}}>{s.label}</div><div style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{s.holder}</div></div>
-        <div style={{fontFamily:MONO,fontSize:12,color:T.faint}}>{s.year}</div>
-      </div>)}
-    </div>}
-    {tab==='Trophies'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:14}}>
-      {trophies.map(t=><div key={t.name} style={{...card,overflow:'hidden'}}>
-        <div style={{padding:'15px 16px',borderBottom:`1px solid ${T.line}`}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontFamily:SERIF,fontStyle:'italic',fontSize:19,color:T.ink}}>{t.name}</span><span style={{fontFamily:MONO,fontSize:10.5,color:T.faint}}>{t.desc}</span></div>
-          <div style={{marginTop:9,fontSize:15,fontWeight:600}}>{t.winner}</div>
-          <div style={{fontFamily:MONO,fontSize:11,color:T.red}}>{t.year} winner</div>
-        </div>
-        <div style={{padding:'10px 16px 12px'}}><div style={{...ML,marginBottom:6}}>Recent</div>{t.history.slice(1).map(h=><div key={h.yr} style={{display:'flex',justifyContent:'space-between',fontFamily:MONO,fontSize:11.5,color:T.mut,padding:'2.5px 0'}}><span>{h.yr}</span><span style={{color:T.ink}}>{h.name}</span></div>)}</div>
-      </div>)}
-    </div>}
-    {tab==='Milestone watch'&&<div style={{...card,overflow:'hidden'}}>
-      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between'}}><span>Active players chasing career milestones</span><span style={{color:T.faint}}>closest first</span></div>
-      {watch.map((m,i)=><div key={m.id} style={{display:'grid',gridTemplateColumns:'auto 1fr auto',alignItems:'center',gap:13,padding:'13px 16px',borderTop:i?`1px solid ${T.line}`:'none'}}>
-        <span style={{width:30,height:30,borderRadius:8,background:c2(m.team),color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:MONO,fontSize:12,fontWeight:700}}>{m.num||m.pos}</span>
-        <div style={{minWidth:0}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontWeight:600,color:T.ink,fontSize:14}}>{m.name}</span><span style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{m.team} · {m.pos}</span></div>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginTop:6}}><div style={{flex:1,height:6,borderRadius:3,background:T.bg,overflow:'hidden',minWidth:80}}><div style={{height:'100%',width:`${m.pct}%`,background:c2(m.team)}}/></div><span style={{fontFamily:MONO,fontSize:11,color:T.faint,whiteSpace:'nowrap'}}>{m.career.toLocaleString()} / {m.target.toLocaleString()} {m.stat}</span></div>
-        </div>
-        <div style={{textAlign:'right'}}><div style={{fontSize:20,fontWeight:700,color:T.red,letterSpacing:'-.02em'}}>{m.remaining}</div><div style={{fontFamily:MONO,fontSize:9.5,color:T.faint,textTransform:'uppercase',letterSpacing:'.06em'}}>away</div></div>
-      </div>)}
-    </div>}
-    {tab==='Franchise'&&<div style={{...card,overflow:'hidden'}}><div style={{padding:'12px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><span style={ML}>All-time franchise {frSort==='cups'?'cups':'wins'}</span><div style={{display:'flex',gap:6}}>{[['wins','Wins'],['cups','Cups']].map(([k,l])=><Pill key={k} on={frSort===k} onClick={()=>setFrSort(k)}>{l}</Pill>)}</div></div>
-      <table style={{width:'100%',borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}>{['#','Team','All-time W','Cups','Seasons'].map((h,i)=><th key={h} style={{padding:'10px 14px',textAlign:i<2?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
-      <tbody>{franchRows.map((t,i)=><tr key={t.ab} onClick={()=>onTeam(t.ab)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',fontFamily:MONO,color:T.faint}}>{i+1}</td><td style={{padding:'9px 14px'}}><span style={{display:'inline-flex',alignItems:'center',gap:9}}><Badge ab={t.ab} size={22}/><span style={{fontWeight:600,color:T.ink}}>{ct(t.ab)} {nk(t.ab)}</span></span></td><td style={{textAlign:'center',fontWeight:frSort==='wins'?700:400,color:frSort==='wins'?T.ink:T.mut}}>{t.wins.toLocaleString()}</td><td style={{textAlign:'center',fontWeight:frSort==='cups'?700:400,color:frSort==='cups'?T.ink:T.mut}}>{t.cups}</td><td style={{textAlign:'center',color:T.mut}}>{t.seasons}</td></tr>)}</tbody></table>
-    </div>}
-    {tab==='Stat explorer'&&<div style={{...card,padding:18}}>
-      <div style={{...ML,marginBottom:6}}>NHL stats API · report catalog</div>
-      <p style={{fontSize:13,color:T.mut,marginBottom:14}}>Every report the Stats API exposes (from its <span style={{fontFamily:MONO}}>config</span> endpoint). Each is queryable live via <span style={{fontFamily:MONO}}>/api/nhl/stats/{scope}/{'{report}'}</span>.</p>
-      <div style={{display:'flex',gap:8,marginBottom:14}}>{['skater','goalie','team'].map(s=><Pill key={s} on={scope===s} onClick={()=>setScope(s)}>{s}</Pill>)}</div>
-      <div style={{display:'flex',flexWrap:'wrap',gap:8}}>{reports[scope].map(r=><span key={r} style={{fontFamily:MONO,fontSize:11.5,padding:'5px 10px',borderRadius:7,background:T.bg,border:`1px solid ${T.line}`,color:T.ink}}>{r}</span>)}</div>
-      <div style={{fontFamily:MONO,fontSize:11,color:T.faint,marginTop:14}}>{reports[scope].length} {scope} reports available</div>
-    </div>}
-  </div>);
-}
-
 window.E_TOK={T,MONO,SERIF,card,ML};
 function DraftPage({onTeam}){
   const NOW=new Date();
@@ -1752,7 +1646,7 @@ function LegalPage({doc,onGo}){
   </div>);
 }
 
-window.E_PAGES={HighlightsPage,StandingsPage,TeamsPage,TeamDetailPage,PlayersPage,PlayerDetailPage,StatsPage,HockeyIQPage,DraftPage,RecordsPage,PlayoffsPage,LegalPage};
+window.E_PAGES={HighlightsPage,StandingsPage,TeamsPage,TeamDetailPage,PlayersPage,PlayerDetailPage,StatsPage,HockeyIQPage,DraftPage,PlayoffsPage,LegalPage};
 window.E_FOOTER_LINKS=[
   ['terms','Terms of Service'],['privacy','Privacy Policy'],['cookies','Cookie Policy'],
   ['copyright','Copyright Notice'],['dmca','DMCA / Copyright Takedown'],['affiliate','Affiliate Disclosure'],

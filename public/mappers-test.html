@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Mapper tests</title>
+<style>
+  body{font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:#0f1115;color:#e6e7ea;margin:0;padding:28px;}
+  h1{font-size:18px;margin:0 0 4px;}
+  .sub{color:#9aa0a8;margin:0 0 20px;}
+  #summary{font-size:15px;font-weight:700;padding:10px 14px;border-radius:8px;margin-bottom:16px;display:inline-block;}
+  .ok{background:#10341f;color:#5ee08a;}
+  .bad{background:#3a1414;color:#ff7a6b;}
+  .row{padding:7px 12px;border-left:3px solid #2a2c33;margin:4px 0;background:#171922;border-radius:0 6px 6px 0;}
+  .row.pass{border-left-color:#1f8a4f;}
+  .row.fail{border-left-color:#e0473a;}
+  .row .n{color:#cfd2d8;}
+  .row .d{color:#8a8c96;font-size:12px;}
+  .row.fail .d{color:#ff9a8e;}
+</style>
+</head>
+<body>
+<h1>The Hockey Lab — NHL mapper tests</h1>
+<p class="sub">Feeds captured-shape payloads through <code>window.NHL._map.*</code> and asserts the view-model. Pure unit checks — no network.</p>
+<div id="summary">running…</div>
+<div id="out"></div>
+
+<!-- the real client under test (assigns window.NHL, including _map) -->
+<script src="redesign/nhl-client.js"></script>
+<script>
+(function () {
+  var out = document.getElementById('out');
+  var pass = 0, fail = 0;
+  function t(name, fn) {
+    var ok = false, detail = '';
+    try { var r = fn(); ok = r === true; if (!ok) detail = 'got: ' + JSON.stringify(r); }
+    catch (e) { ok = false; detail = 'threw: ' + (e && e.message); }
+    (ok ? pass++ : fail++);
+    var div = document.createElement('div');
+    div.className = 'row ' + (ok ? 'pass' : 'fail');
+    div.innerHTML = '<span class="n">' + (ok ? '✓' : '✕') + ' ' + name + '</span>' + (detail ? ' <span class="d">' + detail + '</span>' : '');
+    out.appendChild(div);
+  }
+  var M = (window.NHL && window.NHL._map) || {};
+
+  // ---- mapEdgeSkater -------------------------------------------------------
+  var skater = {
+    topSkatingSpeed: { value: 24.1, percentile: 88, leagueAverage: 21.9 },
+    topShotSpeed:    { value: 95.2, percentile: 92, leagueAverage: 80.1 },
+    skatingDistance: { value: 180.5, percentile: 70, leagueAverage: 160 },
+    offensiveZoneTime: { value: 55, percentile: 65 }
+  };
+  t('mapEdgeSkater: returns a partial overlay object', function () {
+    return !!M.mapEdgeSkater && typeof M.mapEdgeSkater(skater) === 'object';
+  });
+  t('mapEdgeSkater: extracts speed rows', function () {
+    var r = M.mapEdgeSkater(skater); return !!(r && r.speed && r.speed.length >= 3);
+  });
+  t('mapEdgeSkater: derives a zone-time split that sums to 100', function () {
+    var r = M.mapEdgeSkater(skater); if (!r || !r.zones) return false;
+    var sum = r.zones.reduce(function (a, z) { return a + z[1]; }, 0);
+    return Math.round(sum) === 100;
+  });
+  t('mapEdgeSkater: unrecognizable payload → null (keeps projection)', function () {
+    return M.mapEdgeSkater({ foo: { bar: 1 } }) === null;
+  });
+  t('mapEdgeSkater: null payload → null', function () {
+    return M.mapEdgeSkater(null) === null;
+  });
+
+  // ---- mapEdgeGoalie -------------------------------------------------------
+  var goalie = {
+    highDangerSavePct: { value: 0.835, percentile: 90, leagueAverage: 0.812 },
+    midDangerSavePct:  { value: 0.915, percentile: 60 },
+    lowDangerSavePct:  { value: 0.978, percentile: 75 },
+    goalsSavedAboveExpected: { value: 6.2, percentile: 88 }
+  };
+  t('mapEdgeGoalie: returns save-quality rows', function () {
+    var r = M.mapEdgeGoalie(goalie); return !!(r && r.saveQ && r.saveQ.length >= 3);
+  });
+  t('mapEdgeGoalie: maps the advanced GSAx metric', function () {
+    var r = M.mapEdgeGoalie(goalie);
+    return !!(r && r.saveQ.some(function (row) { return /saved a\.e\./i.test(row[0]); }));
+  });
+  t('mapEdgeGoalie: no danger metrics → null', function () {
+    return M.mapEdgeGoalie({ wins: { value: 30 } }) === null;
+  });
+
+  // ---- mapStandings --------------------------------------------------------
+  var standings = { standings: [
+    { teamAbbrev: { default: 'TOR' }, divisionName: 'Atlantic', conferenceName: 'Eastern', gamesPlayed: 10, wins: 7, losses: 2, otLosses: 1, points: 15 }
+  ] };
+  t('mapStandings: maps abbrev + conference shorthand', function () {
+    var r = M.mapStandings(standings);
+    return !!(r && r[0] && r[0].ab === 'TOR' && r[0].conf === 'East');
+  });
+  t('mapStandings: carries the win/loss record', function () {
+    var r = M.mapStandings(standings);
+    return !!(r && r[0] && r[0].w === 7 && r[0].l === 2 && r[0].otl === 1);
+  });
+  t('mapStandings: empty payload → empty array (no throw)', function () {
+    var r = M.mapStandings({}); return Array.isArray(r) && r.length === 0;
+  });
+
+  // ---- mapZones (heuristic — must degrade safely) --------------------------
+  t('mapZones: unrecognizable payload → null (falls back to sample)', function () {
+    return !M.mapZones || M.mapZones({ nonsense: true }, 'skater') == null;
+  });
+
+  var s = document.getElementById('summary');
+  s.className = fail === 0 ? 'ok' : 'bad';
+  s.textContent = (fail === 0 ? 'ALL PASS' : 'FAILURES') + ' · ' + pass + ' passed, ' + fail + ' failed';
+  document.title = (fail === 0 ? 'PASS' : 'FAIL') + ' ' + pass + '/' + (pass + fail);
+})();
+</script>
+</body>
+</html>

@@ -489,23 +489,53 @@
   // Fictional all-time greats — keeps the records page a demo, not real player records.
   const HFN=['Reginald','Maurice','Gordon','Howard','Vance','Clark','Errol','Sterling','Lionel','Bernard','Cecil','Wendell','Floyd','Marcel','Roald'];
   const HLN=['Thornbury','Vandermeer','Beauregard','Halloran','Strickland','Mortensen','Bellerose','Kallenbach','Whitcombe','Ravenscroft','Dubicki','Macklin','Stahl','Cormier','Ekberg'];
-  B.recordSkaters=()=>{ if(B._rs)return B._rs; const r=rng('recsk');
-    const cats=[['Goals',894],['Assists',1963],['Points',2857],['Games',1779],['Power-play goals',274],['Game-winning goals',135]];
-    B._rs=cats.map(([cat,top])=>({cat,rows:Array.from({length:5},(_,i)=>({name:`${pick(r,HFN)} ${pick(r,HLN)}`,v:Math.round(top*(1-i*0.07)-ri(r,0,40))}))})); return B._rs; };
+  B.recordSkaters=()=>{ if(B._rs)return B._rs;
+    // Real NHL all-time regular-season leaders (through 2024-25). Live records.nhl.com
+    // overlay refreshes on deploy; this accurate baseline shows when the feed is unavailable.
+    B._rs=[
+      {cat:'Goals',rows:[{name:'Alex Ovechkin',v:897},{name:'Wayne Gretzky',v:894},{name:'Gordie Howe',v:801},{name:'Jaromir Jagr',v:766},{name:'Brett Hull',v:741}]},
+      {cat:'Assists',rows:[{name:'Wayne Gretzky',v:1963},{name:'Ron Francis',v:1249},{name:'Mark Messier',v:1193},{name:'Ray Bourque',v:1169},{name:'Jaromir Jagr',v:1155}]},
+      {cat:'Points',rows:[{name:'Wayne Gretzky',v:2857},{name:'Jaromir Jagr',v:1921},{name:'Mark Messier',v:1887},{name:'Gordie Howe',v:1850},{name:'Ron Francis',v:1798}]},
+      {cat:'Games played',rows:[{name:'Patrick Marleau',v:1779},{name:'Gordie Howe',v:1767},{name:'Mark Messier',v:1756},{name:'Jaromir Jagr',v:1733},{name:'Chris Chelios',v:1651}]},
+      {cat:'Power-play goals',rows:[{name:'Alex Ovechkin',v:325},{name:'Dave Andreychuk',v:274},{name:'Brett Hull',v:265},{name:'Phil Esposito',v:249},{name:'Luc Robitaille',v:247}]},
+      {cat:'Game-winning goals',rows:[{name:'Jaromir Jagr',v:135},{name:'Alex Ovechkin',v:128},{name:'Gordie Howe',v:121},{name:'Phil Esposito',v:118},{name:'Brett Hull',v:110}]},
+    ]; return B._rs; };
   const GFN=['Martin','Patrick','Roberto','Henrik','Marc-André','Dominik','Ed','Tony','Terry','Glenn','Curtis','Grant'];
   const GLN=['Brodeur','Roy','Luongo','Lundqvist','Fleury','Hasek','Belfour','Esposito','Sawchuk','Hall','Joseph','Fuhr'];
-  B.recordGoalies=()=>{ if(B._rg)return B._rg; const r=rng('recg');
-    const cats=[['Wins',691],['Shutouts',125],['Saves',28928],['Games',1266]];
-    B._rg=cats.map(([cat,top])=>({cat,rows:Array.from({length:5},(_,i)=>({name:`${pick(r,GFN)} ${pick(r,GLN)}`,v:Math.round(top*(1-i*0.055)-ri(r,0,18))}))})); return B._rg; };
+  B.recordGoalies=()=>{ if(B._rg)return B._rg;
+    B._rg=[
+      {cat:'Wins',rows:[{name:'Martin Brodeur',v:691},{name:'Marc-André Fleury',v:575},{name:'Patrick Roy',v:551},{name:'Ed Belfour',v:484},{name:'Curtis Joseph',v:454}]},
+      {cat:'Shutouts',rows:[{name:'Martin Brodeur',v:125},{name:'Terry Sawchuk',v:103},{name:'George Hainsworth',v:94},{name:'Glenn Hall',v:84},{name:'Jacques Plante',v:82}]},
+      {cat:'Saves',rows:[{name:'Martin Brodeur',v:28928},{name:'Roberto Luongo',v:24129},{name:'Marc-André Fleury',v:24006},{name:'Patrick Roy',v:23070},{name:'Henrik Lundqvist',v:22443}]},
+      {cat:'Games played',rows:[{name:'Martin Brodeur',v:1266},{name:'Marc-André Fleury',v:1057},{name:'Roberto Luongo',v:1044},{name:'Patrick Roy',v:1029},{name:'Henrik Lundqvist',v:887}]},
+    ]; return B._rg; };
   // single-season records (skater + goalie), with holder + season
   const SEASONS=['1981-82','1985-86','1970-71','1988-89','1992-93','1995-96','2018-19','1944-45','1976-77','2022-23'];
-  B.recordSeason=()=>{ if(B._rsn)return B._rsn; const r=rng('recsn');
-    const recs=[['Goals, one season',92,'skater'],['Assists, one season',163,'skater'],['Points, one season',215,'skater'],['Points, defenseman',139,'skater'],['Goals, rookie',76,'skater'],['Wins, goalie',48,'goalie'],['Shutouts, one season',22,'goalie'],['Save %, qualified','.940','goalie']];
-    B._rsn=recs.map(([label,v,kind])=>({label,v:typeof v==='number'?v:v,holder:`${pick(r,kind==='goalie'?GFN:HFN)} ${pick(r,kind==='goalie'?GLN:HLN)}`,season:pick(r,SEASONS),kind})); return B._rsn; };
-  B.recordTrophiesList=()=>{ if(B._rt)return B._rt; const r=rng('rectr');
-    const tro=[['Keystone','MVP'],['Vanguard','Scoring'],['Marksman','Goals'],['Bastion','Top D'],['Sentinel','Top G'],['Backcheck','Defensive F'],['Crucible','Playoff MVP'],['Newcomer','Rookie']];
-    B._rt=tro.map(([name,desc])=>({name,desc,winner:`${pick(r,HFN)} ${pick(r,HLN)}`,year:'2025',
-      history:Array.from({length:5},(_,i)=>({yr:2025-i,name:`${pick(r,HFN)} ${pick(r,HLN)}`}))})); return B._rt; };
+  B.recordSeason=()=>{ if(B._rsn)return B._rsn;
+    B._rsn=[
+      {label:'Goals, one season',v:92,holder:'Wayne Gretzky',season:'1981-82',kind:'skater'},
+      {label:'Assists, one season',v:163,holder:'Wayne Gretzky',season:'1985-86',kind:'skater'},
+      {label:'Points, one season',v:215,holder:'Wayne Gretzky',season:'1985-86',kind:'skater'},
+      {label:'Points, defenseman',v:139,holder:'Bobby Orr',season:'1970-71',kind:'skater'},
+      {label:'Goals, rookie',v:76,holder:'Teemu Selänne',season:'1992-93',kind:'skater'},
+      {label:'Points, rookie',v:132,holder:'Teemu Selänne',season:'1992-93',kind:'skater'},
+      {label:'Wins, goalie',v:48,holder:'Martin Brodeur',season:'2006-07',kind:'goalie'},
+      {label:'Shutouts, one season',v:22,holder:'George Hainsworth',season:'1928-29',kind:'goalie'},
+    ]; return B._rsn; };
+  B.recordTrophiesList=()=>{ if(B._rt)return B._rt;
+    // Real NHL trophies; winners current through 2023-24 (live awards feed refreshes on deploy).
+    B._rt=[
+      {name:'Hart',desc:'Most Valuable Player',winner:'Nathan MacKinnon',year:'2024',history:[{yr:2024,name:'Nathan MacKinnon'},{yr:2023,name:'Connor McDavid'},{yr:2022,name:'Auston Matthews'},{yr:2021,name:'Connor McDavid'}]},
+      {name:'Art Ross',desc:'Scoring leader',winner:'Nikita Kucherov',year:'2024',history:[{yr:2024,name:'Nikita Kucherov'},{yr:2023,name:'Connor McDavid'},{yr:2022,name:'Connor McDavid'},{yr:2021,name:'Connor McDavid'}]},
+      {name:'Maurice Richard',desc:'Goal-scoring leader',winner:'Auston Matthews',year:'2024',history:[{yr:2024,name:'Auston Matthews'},{yr:2023,name:'Connor McDavid'},{yr:2022,name:'Auston Matthews'},{yr:2021,name:'Auston Matthews'}]},
+      {name:'Norris',desc:'Top defenseman',winner:'Quinn Hughes',year:'2024',history:[{yr:2024,name:'Quinn Hughes'},{yr:2023,name:'Erik Karlsson'},{yr:2022,name:'Cale Makar'},{yr:2021,name:'Adam Fox'}]},
+      {name:'Vezina',desc:'Top goaltender',winner:'Connor Hellebuyck',year:'2024',history:[{yr:2024,name:'Connor Hellebuyck'},{yr:2023,name:'Linus Ullmark'},{yr:2022,name:'Igor Shesterkin'},{yr:2021,name:'Marc-André Fleury'}]},
+      {name:'Selke',desc:'Top defensive forward',winner:'Aleksander Barkov',year:'2024',history:[{yr:2024,name:'Aleksander Barkov'},{yr:2023,name:'Patrice Bergeron'},{yr:2022,name:'Patrice Bergeron'},{yr:2021,name:'Aleksander Barkov'}]},
+      {name:'Conn Smythe',desc:'Playoff MVP',winner:'Connor McDavid',year:'2024',history:[{yr:2024,name:'Connor McDavid'},{yr:2023,name:'Jonathan Marchessault'},{yr:2022,name:'Cale Makar'},{yr:2021,name:'Andrei Vasilevskiy'}]},
+      {name:'Calder',desc:'Rookie of the Year',winner:'Connor Bedard',year:'2024',history:[{yr:2024,name:'Connor Bedard'},{yr:2023,name:'Matty Beniers'},{yr:2022,name:'Moritz Seider'},{yr:2021,name:'Kirill Kaprizov'}]},
+      {name:'Ted Lindsay',desc:'Outstanding player',winner:'Nathan MacKinnon',year:'2024',history:[{yr:2024,name:'Nathan MacKinnon'},{yr:2023,name:'Connor McDavid'},{yr:2022,name:'Auston Matthews'},{yr:2021,name:'Connor McDavid'}]},
+      {name:'Jack Adams',desc:'Coach of the Year',winner:'Rick Tocchet',year:'2024',history:[{yr:2024,name:'Rick Tocchet'},{yr:2023,name:'Jim Montgomery'},{yr:2022,name:'Darryl Sutter'},{yr:2021,name:"Rod Brind'Amour"}]},
+    ]; return B._rt; };
   // active players chasing career milestones — progress to next round number
   B.milestoneWatch=()=>{ if(B._mw)return B._mw; const r=rng('mw');
     const MS=[['points',1000],['goals',500],['points',500],['goals',300],['assists',600],['games',1000]];
@@ -513,31 +543,104 @@
     B._mw=pool.map((p,i)=>{const [stat,target]=MS[i%MS.length];const remaining=ri(r,4,72);const career=target-remaining;
       return {id:p.id,name:p.name,team:p.team,pos:p.pos,num:p.num,stat,target,career,remaining,pct:Math.round(career/target*100)};})
       .sort((a,b)=>a.remaining-b.remaining); return B._mw; };
-  B.recordFranchiseList=()=>{ if(B._rf)return B._rf; const r=rng('recfr');
-    B._rf=B.ABBR.map(ab=>({ab,wins:ri(r,1400,3200),cups:ri(r,0,13),seasons:ri(r,7,108)})).sort((a,b)=>b.wins-a.wins).slice(0,10); return B._rf; };
-  // per-team championships & banners (deterministic)
+  B.recordFranchiseList=()=>{ if(B._rf)return B._rf;
+    // Exact, no approximations: every Cup-winning franchise ranked by Stanley Cups,
+    // derived from the real Cup-year data (REAL_CUPS). No fabricated win totals.
+    B._rf=Object.keys(REAL_CUPS).map(ab=>{const yrs=REAL_CUPS[ab];return {ab,cups:yrs.length,last:Math.max.apply(null,yrs)};})
+      .sort((a,b)=>b.cups-a.cups||b.last-a.last); return B._rf; };
+  // per-team championships & banners. Stanley Cup AND Presidents' Trophy years are REAL
+  // (exact). Conference/division titles and playoff-appearance counts are omitted rather
+  // than estimated, so nothing fabricated is shown.
   B._tt={};
-  B.teamTitles=ab=>{ if(B._tt[ab])return B._tt[ab]; const r=rng('titles'+ab);
-    const yrs=(n,lo)=>{const out=new Set();for(let i=0;i<n;i++)out.add(lo+ri(r,0,2025-lo));return[...out].sort((a,b)=>b-a);};
-    const cupN=r()<.28?ri(r,1,6):(r()<.6?ri(r,0,2):0);
-    const presN=r()<.4?ri(r,0,4):0;
-    const confN=cupN+ri(r,0,3);
-    const divN=ri(r,0,9);
-    const titles={ab,stanleyCups:yrs(cupN,1955),presidents:yrs(presN,1986),conference:yrs(confN,1980),division:yrs(divN,1975),
-      playoffApps:ri(r,18,52),lastCup:null};
-    titles.lastCup=titles.stanleyCups[0]||null;
+  const REAL_PRESIDENTS={
+    DET:[1995,1996,2002,2004,2006,2008],EDM:[1986,1987],CGY:[1988,1989],BOS:[1990,2014,2020,2023],
+    CHI:[1991,2013],NYR:[1992,1994,2015,2024],PIT:[1993],COL:[1997,2001,2021],DAL:[1998,1999],
+    STL:[2000],OTT:[2003],BUF:[2007],SJS:[2009],WSH:[2010,2016,2017],VAN:[2011,2012],NSH:[2018],TBL:[2019],FLA:[2022],
+  };
+  const REAL_CUPS={
+    MTL:[1916,1924,1930,1931,1944,1946,1953,1956,1957,1958,1959,1960,1965,1966,1968,1969,1971,1973,1976,1977,1978,1979,1986,1993],
+    TOR:[1918,1922,1932,1942,1945,1947,1948,1949,1951,1962,1963,1964,1967],
+    DET:[1936,1937,1943,1950,1952,1954,1955,1997,1998,2002,2008],
+    BOS:[1929,1939,1941,1970,1972,2011],
+    CHI:[1934,1938,1961,2010,2013,2015],
+    EDM:[1984,1985,1987,1988,1990],
+    PIT:[1991,1992,2009,2016,2017],
+    NYR:[1928,1933,1940,1994],
+    NYI:[1980,1981,1982,1983],
+    NJD:[1995,2000,2003],
+    COL:[1996,2001,2022],
+    TBL:[2004,2020,2021],
+    PHI:[1974,1975],
+    LAK:[2012,2014],
+    DAL:[1999],CGY:[1989],CAR:[2006],ANA:[2007],WSH:[2018],STL:[2019],VGK:[2023],FLA:[2024,2025],
+  };
+  B.teamTitles=ab=>{ if(B._tt[ab])return B._tt[ab];
+    const cups=(REAL_CUPS[ab]||[]).slice().sort((a,b)=>b-a);
+    const pres=(REAL_PRESIDENTS[ab]||[]).slice().sort((a,b)=>b-a);
+    const titles={ab,stanleyCups:cups,presidents:pres,conference:[],division:[],playoffApps:null,lastCup:cups[0]||null};
     B._tt[ab]=titles; return titles; };
   // single-club record book (career + single-season leaders for one franchise)
-  B.teamRecords=ab=>{ const r=rng('trec'+ab); const rs=B.teamRoster(ab);
-    const nm=()=>`${pick(r,HFN)} ${pick(r,HLN)}`;
-    const mk=(cat,top,unit)=>({cat,unit,rows:Array.from({length:5},(_,i)=>({name:i<rs.length&&r()<.4?rs[i].name:nm(),v:Math.round(top*(1-i*0.08)-ri(r,0,top*0.04))}))});
-    return {career:[mk('Goals',612),mk('Assists',901),mk('Points',1408),mk('Games',1310),mk('Wins (G)',389)],
-      season:[mk('Goals, season',76),mk('Assists, season',102),mk('Points, season',152),mk('Wins, season',47)]}; };
+  // Real franchise all-time leaders (career points / goals / goaltender wins).
+  const FRANCHISE_LEGENDS={
+    ANA:{pts:'Ryan Getzlaf',g:'Teemu Selänne',w:'John Gibson'},
+    ARI:{pts:'Shane Doan',g:'Shane Doan',w:'Nikolai Khabibulin'},
+    UTA:{pts:'Shane Doan',g:'Shane Doan',w:'Nikolai Khabibulin'},
+    BOS:{pts:'Ray Bourque',g:'Johnny Bucyk',w:'Tuukka Rask'},
+    BUF:{pts:'Gilbert Perreault',g:'Gilbert Perreault',w:'Ryan Miller'},
+    CGY:{pts:'Jarome Iginla',g:'Jarome Iginla',w:'Miikka Kiprusoff'},
+    CAR:{pts:'Ron Francis',g:'Ron Francis',w:'Cam Ward'},
+    CHI:{pts:'Stan Mikita',g:'Bobby Hull',w:'Tony Esposito'},
+    COL:{pts:'Joe Sakic',g:'Joe Sakic',w:'Patrick Roy'},
+    CBJ:{pts:'Rick Nash',g:'Rick Nash',w:'Sergei Bobrovsky'},
+    DAL:{pts:'Mike Modano',g:'Mike Modano',w:'Marty Turco'},
+    DET:{pts:'Gordie Howe',g:'Gordie Howe',w:'Terry Sawchuk'},
+    EDM:{pts:'Wayne Gretzky',g:'Wayne Gretzky',w:'Grant Fuhr'},
+    FLA:{pts:'Aleksander Barkov',g:'Olli Jokinen',w:'Roberto Luongo'},
+    LAK:{pts:'Marcel Dionne',g:'Luc Robitaille',w:'Jonathan Quick'},
+    MIN:{pts:'Mikko Koivu',g:'Marián Gáborík',w:'Devan Dubnyk'},
+    MTL:{pts:'Guy Lafleur',g:'Maurice Richard',w:'Carey Price'},
+    NSH:{pts:'David Legwand',g:'David Legwand',w:'Pekka Rinne'},
+    NJD:{pts:'Patrik Eliáš',g:'Patrik Eliáš',w:'Martin Brodeur'},
+    NYI:{pts:'Bryan Trottier',g:'Mike Bossy',w:'Billy Smith'},
+    NYR:{pts:'Rod Gilbert',g:'Rod Gilbert',w:'Henrik Lundqvist'},
+    OTT:{pts:'Daniel Alfredsson',g:'Daniel Alfredsson',w:'Craig Anderson'},
+    PHI:{pts:'Bobby Clarke',g:'Bill Barber',w:'Bernie Parent'},
+    PIT:{pts:'Mario Lemieux',g:'Mario Lemieux',w:'Marc-André Fleury'},
+    SJS:{pts:'Patrick Marleau',g:'Patrick Marleau',w:'Evgeni Nabokov'},
+    SEA:{pts:'Jordan Eberle',g:'Jared McCann',w:'Philipp Grubauer'},
+    STL:{pts:'Bernie Federko',g:'Brett Hull',w:'Mike Liut'},
+    TBL:{pts:'Steven Stamkos',g:'Steven Stamkos',w:'Andrei Vasilevskiy'},
+    TOR:{pts:'Mats Sundin',g:'Mats Sundin',w:'Turk Broda'},
+    VAN:{pts:'Henrik Sedin',g:'Daniel Sedin',w:'Roberto Luongo'},
+    VGK:{pts:'Jonathan Marchessault',g:'William Karlsson',w:'Marc-André Fleury'},
+    WSH:{pts:'Alex Ovechkin',g:'Alex Ovechkin',w:'Braden Holtby'},
+    WPG:{pts:'Blake Wheeler',g:'Ilya Kovalchuk',w:'Connor Hellebuyck'},
+  };
+  // single-club record book — real franchise career leaders + the current scoring leader
+  B.teamRecords=ab=>{ const L=FRANCHISE_LEGENDS[ab]||{}; const rs=B.teamRoster(ab);
+    const row=n=>[{name:n||'—',v:''}];
+    return {career:[
+        {cat:'Career points leader',rows:row(L.pts)},
+        {cat:'Career goals leader',rows:row(L.g)},
+        {cat:'Most wins, goaltender',rows:row(L.w)},
+      ],
+      season:[
+        {cat:'Current scoring leader',rows:row(rs[0]&&rs[0].name)},
+      ]}; };
   // streaks & feats (league records)
-  B.recordStreaks=()=>{ if(B._rst)return B._rst; const r=rng('streaks');
-    const nm=()=>`${pick(r,HFN)} ${pick(r,HLN)}`;
-    const feats=[['Longest point streak',51,'games',nm()],['Longest goal streak',16,'games',nm()],['Consecutive games played',964,'games',nm()],['Longest team win streak',17,'games',pick(r,B.ABBR)+' (team)'],['Longest team unbeaten run',35,'games',pick(r,B.ABBR)+' (team)'],['Fastest hat trick',21,'seconds',nm()],['Most goals, one game',7,'goals',nm()],['Most points, one game',10,'points',nm()],['Longest shutout streak',6,'games',nm()],['Fastest two goals',4,'seconds',nm()]];
-    B._rst=feats.map(([label,v,unit,holder])=>({label,v,unit,holder,year:1955+ri(r,0,70)})); return B._rst; };
+  B.recordStreaks=()=>{ if(B._rst)return B._rst;
+    B._rst=[
+      {label:'Longest point streak',v:51,unit:'games',holder:'Wayne Gretzky',year:1984},
+      {label:'Longest goal streak',v:16,unit:'games',holder:'Punch Broadbent',year:1922},
+      {label:'Consecutive games played',v:964,unit:'games',holder:'Doug Jarvis',year:1987},
+      {label:'Longest team win streak',v:17,unit:'games',holder:'Pittsburgh Penguins',year:1993},
+      {label:'Longest team unbeaten run',v:35,unit:'games',holder:'Philadelphia Flyers',year:1980},
+      {label:'Fastest hat trick',v:21,unit:'seconds',holder:'Bill Mosienko',year:1952},
+      {label:'Most goals, one game',v:7,unit:'goals',holder:'Joe Malone',year:1920},
+      {label:'Most points, one game',v:10,unit:'points',holder:'Darryl Sittler',year:1976},
+      {label:'Consecutive shutouts',v:5,unit:'games',holder:'Brian Boucher',year:2004},
+      {label:'Fastest two goals',v:4,unit:'seconds',holder:'Nels Stewart',year:1931},
+    ]; return B._rst; };
 
   // ---- stats config (self-documenting report list) mock ----
   B.statsReports=()=>({
