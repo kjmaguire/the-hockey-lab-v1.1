@@ -29,15 +29,19 @@ enabled = true
 
 # ---------------------------------------------------------------------------
 # Per-IP rate limiting for /api/nhl/* (worker.ts: 120 req/min/IP, soft window).
-# Create the namespace once, then paste the printed id below:
+# Soft per-IP rate limiting is OPTIONAL and DISABLED by default so `wrangler deploy`
+# works out of the box. The worker treats RATE_LIMIT as optional — when no namespace
+# is bound, rateLimit() is a no-op (lean on a Cloudflare WAF rate-limit rule instead).
+#
+# To turn it ON: create the namespace, paste the printed ids below, and UNCOMMENT
+# the whole [[kv_namespaces]] block:
 #   npx wrangler kv:namespace create RATE_LIMIT
 #   npx wrangler kv:namespace create RATE_LIMIT --preview
-# Until a real id is set, `wrangler deploy` will reject this binding — replace
-# the placeholder(s) before deploying. (Prefer a Cloudflare WAF rule too — README.)
-[[kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+#
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT"
+# id = "PASTE_REAL_KV_NAMESPACE_ID"
+# preview_id = "PASTE_REAL_KV_PREVIEW_ID"
 
 # Optional: extra browser hosts allowed to call /api/nhl/* (comma-separated).
 # Same-origin is always allowed; this only matters if another origin must call it.
