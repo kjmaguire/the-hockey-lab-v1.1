@@ -47,3 +47,23 @@ enabled = true
 # Same-origin is always allowed; this only matters if another origin must call it.
 # [vars]
 # ALLOWED_HOSTS = "the-hockey-lab.pages.dev"
+
+# ---------------------------------------------------------------------------
+# Durable L2 cache for immutable NHL endpoints (Cloudflare D1).
+#
+# The edge Cache API (caches.default) is per-colo and can be evicted, so a draft
+# year you pulled in one region can be a cold miss in another — and a slow/blocked
+# upstream then drops it back to "demo data" until you refresh. This D1 database
+# gives a global, durable cache so historical draft years / records / league meta
+# answer instantly and identically everywhere.
+#
+# Dashboard setup (UI only):
+#   1. Storage & Databases → D1 → Create database → name: the-hockey-lab-cache
+#   2. open it → Console tab → paste + run the SQL in ./schema.sql (one time)
+#   3. paste the database's "Database ID" into database_id below, then push.
+# Until a real database_id is filled in, leave this block commented (the code is
+# inert without the `DB` binding, so the app still works).
+[[d1_databases]]
+binding = "DB"
+database_name = "the-hockey-lab-cache"
+database_id = "f2455b63-80f9-49bb-8fa3-cb835f00c23d"

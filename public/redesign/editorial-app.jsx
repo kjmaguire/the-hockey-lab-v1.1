@@ -802,7 +802,7 @@ function App(){
         <a href="The Hockey Lab - Landing.html" style={{textAlign:'left',marginTop:4,color:T.faint,fontFamily:MONO,fontSize:12,textDecoration:'none',padding:'8px 14px'}}>⌂ Lab home</a>
       </div>
     </div>}
-    <main style={{maxWidth:1080,margin:'0 auto',padding:'30px 24px 50px'}}><EB routeKey={route+'|'+(team||'')+'|'+(player&&player.id||'')+'|'+(game&&game.id||'')} onReset={()=>go('highlights')}>{content}</EB></main>
+    <main style={{maxWidth:1080,margin:'0 auto',padding:'30px 24px 50px'}}><EB key={'season-'+season} routeKey={route+'|'+(team||'')+'|'+(player&&player.id||'')+'|'+(game&&game.id||'')} onReset={()=>go('highlights')}>{content}</EB></main>
     <footer style={{borderTop:`1px solid ${T.line}`,marginTop:20}}>
       <div style={{maxWidth:1080,margin:'0 auto',padding:'26px 24px 36px'}}>
         <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:14}}><span style={{width:24,height:24,borderRadius:6,background:T.invBg,color:T.invFg,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12}}>H</span><span style={{fontWeight:700,fontSize:14}}>The Hockey Lab</span></div>

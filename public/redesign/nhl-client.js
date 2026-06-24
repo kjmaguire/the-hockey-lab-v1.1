@@ -16,6 +16,13 @@
   const _inflight = new Map();
   const _cache = new Map();
   const TTL = 12000;
+  // Immutable / historical data (a SPECIFIC past draft year, the records book) never
+  // changes, so cache it for the whole session client-side. This is what makes
+  // flipping back and forth between draft YEARS instant + reliable: once a year has
+  // been pulled it is never re-fetched (so a cold edge / slow upstream can't drop
+  // that year back to mock on the next switch).
+  const LONG_TTL = 6 * 3600 * 1000;
+  const IMMUTABLE = /draft\/(picks|rankings)\/\d{4}|^records\//;
   const ALWAYS_FRESH = /scoreboard|^score\b|\/now|gamecenter\/.*\/(boxscore|play-by-play)/;
   async function rawGet(path) {
     const ac = new AbortController();
@@ -30,7 +37,8 @@
     const fresh = ALWAYS_FRESH.test(path);
     if (!fresh) {
       const c = _cache.get(path);
-      if (c && Date.now() - c.t < TTL) return c.data;
+      const ttl = IMMUTABLE.test(path) ? LONG_TTL : TTL;
+      if (c && Date.now() - c.t < ttl) return c.data;
     }
     const existing = _inflight.get(path);
     if (existing) return existing;            // join a concurrent identical request
@@ -615,6 +623,39 @@
     return made.length ? made : null;
   }
 
+  // ---- REAL post-lottery draft ORDER -> the lottery-result picks the UI shows ----
+  // `draft/picks/now` (and a year's /all) return the actual first-round ORDER once
+  // the lottery has been held — real teams, players null until draft night. We
+  // decorate each pick with its pre-lottery slot (reverse standings) so the
+  // projected/landed/▲▼ view reflects the REAL lottery, not a simulated one.
+  function buildLotteryPicks(payload, standings, rankings) {
+    const mapped = mapDraftYear(payload, null);
+    const all = mapped && mapped.picks ? mapped.picks : [];
+    const r1 = all.filter((p) => (p.round || 1) === 1).sort((a, b) => a.pick - b.pick);
+    if (r1.length < 8 || !standings || !standings.length) return null; // not enough real order yet
+    // pre-lottery projection: worst record picks 1st. standings is best-first, so
+    // reverse = worst-first; a team's index there is its pre-lottery slot.
+    const reverse = [...standings].slice().reverse();
+    const slotOf = {}; reverse.forEach((t, i) => { slotOf[t.ab] = i + 1; });
+    return r1.map((p, i) => {
+      const pick = p.pick || (i + 1);
+      const proj = slotOf[p.team];
+      // Only treat it as lottery movement for a genuine lottery participant (a
+      // non-playoff team, slot ≤ 16, capped at the NHL's 10-spot climb). Traded
+      // picks held by playoff teams otherwise look like impossible 20-spot jumps.
+      const eligible = proj != null && proj <= 16 && Math.abs(proj - pick) <= 11;
+      const slot = eligible ? proj : pick;
+      const moved = eligible ? slot - pick : 0;
+      const rk = rankings && rankings[i];
+      return {
+        pick, team: p.team, slot, moved, lotteryWin: moved > 0,
+        name: p.name || (rk && rk.name) || 'TBD',
+        pos: p.pos || (rk && rk.pos) || '',
+        league: p.league || (rk && rk.league) || '',
+      };
+    });
+  }
+
   // The season the UI is currently VIEWING (set by the season switcher via
   // BC._seasonId); defaults to the league's current season.
   function activeSeason(){ return (window.BC && window.BC._seasonId) ? String(window.BC._seasonId) : curSeason(); }
@@ -729,14 +770,23 @@
         try { return mapPlayoffBracket(await get('playoff-bracket'), standings); } catch (__) { return null; }
       }
     },
-    // Draft board: live prospect rankings + standings-derived order with live names:
+    // Draft board: live prospect rankings + the REAL post-lottery first-round order
+    // (correct teams + lottery winners). Falls back to the editorial projection only
+    // when the real order isn't published yet.
     draftFull: async () => {
       try {
         const live = mapDraftRankings(await get('draft/rankings'));
-        if (!live) return null;
-        const mockPicks = (window.BC && typeof window.BC.draftPicks === 'function') ? window.BC.draftPicks() : [];
-        const picks = mockPicks.map((pk, i) => (live[i] ? { ...pk, name: live[i].name, pos: live[i].pos, league: live[i].league } : pk));
-        return { rankings: live, picks };
+        const standings = (window.BC && window.BC.STANDINGS) || [];
+        let picks = null;
+        try { picks = buildLotteryPicks(await get('draft/picks/now'), standings, live); } catch (_) { picks = null; }
+        if (!picks) {
+          // real order not available yet → editorial projection, prospect names overlaid
+          const mockPicks = (window.BC && typeof window.BC.draftPicks === 'function') ? window.BC.draftPicks() : [];
+          picks = mockPicks.map((pk, i) => (live && live[i] ? { ...pk, name: live[i].name, pos: live[i].pos, league: live[i].league } : pk));
+        }
+        if (!live && !picks.length) return null;
+        const rankings = live || ((window.BC && window.BC.draftRankings) ? window.BC.draftRankings() : []);
+        return { rankings, picks };
       } catch (_) { return null; }
     },
     // Draft board for any year (real results for completed drafts):
@@ -765,7 +815,7 @@
       } catch (_) { return null; }
     },
     // Full-season team schedule -> live calendar + Last/Next game:
-    clubScheduleMapped: async (ab) => { try { return mapClubSchedule(await get(`club-schedule/${ab}`)); } catch (_) { return null; } },
+    clubScheduleMapped: async (ab) => { try { const s = activeSeason(); const qy = (s && s !== curSeason()) ? `?season=${s}` : ''; return mapClubSchedule(await get(`club-schedule/${ab}${qy}`)); } catch (_) { return null; } },
     teamRecUp: async (ab) => {
       try {
         const all = await window.NHL.clubScheduleMapped(ab); if (!all) return null;

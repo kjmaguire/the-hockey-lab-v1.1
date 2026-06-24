@@ -16,10 +16,11 @@ import {
   teamStats,
   errorJson,
   json,
-  currentSeason,
+  resolveCurrentSeason,
   isRefererAllowed,
   rateLimit,
   sanitizeRest,
+  setCacheDb,
   SECURITY_HEADERS,
 } from './functions/api/nhl/_lib';
 
@@ -29,6 +30,8 @@ interface Env {
   RATE_LIMIT?: { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: any) => Promise<void> };
   // Optional comma-separated extra browser hosts allowed to call /api/nhl/* (same-origin always allowed).
   ALLOWED_HOSTS?: string;
+  // Optional D1 database for the durable L2 cache of immutable endpoints (see wrangler.toml).
+  DB?: any;
 }
 
 // Content-Security-Policy for the HTML app. `strict` (Babel-free) is used when we
@@ -95,7 +98,7 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'roster': {
         if (!b) break;
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         const gameType = q('gameType', '2')!;
         return proxyWeb(`roster/${b}/${season}`, { gameType });
       }
@@ -104,7 +107,7 @@ async function handleNhl(url: URL): Promise<Response> {
         return proxyWeb(`roster-season/${b}`);
       case 'club-schedule': {
         if (!b) break;
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         return proxyWeb(`club-schedule-season/${b}/${season}`);
       }
       case 'club-schedule-view': {
@@ -117,7 +120,7 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'club-stats': {
         if (!b) break;
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         const gameType = q('gameType', '2')!;
         return proxyWeb(`club-stats/${b}/${season}/${gameType}`);
       }
@@ -129,7 +132,7 @@ async function handleNhl(url: URL): Promise<Response> {
         return proxyWeb(`prospects/${b}`);
       case 'team-stats': {
         if (!b) break;
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         const gameType = q('gameType', '2')!;
         return teamStats(b, season, gameType);
       }
@@ -139,14 +142,14 @@ async function handleNhl(url: URL): Promise<Response> {
         if (!playerId || !kind) break;
         if (kind === 'landing') return proxyWeb(`player/${playerId}/landing`);
         if (kind === 'game-log') {
-          const season = q('season', currentSeason())!;
+          const season = (q('season') ?? await resolveCurrentSeason());
           const gameType = q('gameType', '2')!;
           return proxyWeb(`player/${playerId}/game-log/${season}/${gameType}`);
         }
         break;
       }
       case 'goalie-leaders': {
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('goalie/summary', {
@@ -162,7 +165,7 @@ async function handleNhl(url: URL): Promise<Response> {
         }
       }
       case 'skater-leaders': {
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         const gameType = q('gameType', '2')!;
         try {
           const data = await statsRequest('skater/summary', {
@@ -181,7 +184,7 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'edge': {
         const kind = b;
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         const group = q('group', '2')!;
         if (kind === 'skater-landing') return proxyWeb(`edge/skater-landing/${season}/${group}`);
         if (kind === 'goalie-landing') return proxyWeb(`edge/goalie-landing/${season}/${group}`);
@@ -207,7 +210,7 @@ async function handleNhl(url: URL): Promise<Response> {
       }
       case 'edge-team': {
         const kind = b;
-        const season = q('season', currentSeason())!;
+        const season = (q('season') ?? await resolveCurrentSeason());
         const group = q('group', '2')!;
         if (kind === 'skating-speed' && c) return proxyWeb(`edge/team-skating-speed-top-10/${c}/points/${season}/${group}`);
         if (kind === 'shot-location' && c) return proxyWeb(`edge/team-shot-location-top-10/${c}/all/points/${season}/${group}`);
@@ -316,6 +319,7 @@ async function handleNhl(url: URL): Promise<Response> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    setCacheDb(env.DB); // wire the durable L2 cache (no-op unless a D1 DB is bound)
 
     // API routes → live NHL proxy
     if (url.pathname === '/api/nhl' || url.pathname.startsWith('/api/nhl/')) {

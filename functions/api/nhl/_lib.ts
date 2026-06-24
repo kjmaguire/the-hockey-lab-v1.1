@@ -162,10 +162,52 @@ export async function edgeMemo(key: string, ttl: number, build: () => Promise<Re
   return resp;
 }
 
+// ---------------------------------------------------------------------------
+// Optional durable L2 cache (Cloudflare D1). The edge Cache API (caches.default)
+// is per-colo and can be evicted, so a year you viewed an hour ago in one region
+// may be a cold miss in another — and a slow/blocked upstream then drops that year
+// back to mock until a refresh. D1 is a global, durable store: we persist ONLY
+// immutable endpoints (a specific historical draft year, the records book, league
+// meta, finals) so a cold edge anywhere still answers instantly instead of
+// round-tripping to api-web.nhle.com. Inert until a D1 database is bound as `DB`
+// (see wrangler.toml) — mirrors the optional-RATE_LIMIT pattern.
+// ---------------------------------------------------------------------------
+type D1Like = {
+  prepare: (q: string) => {
+    bind: (...a: any[]) => { first: <T = any>() => Promise<T | null>; run: () => Promise<any> };
+  };
+};
+let _cacheDb: D1Like | null = null;
+/** Wire the request's D1 binding (env.DB) into the cache layer. Safe to pass undefined. */
+export function setCacheDb(db: any): void { _cacheDb = db || null; }
+
+/** Only immutable-ish URLs (long/day TTL) are worth persisting durably. */
+function isDurable(url: string): boolean { return ttlFor(url) >= TTL.long; }
+
+async function d1Get(url: string): Promise<unknown | undefined> {
+  if (!_cacheDb) return undefined;
+  try {
+    const row = await _cacheDb.prepare('SELECT body, exp FROM nhl_cache WHERE k = ?')
+      .bind(url).first<{ body: string; exp: number }>();
+    if (!row) return undefined;
+    if (row.exp && row.exp < Math.floor(Date.now() / 1000)) return undefined; // expired
+    return JSON.parse(row.body);
+  } catch { return undefined; }
+}
+async function d1Put(url: string, body: string, ttl: number): Promise<void> {
+  if (!_cacheDb) return;
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    await _cacheDb.prepare('INSERT OR REPLACE INTO nhl_cache (k, body, exp, updated) VALUES (?, ?, ?, ?)')
+      .bind(url, body, now + ttl, now).run();
+  } catch { /* best-effort */ }
+}
+
 /**
  * Fetch JSON from an upstream URL, caching the parsed payload at the edge for
- * CACHE_SECONDS. Mirrors NhlApiController's Cache::has / Cache::put pattern,
- * but keyed by the fully-qualified upstream URL so it is shared across requests.
+ * CACHE_SECONDS. Mirrors NhlApiController's Cache::has / Cache::put pattern, but
+ * keyed by the fully-qualified upstream URL so it is shared across requests. For
+ * immutable endpoints a durable D1 copy (when bound) backs the per-colo edge cache.
  */
 export async function fetchUpstream(url: string): Promise<unknown> {
   const cache = (caches as unknown as { default: Cache }).default;
@@ -183,6 +225,23 @@ export async function fetchUpstream(url: string): Promise<unknown> {
     return hit.json();
   }
 
+  // Edge miss. For immutable endpoints, try the durable L2 (D1) before the network:
+  // a cold colo or a slow/blocked upstream then still answers instantly + identically,
+  // which is what keeps flipping between draft years reliable across regions.
+  const durable = isDurable(url);
+  if (durable) {
+    const d1 = await d1Get(url);
+    if (d1 !== undefined) {
+      // warm this colo's edge cache so subsequent same-colo hits skip D1 too
+      try {
+        await cache.put(cacheKey, new Response(JSON.stringify(d1), {
+          headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': `public, max-age=${ttlFor(url, d1)}` },
+        }));
+      } catch { /* best-effort */ }
+      return d1;
+    }
+  }
+
   const baseTtl = ttlFor(url); // URL-only guess for the origin fetch hint
   let upstream: Response;
   try {
@@ -195,12 +254,16 @@ export async function fetchUpstream(url: string): Promise<unknown> {
     // NHL unreachable → serve the last-known-good copy if we have one.
     const stale = await serveFallback();
     if (stale !== undefined) return stale;
+    const d1 = durable ? await d1Get(url) : undefined;
+    if (d1 !== undefined) return d1;
     throw new UpstreamError('Unable to reach the NHL API.');
   }
 
   if (!upstream.ok) {
     const stale = await serveFallback();
     if (stale !== undefined) return stale;
+    const d1 = durable ? await d1Get(url) : undefined;
+    if (d1 !== undefined) return d1;
     throw new UpstreamError('NHL API responded with an error.', 502);
   }
 
@@ -230,6 +293,8 @@ export async function fetchUpstream(url: string): Promise<unknown> {
       'cache-control': 'public, max-age=604800',
     },
   }));
+  // Persist immutable payloads durably (D1) so other colos / later cold edges hit it.
+  if (durable) { await d1Put(url, body, ttl); }
   return parsed;
 }
 
@@ -469,8 +534,32 @@ async function buildTeamStats(teamAbbrev: string, season: string, gameType: stri
 
 
 // NHL season id for "now" — season starts in October; treat Sept+ as the new season.
+// NOTE: this is a calendar HEURISTIC and can disagree with the NHL's official
+// `currentSeason` for a few days around rollover / through the offseason. It's the
+// fallback only — prefer resolveCurrentSeason() (authoritative) wherever possible.
 export function currentSeason(): string {
   const d = new Date();
   const y = d.getFullYear();
   return d.getMonth() >= 8 ? String(y) + String(y + 1) : String(y - 1) + String(y);
+}
+
+// Authoritative current season id, straight from the NHL. The /season endpoint
+// returns every season id ever; the largest is the current/most-recent one. We
+// cache it two ways so it costs essentially nothing per request: a 6h module-level
+// memo (per isolate) in front of the edge/D1-cached upstream fetch. Any failure
+// falls back to the date heuristic, so a season default is never missing.
+let _seasonMemo: { id: string; t: number } | null = null;
+const SEASON_MEMO_TTL = 6 * 3600 * 1000;
+export async function resolveCurrentSeason(): Promise<string> {
+  if (_seasonMemo && Date.now() - _seasonMemo.t < SEASON_MEMO_TTL) return _seasonMemo.id;
+  try {
+    const data: any = await fetchUpstream(`${API_BASE}/season`);
+    const ids = (Array.isArray(data) ? data : (data && data.seasons) || [])
+      .map((v: any) => Number(v)).filter((n: number) => n >= 19000000 && n <= 21000000);
+    const id = ids.length ? String(Math.max(...ids)) : currentSeason();
+    _seasonMemo = { id, t: Date.now() };
+    return id;
+  } catch {
+    return currentSeason();
+  }
 }

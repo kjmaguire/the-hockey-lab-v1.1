@@ -263,7 +263,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
     {tab==='Hub'&&(()=>{
       const news=D.teamNews(ab);
       const NACC={pos:'#1a8a4f',neg:T.red,gold:'#b5762a',edge:'#1a8a4f',brand:c2(ab),mut:T.faint};
-      const GameHero=({label,g})=>{ if(!g)return(<div style={{...card,padding:'16px 18px'}}><div style={ML}>{label}</div><div style={{fontFamily:MONO,fontSize:12,color:T.mut,marginTop:10}}>None scheduled</div></div>);
+      const GameHero=({label,g,emptyMsg})=>{ if(!g)return(<div style={{...card,padding:'16px 18px'}}><div style={ML}>{label}</div><div style={{fontFamily:MONO,fontSize:12,color:T.mut,marginTop:10}}>{emptyMsg||'None scheduled'}</div></div>);
         const final=g.st.startsWith('final');const home=g.h===ab;const us=home?g.hs:g.as,them=home?g.as:g.hs;const won=final&&us>them;const winAb=final?(g.as>g.hs?g.a:g.h):null;
         return(<div onClick={()=>onGame(g)} className="ec" style={{...card,overflow:'hidden',cursor:'pointer'}}>
           <div style={{padding:'11px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${T.line}`}}>
@@ -285,7 +285,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
         </div>);};
       return(<div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}} className="g2">
-          <GameHero label="Last game" g={sched.rec[0]}/><GameHero label="Next game" g={sched.up[0]}/>
+          <GameHero label="Last game" g={sched.rec[0]}/><GameHero label="Next game" g={sched.up[0]} emptyMsg={(sched.rec&&sched.rec.length)?'Season complete':'None scheduled'}/>
         </div>
         <div style={{...ML,marginBottom:10}}>{ct(ab)} headlines</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:14,marginBottom:18}}>
@@ -1366,6 +1366,9 @@ function DraftPage({onTeam}){
   const draftLive=window.E_useLive(draftMock,()=>window.NHL.draftFull(),[]);
   const rankings=draftLive.rankings;
   const picks=draftLive.picks;
+  // lottery winners come from the REAL post-lottery order when available
+  // (buildLotteryPicks flags them); fall back to the editorial sim otherwise.
+  const lotWinners=uM(()=>{const w=(picks||[]).filter(p=>p.lotteryWin).map(p=>p.team);return w.length?w:D.lotteryWinners();},[picks]);
   // past draft: real results for the chosen year (mock fallback in preview)
   const pastMock=uM(()=>D.draftPastYear(year),[year]);
   const past=window.E_useLive(pastMock,()=>window.NHL.draftYear(year),[year]);
@@ -1384,6 +1387,7 @@ function DraftPage({onTeam}){
       </select>
       <span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>{isUpcoming?'Upcoming draft — projected order & prospect board':'Completed draft — full results'}</span>
     </div>
+    <div key={'y'+year}>
     {isUpcoming&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{upTabs.map(s=><Pill key={s} on={tab===s} onClick={()=>setTab(s)}>{s}</Pill>)}</div>}
     {tab==='Prospect rankings'&&<div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Central Scouting · top 32 prospects</div>
@@ -1402,7 +1406,7 @@ function DraftPage({onTeam}){
     {tab==='Mock first round'&&<div>
       <div style={{...card,padding:'14px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',background:`linear-gradient(110deg, ${T.bg}, transparent)`}}>
         <span style={{...ML}}>Lottery winners</span>
-        {D.lotteryWinners().map(ab=>{const p=picks.find(x=>x.team===ab);return(
+        {lotWinners.map(ab=>{const p=picks.find(x=>x.team===ab);if(!p)return null;return(
           <div key={ab} onClick={()=>onTeam(ab)} className="el" style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
             <Badge ab={ab} size={24}/><span style={{fontWeight:600,fontSize:13}}>{ct(ab)}</span>
             <span style={{fontFamily:MONO,fontSize:11,color:'#1a8a4f'}}>#{p.pick} · ▲{p.moved} from #{p.slot}</span>
@@ -1502,6 +1506,7 @@ function DraftPage({onTeam}){
       <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>{year} NHL Draft — full results, all seven rounds</div>
     </div>
     </div>);})()}
+    </div>
   </div>);
 }
 
