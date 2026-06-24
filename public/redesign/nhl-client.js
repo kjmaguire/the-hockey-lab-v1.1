@@ -586,13 +586,21 @@
     if (!arr || !arr.length) return null;
     const hin = (v, p) => { const n = num(v) ?? (p && num(p.heightInInches)); return n != null ? `${Math.floor(n / 12)}'${n % 12}"` : (dflt(v) || ''); };
     const picks = arr.map((p) => {
-      const overall = num(p.overallPick) ?? num(p.pickOverall) ?? num(p.pickNumber);
       const round = num(p.round) ?? num(p.roundNumber) ?? 1;
+      const pir = num(p.pickInRound) ?? num(p.pickInRoundNumber);
+      // overall pick number; for an UNDRAFTED upcoming draft the API may omit it,
+      // so derive it from round + pick-in-round so the ORDER is still stable+correct.
+      const overall = num(p.overallPick) ?? num(p.pickOverall) ?? num(p.pickNumber)
+        ?? (pir != null ? (round - 1) * 32 + pir : undefined);
       const first = dflt(p.firstName), last = dflt(p.lastName);
       const name = `${first || ''} ${last || ''}`.trim() || dflt(p.playerName) || dflt(p.name) || '';
+      // team that HOLDS the pick (reflects the lottery + any trades). Shapes vary:
+      // string, {default}, or a nested team object — cover them all.
+      const team = dflt(p.teamAbbrev) || dflt(p.triCode) || (p.teamAbbrevs && dflt(p.teamAbbrevs))
+        || (p.team && (dflt(p.team.abbrev) || dflt(p.team.triCode) || dflt(p.team.teamAbbrev))) || '';
       return {
-        pick: overall ?? 0, round, pir: num(p.pickInRound) ?? null,
-        team: dflt(p.teamAbbrev) || dflt(p.triCode) || (p.teamAbbrevs && dflt(p.teamAbbrevs)) || '',
+        pick: overall ?? 0, round, pir: pir ?? null,
+        team,
         name, pos: p.positionCode || dflt(p.position) || '',
         league: dflt(p.amateurLeague) || dflt(p.lastAmateurLeague) || dflt(p.leagueAbbrev) || '',
         club: dflt(p.amateurClubName) || dflt(p.lastAmateurClubName) || '',
@@ -773,12 +781,17 @@
     // Draft board: live prospect rankings + the REAL post-lottery first-round order
     // (correct teams + lottery winners). Falls back to the editorial projection only
     // when the real order isn't published yet.
-    draftFull: async () => {
+    draftFull: async (year) => {
       try {
         const live = mapDraftRankings(await get('draft/rankings'));
         const standings = (window.BC && window.BC.STANDINGS) || [];
         let picks = null;
-        try { picks = buildLotteryPicks(await get('draft/picks/now'), standings, live); } catch (_) { picks = null; }
+        // Pull the REAL order for THIS draft year explicitly. `now` can still point at
+        // the last COMPLETED draft until this year's draft day, which showed the wrong
+        // teams on the upcoming-draft page. An explicit year always gets this year's
+        // post-lottery + traded order.
+        const orderPath = year ? `draft/picks/${year}/all` : 'draft/picks/now';
+        try { picks = buildLotteryPicks(await get(orderPath), standings, live); } catch (_) { picks = null; }
         if (!picks) {
           // real order not available yet → editorial projection, prospect names overlaid
           const mockPicks = (window.BC && typeof window.BC.draftPicks === 'function') ? window.BC.draftPicks() : [];

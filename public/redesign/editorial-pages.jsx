@@ -1363,7 +1363,7 @@ function DraftPage({onTeam}){
   const [round,setRound]=uS(1);
   // upcoming draft: projected order (reverse standings) + prospect board + live tracker
   const draftMock=uM(()=>({rankings:D.draftRankings(),picks:D.draftPicks()}),[]);
-  const draftLive=window.E_useLive(draftMock,()=>window.NHL.draftFull(),[]);
+  const draftLive=window.E_useLive(draftMock,()=>window.NHL.draftFull(curDraftYear),[curDraftYear]);
   const rankings=draftLive.rankings;
   const picks=draftLive.picks;
   // lottery winners come from the REAL post-lottery order when available
@@ -1514,7 +1514,7 @@ window.E_TOK={T,MONO,SERIF,card,ML};
 window.E_UI={Eyebrow,PageHead,Badge,Spark,Pill,PlayerAvatar};
 
 /* ---------- HIGHLIGHTS (the Lab front page) ---------- */
-function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs}){
+function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs,booting}){
   const fav=favs||[];
   const today=D.slate(0);
   const live=today.filter(g=>g.st==='live');
@@ -1568,6 +1568,22 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs}){
     <div style={{fontFamily:MONO,fontSize:10.5,letterSpacing:'.12em',textTransform:'uppercase',color:accent||T.red}}>{tag}</div>
     <div style={{fontFamily:SERIF,fontSize:18,lineHeight:1.25,color:T.ink,margin:'7px 0 5px'}}>{headline}</div>
     <div style={{fontSize:12.5,color:T.mut}}>{sub}</div>
+  </div>);
+
+  // First live hydrate still in flight → show the page's shape as skeletons rather than
+  // a flash of mock numbers. Resolves to real content the instant the feed lands (and to
+  // mock if there's no live feed, so it never hangs on shimmer).
+  if(booting) return(<div>
+    <PageHead k="The Lab" t="Tonight around the" serif="league"/>
+    <div className="ed-skel" style={{height:230,borderRadius:14,marginBottom:16}}/>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(158px,1fr))',gap:10,marginBottom:16}}>
+      {Array.from({length:8},(_,i)=><div key={i} className="ed-skel" style={{height:84,borderRadius:12}}/>)}
+    </div>
+    <div className="ed-skel" style={{height:13,width:210,borderRadius:7,marginBottom:12}}/>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:14,marginBottom:18}}>
+      {Array.from({length:6},(_,i)=><div key={i} className="ed-skel" style={{height:92,borderRadius:12}}/>)}
+    </div>
+    <div className="ed-skel" style={{height:300,borderRadius:14}}/>
   </div>);
 
   return(<div>

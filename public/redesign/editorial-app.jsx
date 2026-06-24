@@ -683,6 +683,12 @@ function App(){
   const [toast,setToast]=useState(null);
   const [loading,setLoading]=useState(false);
   const [isLive,setIsLive]=useState(false); // true once live NHL feeds hydrate (flips the header badge)
+  // booting = the very first live hydrate is still in flight. The front page (Highlights)
+  // shows skeletons during this window instead of the mock data, so the user never sees
+  // a flash of fake numbers before the real feed lands. Starts true only when a live
+  // hydrate will actually be attempted; resolves false the moment hydrate settles (live
+  // OR mock-fallback), so preview / a failed proxy degrade to real content, never a hang.
+  const [booting,setBooting]=useState(!!(window.BC&&window.BC.hydrate));
   const curId=(window.NHL&&window.NHL._season)?String(window.NHL._season):'20252026';
   const SEASONS=useMemo(()=>{const top=parseInt(curId.slice(0,4),10)||2025;const a=[];for(let y=top;y>=2010;y--)a.push(`${y}${y+1}`);return a;},[curId]);
   const seasonLabel=v=>v==='cur'?`${curId.slice(0,4)}\u2013${curId.slice(6,8)}`:`${v.slice(0,4)}\u2013${v.slice(6,8)}`;
@@ -717,14 +723,14 @@ function App(){
     apply(); window.addEventListener('hashchange',apply); return()=>window.removeEventListener('hashchange',apply);
   },[]);
   useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setPal(p=>!p);}if(e.key==='Escape')setPal(false);};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);},[]);
-  useEffect(()=>{ let stop=()=>{}; if(window.BC&&BC.hydrate){ setLoading(true); const off=BC.onError&&BC.onError(m=>setToast(m)); BC.hydrate(()=>setHv(v=>v+1)).then(live=>{ setLoading(false); if(live){ setIsLive(true); stop=BC.startPolling(()=>setHv(v=>v+1)); } }).catch(()=>setLoading(false)); return ()=>{stop();off&&off();}; } },[]);
+  useEffect(()=>{ let stop=()=>{}; if(window.BC&&BC.hydrate){ setLoading(true); const off=BC.onError&&BC.onError(m=>setToast(m)); BC.hydrate(()=>setHv(v=>v+1)).then(live=>{ setLoading(false); setBooting(false); if(live){ setIsLive(true); stop=BC.startPolling(()=>setHv(v=>v+1)); } }).catch(()=>{setLoading(false);setBooting(false);}); return ()=>{stop();off&&off();}; } },[]);
   const live=games.filter(g=>g.st==='live').length;
 
   let content;
   if(game)content=<GameDetail g={game} onBack={()=>setGame(null)} onTeam={openTeam}/>;
   else if(player)content=<P.PlayerDetailPage p={player} onBack={()=>setPlayer(null)} onTeam={openTeam} onPlayer={openPlayer}/>;
   else if(team)content=<P.TeamDetailPage ab={team} onBack={()=>setTeam(null)} onPlayer={openPlayer} onGame={openGame}/>;
-  else if(route==='highlights')content=<P.HighlightsPage games={games} favs={favs} onGame={openGame} onTeam={openTeam} onPlayer={openPlayer} onGo={go}/>;
+  else if(route==='highlights')content=<P.HighlightsPage games={games} favs={favs} booting={booting} onGame={openGame} onTeam={openTeam} onPlayer={openPlayer} onGo={go}/>;
   else if(route==='news')content=<P.NewsPage favs={favs} onTeam={openTeam} onGame={openGame} onPlayer={openPlayer} onGo={go}/>;
   else if(route==='standings')content=<P.StandingsPage onTeam={openTeam}/>;
   else if(route==='teams')content=<P.TeamsPage onTeam={openTeam}/>;
