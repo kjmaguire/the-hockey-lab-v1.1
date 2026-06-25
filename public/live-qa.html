@@ -192,7 +192,7 @@
         var d=await NHL.edgeDebug(ctx.skaterId,'skater');
         if(!d||!d.ok) return {status:'fail',note:'endpoint unreachable / empty'};
         var rec=d.recognized||[], raw=d.topLevelKeys||[];
-        var st = rec.length>=3 ? 'pass' : (rec.length>0?'partial':'fail');
+        var st = (rec.indexOf('speed')>=0&&rec.indexOf('zones')>=0) ? 'pass' : (rec.length>0?'partial':'fail');
         return {status:st, note:'recognized '+rec.length+' / '+raw.length+' raw keys',
           keys:'<b>mapped:</b> '+(rec.join(', ')||'—')+'<br/><b>raw keys:</b> '+(raw.slice(0,40).join(', ')||'—')+'<br/><b>shape:</b> '+(d.shape?JSON.stringify(d.shape).replace(/</g,'&lt;').slice(0,1600):'—')}; } },
      { name:'EDGE goalie · edgeDebug', call:"NHL.edgeDebug(goalieId,'goalie')", run: async function(){
@@ -200,7 +200,7 @@
         var d=await NHL.edgeDebug(ctx.goalieId,'goalie');
         if(!d||!d.ok) return {status:'fail',note:'endpoint unreachable / empty'};
         var rec=d.recognized||[], raw=d.topLevelKeys||[];
-        var st = rec.length>=2 ? 'pass' : (rec.length>0?'partial':'fail');
+        var st = (rec.indexOf('saveQ')>=0) ? 'pass' : (rec.length>0?'partial':'fail');
         return {status:st, note:'recognized '+rec.length+' / '+raw.length+' raw keys',
           keys:'<b>mapped:</b> '+(rec.join(', ')||'—')+'<br/><b>raw keys:</b> '+(raw.slice(0,40).join(', ')||'—')+'<br/><b>shape:</b> '+(d.shape?JSON.stringify(d.shape).replace(/</g,'&lt;').slice(0,1600):'—')}; } },
      { name:'EDGE skater overlay → edgeSkaterMapped', call:'NHL.edgeSkaterMapped(skaterId)', run: async function(){
@@ -208,10 +208,16 @@
         var d=await NHL.edgeSkaterMapped(ctx.skaterId);
         if(d==null) return {status:'fail',note:'null overlay → page uses projection'};
         var a=assess(d,[['speed',d&&d.speed],['zones',d&&d.zones]]); a.note='overlay keys: '+Object.keys(d).join(', '); return a; } },
-     { name:'EDGE league board → edgeBoardLive', call:"NHL.edgeBoardLive('top')", run: async function(){
+     { name:'EDGE league board → edgeBoardLive', call:"NHL.edgeBoardLive('top') + raw probe", run: async function(){
+        var shapeOf=function(o,depth){ if(o==null||typeof o!=='object') return o; if(Array.isArray(o)) return o.length?('['+o.length+'] '+(typeof o[0]==='object'&&o[0]?'{'+Object.keys(o[0]).slice(0,14).join(',')+'}':typeof o[0])):'[]'; if(depth>=2) return '{'+Object.keys(o).slice(0,16).join(',')+'}'; var out={}; for(var k of Object.keys(o)) out[k]=shapeOf(o[k],depth+1); return out; };
         var d=await NHL.edgeBoardLive('top');
-        if(d==null) return {status:'fail',note:'null → leaderboard uses projection'};
-        var a=assess(d&&d[0]||null,[['rows',d],['name',d&&d[0]&&d[0].name],['team',d&&d[0]&&d[0].team]]); a.note=(d?d.length:0)+' rows'; return a; } },
+        var ssn=(window.NHL&&NHL._season)||'';
+        var cands=['edge/skater-skating-speed-top-10/all/all','edge/skater-skating-speed-top-10/all/points','edge/skater-skating-speed-top-10/forward/all','edge/skater-skating-speed-top-10/all/all/'+ssn+'/2','edge/skater-skating-speed-top-10/all/points/'+ssn+'/2'];
+        var hit=null,shape=null;
+        for(var i=0;i<cands.length;i++){ try{ var r=await fetch('/api/nhl/'+cands[i],{headers:{accept:'application/json'}}); if(r.ok&&(r.headers.get('content-type')||'').indexOf('json')>=0){ var j=await r.json(); if(j&&!j.error){ hit=cands[i]; shape=shapeOf(j,0); break; } } }catch(e){} }
+        var st = d!=null ? 'pass' : (hit?'partial':'fail');
+        var note = d!=null ? ((d.length||0)+' rows mapped') : (hit ? ('raw OK — mapper needs this shape') : 'all candidate paths failed');
+        return {status:st, note:note, keys:(d==null&&hit)?('<b>working path:</b> '+hit+'<br/><b>shape:</b> '+JSON.stringify(shape).replace(/</g,'&lt;').slice(0,1500)):''}; } },
    ]},
    { title:'Season switch (non-mutating)', desc:'Historical season pull used by the season dropdown. Does not change app state.', specs:[
      { name:'Past-season standings', call:"NHL.standingsForSeason('20222023')", run: async function(){
