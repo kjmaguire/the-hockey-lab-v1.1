@@ -184,6 +184,45 @@ let _cacheDb: D1Like | null = null;
 /** Wire the request's D1 binding (env.DB) into the cache layer. Safe to pass undefined. */
 export function setCacheDb(db: any): void { _cacheDb = db || null; }
 
+// --- Global KV layer ------------------------------------------------------------
+// Unlike the Cache API (per-colo) and D1 (one fetch, but still a network hop), a KV
+// namespace is globally replicated and read-optimized, so a cold edge anywhere serves
+// real warm data instead of the client's demo fallback. We mirror the durable set into
+// KV and keep a global "last-known-good" copy that survives an upstream outage worldwide.
+type KvLike = { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: any) => Promise<void> };
+let _cacheKv: KvLike | null = null;
+/** Wire a globally-replicated KV namespace (env.CACHE_KV). Safe to pass undefined. */
+export function setCacheKv(kv: any): void { _cacheKv = kv || null; }
+
+// --- Analytics Engine: per-upstream cache-tier metric --------------------------
+// One data point per resolved request: which tier served it (edge / d1 / kv / origin /
+// fallback), the endpoint, and latency. Lets us see cache-hit rate + slow/failing
+// endpoints in the dashboard. No-ops gracefully when the binding is absent.
+let _metrics: any = null;
+export function setMetrics(m: any): void { _metrics = m || null; }
+function recordMetric(source: string, url: string, ms: number): void {
+  if (!_metrics) return;
+  try {
+    const path = url.replace(/^https?:\/\/[^/]+\//, '').split('?')[0].split('/').slice(0, 3).join('/');
+    _metrics.writeDataPoint({ blobs: [source, path], doubles: [ms, source === 'origin' ? 1 : 0], indexes: [source] });
+  } catch { /* best-effort */ }
+}
+const KV_FB_TTL = 7 * 24 * 3600; // global last-known-good kept a week
+async function kvGet(url: string, kind: 'c' | 'f'): Promise<unknown | undefined> {
+  if (!_cacheKv) return undefined;
+  try { const v = await _cacheKv.get(kind + ':' + url); return v == null ? undefined : JSON.parse(v); } catch { return undefined; }
+}
+/** Write-if-changed: KV has a modest daily write quota, so read the current value first
+ *  and skip the write when the body is identical (KV reads are far cheaper than writes). */
+export async function kvPut(url: string, body: string, ttl: number, kind: 'c' | 'f' = 'c'): Promise<void> {
+  if (!_cacheKv) return;
+  try {
+    const cur = await _cacheKv.get(kind + ':' + url);
+    if (cur === body) return;
+    await _cacheKv.put(kind + ':' + url, body, { expirationTtl: Math.max(60, kind === 'f' ? KV_FB_TTL : ttl) });
+  } catch { /* best-effort */ }
+}
+
 /** Only immutable-ish URLs (long/day TTL) are worth persisting durably. */
 function isDurable(url: string): boolean { return ttlFor(url) >= TTL.long; }
 
@@ -213,6 +252,7 @@ async function d1Put(url: string, body: string, ttl: number): Promise<void> {
  * immutable endpoints a durable D1 copy (when bound) backs the per-colo edge cache.
  */
 export async function fetchUpstream(url: string): Promise<unknown> {
+  const _t0 = Date.now();
   const cache = (caches as unknown as { default: Cache }).default;
   const cacheKey = new Request(url, { method: 'GET' });
   // Long-lived "last-known-good" copy under a sibling key, served only when the
@@ -220,11 +260,14 @@ export async function fetchUpstream(url: string): Promise<unknown> {
   const fallbackKey = new Request(url + (url.includes('?') ? '&' : '?') + '__fb=1', { method: 'GET' });
   const serveFallback = async (): Promise<unknown | undefined> => {
     const fb = await cache.match(fallbackKey);
-    return fb ? fb.json() : undefined;
+    if (fb) return fb.json();
+    // Per-colo fallback missed (cold edge) → try the GLOBAL last-known-good in KV.
+    return kvGet(url, 'f');
   };
 
   const hit = await cache.match(cacheKey);
   if (hit) {
+    recordMetric('edge', url, Date.now() - _t0);
     return hit.json();
   }
 
@@ -241,7 +284,25 @@ export async function fetchUpstream(url: string): Promise<unknown> {
           headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': `public, max-age=${ttlFor(url, d1)}` },
         }));
       } catch { /* best-effort */ }
+      recordMetric('d1', url, Date.now() - _t0);
       return d1;
+    }
+  }
+  // Global KV warm copy — covers the durable (long+) set AND the medium tier that gets
+  // mirrored to KV (standings, leaders, rosters, club-stats, player landing). A cold colo
+  // serves the globally-shared warm body instead of cold-fetching upstream, which also
+  // spreads load off the NHL API. Live/slate/pre data is never written to KV (the write
+  // gate is ttl ≥ medium), so kvGet misses for those → they always fetch fresh below.
+  {
+    const kv = await kvGet(url, 'c');
+    if (kv !== undefined) {
+      try {
+        await cache.put(cacheKey, new Response(JSON.stringify(kv), {
+          headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': `public, max-age=${ttlFor(url, kv)}` },
+        }));
+      } catch { /* best-effort */ }
+      recordMetric('kv', url, Date.now() - _t0);
+      return kv;
     }
   }
 
@@ -298,6 +359,11 @@ export async function fetchUpstream(url: string): Promise<unknown> {
   }));
   // Persist immutable payloads durably (D1) so other colos / later cold edges hit it.
   if (durable) { await d1Put(url, body, ttl); }
+  // Mirror durable payloads + a global last-known-good into KV (write-if-changed, so a
+  // rarely-changing endpoint costs ~no writes). Gated to refined ttl ≥ medium so live /
+  // slate data never churns the KV quota.
+  if (ttl >= TTL.medium) { await kvPut(url, body, ttl, 'c'); await kvPut(url, body, ttl, 'f'); }
+  recordMetric('origin', url, Date.now() - _t0);
   return parsed;
 }
 
@@ -559,7 +625,11 @@ export async function resolveCurrentSeason(): Promise<string> {
     const data: any = await fetchUpstream(`${API_BASE}/season`);
     const ids = (Array.isArray(data) ? data : (data && data.seasons) || [])
       .map((v: any) => Number(v)).filter((n: number) => n >= 19000000 && n <= 21000000);
-    const id = ids.length ? String(Math.max(...ids)) : currentSeason();
+    // The /season list adds the UPCOMING season id months before it has any games or
+    // rosters. Taking the raw max would, in the offseason gap, resolve to that empty
+    // season → sparse rosters / empty leaders. Cap at the calendar heuristic so we never
+    // default to a season that hasn't started yet (no-op during an active season).
+    const id = ids.length ? String(Math.min(Math.max(...ids), Number(currentSeason()))) : currentSeason();
     _seasonMemo = { id, t: Date.now() };
     return id;
   } catch {

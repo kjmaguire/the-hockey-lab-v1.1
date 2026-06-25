@@ -80,6 +80,9 @@
   // BC.edgeLeaders/edgeBoard immediately (returns mock until live lands), then fills
   // BC._liveEB from ONE per-player tracking pass and re-renders. Idempotent.
   let _ebWrapped = false;
+  // Notify E_useLive overlays that live data has landed so any that mounted before
+  // hydration (and kept mock) re-attempt their fetch now instead of staying on demo.
+  const fireReady = () => { try { window.dispatchEvent(new Event('e-live-ready')); } catch (_) {} };
   function overlayEdgeBoard(onReady) {
     if (!(NHL && NHL.edgeBoardAll)) return;
     if (!_ebWrapped) {
@@ -152,7 +155,7 @@
       // real EDGE board overlay (skater speed/shot/distance/bursts/zone), built from
       // per-player tracking — replaces the projection in D.edgeLeaders/D.edgeBoard for
       // the analytics-desk cards AND the IQ leaderboard once it lands (non-blocking).
-      try { overlayEdgeBoard(onReady); } catch (_) {}
+      try { overlayEdgeBoard(() => { fireReady(); onReady && onReady(); }); } catch (_) {}
     }
     // Mark every offset we hear back on as fetched — even an empty slate — so the
     // board shows the real "no games" state instead of mock's fabricated games.
@@ -169,6 +172,7 @@
     }
 
     if (changed && typeof onReady === 'function') onReady();
+    if (changed) fireReady();
     return BC.LIVE;
   }
 
@@ -223,6 +227,7 @@
       try { if (BC.resetDerived) BC.resetDerived(); } catch (_) {}
       try { overlayEdgeBoard(onReady); } catch (_) {}
       onReady && onReady();
+      fireReady();
     } catch (_) { onReady && onReady(); }
   };
 })();

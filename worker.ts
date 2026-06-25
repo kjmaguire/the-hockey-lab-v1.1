@@ -21,6 +21,8 @@ import {
   rateLimit,
   sanitizeRest,
   setCacheDb,
+  setCacheKv,
+  setMetrics,
   SECURITY_HEADERS,
 } from './functions/api/nhl/_lib';
 
@@ -32,6 +34,11 @@ interface Env {
   ALLOWED_HOSTS?: string;
   // Optional D1 database for the durable L2 cache of immutable endpoints (see wrangler.toml).
   DB?: any;
+  // Optional globally-replicated KV namespace: a cross-colo warm cache + last-known-good
+  // so a cold edge serves real data instead of the client's demo (see wrangler.toml).
+  CACHE_KV?: any;
+  // Optional Analytics Engine dataset for cache-tier / latency metrics (see wrangler.toml).
+  nhl_proxy_metrics?: any;
 }
 
 // Content-Security-Policy for the HTML app. `strict` (Babel-free) is used when we
@@ -57,7 +64,11 @@ function cspFor(strict: boolean): string {
 function withAppHeaders(resp: Response, strict = false): Response {
   const h = new Headers(resp.headers);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) h.set(k, v);
-  if ((h.get('content-type') || '').includes('text/html')) h.set('content-security-policy', cspFor(strict));
+  if ((h.get('content-type') || '').includes('text/html')) {
+    h.set('content-security-policy', cspFor(strict));
+    // RFC 8288 agent-discovery hints: advertise the public read API catalog + the docs.
+    h.set('link', '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", </learn>; rel="service-doc"');
+  }
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }
 
@@ -378,6 +389,16 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     setCacheDb(env.DB); // wire the durable L2 cache (no-op unless a D1 DB is bound)
+    setCacheKv(env.CACHE_KV); // wire the global KV warm/fallback cache (no-op unless bound)
+    setMetrics(env.nhl_proxy_metrics); // wire cache-tier/latency metrics (no-op unless bound)
+
+    // Edge hygiene: short-circuit the common exploit-probe paths bots spray at every site
+    // (WordPress, env/secret files, VCS dirs, PHP shells). This app has none of them, so a
+    // flat 403 here cuts log noise and work before the asset layer — a code-side complement
+    // to the dashboard WAF managed rules. Method-agnostic; only matches obvious junk.
+    if (/(^|\/)(wp-(admin|login|content|includes)|xmlrpc\.php|phpmyadmin|\.env|\.git|\.aws|\.ssh|wp-config)/i.test(url.pathname)) {
+      return new Response('Not found.', { status: 403, headers: { 'cache-control': 'no-store', ...SECURITY_HEADERS } });
+    }
 
     // API routes → live NHL proxy
     if (url.pathname === '/api/nhl' || url.pathname.startsWith('/api/nhl/')) {
@@ -438,6 +459,20 @@ export default {
       const posts = [...reddit, ...news];
       if (debug) return json({ sub, redditCount: reddit.length, newsCount: news.length, total: posts.length }, 200, 5);
       return json({ posts }, 200, 600);
+    }
+
+    // RFC 9727 API catalog: a machine-readable index of the public read API so agents can
+    // discover it (the live NHL proxy), its health endpoint, and the docs. No auth advertised
+    // because the API is public + read-only.
+    if (url.pathname === '/.well-known/api-catalog') {
+      const o = url.origin;
+      const body = JSON.stringify({ linkset: [{
+        anchor: `${o}/api/nhl/`,
+        'service-doc': [{ href: `${o}/learn` }],
+        status: [{ href: `${o}/api-health.html` }],
+        author: [{ href: `${o}/` }],
+      }] });
+      return new Response(body, { headers: { 'content-type': 'application/linkset+json', 'cache-control': 'public, max-age=86400', ...SECURITY_HEADERS } });
     }
 
     if (url.pathname === '/robots.txt') {
@@ -512,5 +547,19 @@ export default {
     }
 
     return withAppHeaders(resp, servedProd);
+  },
+
+  // Cron warming (see [triggers] in wrangler.toml): pre-fetch the hot endpoints on a
+  // schedule so the per-colo cache, D1, and global KV are already warm when a real user
+  // arrives — they hit cached real data instead of triggering a cold upstream fetch (or
+  // falling back to demo). Each fetchUpstream writes Cache + D1 + KV as configured.
+  async scheduled(_event: any, env: Env, ctx: any): Promise<void> {
+    setCacheDb(env.DB);
+    setCacheKv(env.CACHE_KV);
+    setMetrics(env.nhl_proxy_metrics);
+    const HOT = ['standings', 'scoreboard/now', 'skater-leaders', 'goalie-leaders', 'spotlight', 'partner-odds/US'];
+    const warm = Promise.all(HOT.map((p) =>
+      handleNhl(new URL('https://warm.thehockeylab.invalid/api/nhl/' + p)).catch(() => undefined)));
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(warm); else await warm;
   },
 };

@@ -13,11 +13,19 @@ window.E_useLive = function(mock, fetchLive, deps){
   // (e.g. a skater's edge while now rendering a goalie). The effect then syncs val.
   const dprev = depRef.current, dnow = deps||[];
   const depsChanged = !dprev || dprev.length!==dnow.length || dnow.some((d,i)=>d!==dprev[i]);
-  React.useEffect(()=>{ depRef.current = deps; let alive=true; setVal(mock);
-    if(window.NHL && window.BC && window.BC.LIVE && typeof fetchLive==='function'){
-      Promise.resolve().then(fetchLive).then(live=>{ if(alive && live) setVal(live); }).catch(()=>{});
-    }
-    return ()=>{ alive=false; };
+  React.useEffect(()=>{ depRef.current = deps; let alive=true; let got=false; setVal(mock);
+    const runLive=()=>{
+      if(!alive || got) return;
+      if(window.NHL && window.BC && window.BC.LIVE && typeof fetchLive==='function'){
+        Promise.resolve().then(fetchLive).then(live=>{ if(alive && live){ got=true; setVal(live); } }).catch(()=>{});
+      }
+    };
+    runLive();
+    // If this component mounted BEFORE live hydration finished, the first attempt
+    // saw BC.LIVE=false and kept mock. Re-attempt when hydration lands (and on any
+    // later season re-hydrate) so the view never stays stuck on demo data.
+    window.addEventListener('e-live-ready', runLive);
+    return ()=>{ alive=false; window.removeEventListener('e-live-ready', runLive); };
   // eslint-disable-next-line
   }, deps);
   return depsChanged ? mock : val;
@@ -257,7 +265,11 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const prosMock=uM(()=>D.prospects(ab),[ab]);
   // overlay real club prospects when deployed
   const pros=window.E_useLive(prosMock,()=>window.NHL.prospectsMapped(ab),[ab]);
-  const fwd=roster.filter(p=>p.pos!=='D'&&p.pos!=='G'),def=roster.filter(p=>p.pos==='D');const tg=D.goalies.filter(g=>g.team===ab);
+  const fwd=roster.filter(p=>p.pos!=='D'&&p.pos!=='G'),def=roster.filter(p=>p.pos==='D');
+  // goalies from the actual roster overlay (includes backups not in the leaders pool),
+  // with season stats merged from the goalie pool; fall back to the pool in preview/mock.
+  const rg=roster.filter(p=>p._isGoalie||p.pos==='G');
+  const tg=rg.length?rg.map(g=>({...(D.goalies.find(x=>String(x.id)===String(g.id))||{}),...g,pos:'G'})):D.goalies.filter(g=>g.team===ab);
   const Stat=({l,v})=><div style={{...card,padding:'15px 16px'}}><div style={ML}>{l}</div><div style={{fontSize:26,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
   const RT=({title,rows,cols})=>rows.length?<div style={{marginBottom:18}}><div style={{...ML,marginBottom:8}}>{title}</div><div style={{...card,overflow:'hidden'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}><th style={{padding:'9px 14px',textAlign:'left',fontWeight:600,...ML}}>Player</th>{cols.map(([h])=><th key={h} style={{padding:'9px',textAlign:'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead><tbody>{rows.map(p=><tr key={p.id} onClick={()=>onPlayer(p)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontWeight:500}}>{p.name} <span style={{color:T.faint,fontFamily:MONO,fontSize:11}}>#{p.num}</span></td>{cols.map(([h,k])=><td key={h} style={{textAlign:'center',color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{k==='pm'?(p[k]>=0?'+':'')+p[k]:p[k]}</td>)}</tr>)}</tbody></table></div></div>:null;
   const SC=[['Pos','pos'],['GP','gp'],['G','g'],['A','a'],['P','p'],['+/-','pm']],GC=[['GP','gp'],['W','w'],['L','l'],['SV%','svp'],['GAA','gaa']];
