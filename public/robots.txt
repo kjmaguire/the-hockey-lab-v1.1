@@ -3,6 +3,7 @@ Allow: /
 Disallow: /api/
 Disallow: /mappers-test.html
 Disallow: /api-health.html
+Disallow: /live-qa.html
 
 # The Workers deploy (worker.ts) serves a dynamic robots.txt with an absolute
 # Sitemap: <origin>/sitemap.xml line. This static copy is the Pages fallback.

@@ -340,7 +340,7 @@ export default {
     // so they override any committed fallback copy. Diagnostics pages are disallowed.
     if (url.pathname === '/robots.txt') {
       const body =
-        `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /mappers-test.html\nDisallow: /api-health.html\n\nSitemap: ${url.origin}/sitemap.xml\n`;
+        `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /mappers-test.html\nDisallow: /api-health.html\nDisallow: /live-qa.html\n\nSitemap: ${url.origin}/sitemap.xml\n`;
       return new Response(body, {
         headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400', ...SECURITY_HEADERS },
       });
