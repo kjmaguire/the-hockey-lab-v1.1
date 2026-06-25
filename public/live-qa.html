@@ -212,7 +212,7 @@
         var shapeOf=function(o,depth){ if(o==null||typeof o!=='object') return o; if(Array.isArray(o)) return o.length?('['+o.length+'] '+(typeof o[0]==='object'&&o[0]?'{'+Object.keys(o[0]).slice(0,14).join(',')+'}':typeof o[0])):'[]'; if(depth>=2) return '{'+Object.keys(o).slice(0,16).join(',')+'}'; var out={}; for(var k of Object.keys(o)) out[k]=shapeOf(o[k],depth+1); return out; };
         var d=await NHL.edgeBoardLive('top');
         var ssn=(window.NHL&&NHL._season)||'';
-        var cands=['edge/skater-skating-speed-top-10/all/all','edge/skater-skating-speed-top-10/all/points','edge/skater-skating-speed-top-10/forward/all','edge/skater-skating-speed-top-10/all/all/'+ssn+'/2','edge/skater-skating-speed-top-10/all/points/'+ssn+'/2'];
+        var cands=['edge/skater-landing','edge/skater-landing/'+ssn+'/2','edge/goalie-landing','edge/skater-skating-speed-top-10/all/all/'+ssn+'/2','edge/skater-shot-speed-top-10/all/all/'+ssn+'/2'];
         var hit=null,shape=null;
         for(var i=0;i<cands.length;i++){ try{ var r=await fetch('/api/nhl/'+cands[i],{headers:{accept:'application/json'}}); if(r.ok&&(r.headers.get('content-type')||'').indexOf('json')>=0){ var j=await r.json(); if(j&&!j.error){ hit=cands[i]; shape=shapeOf(j,0); break; } } }catch(e){} }
         var st = d!=null ? 'pass' : (hit?'partial':'fail');
