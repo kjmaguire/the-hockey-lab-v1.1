@@ -361,31 +361,55 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
 /* ---------- PLAYERS ---------- */
 function PlayersPage({onPlayer}){
   const teams=uM(()=>[...D.ABBR].sort((a,b)=>ct(a).localeCompare(ct(b))),[]);
-  const [team,setTeam]=uS(teams[0]); const [filter,setFilter]=uS('All'); const [q,setQ]=uS('');
-  const ql=q.toLowerCase();
-  // pull the real full roster for the selected team when deployed
-  const liveRoster=window.E_useLive(D.teamRoster(team),()=>new Promise(res=>{window.BC.ensureRoster(team,()=>res(window.BC.teamRoster(team)));}),[team]);
-  const roster=liveRoster.filter(p=>p.name.toLowerCase().includes(ql));
-  const fwd=roster.filter(p=>p.pos!=='D'&&p.pos!=='G'), def=roster.filter(p=>p.pos==='D');
-  const goalies=D.goalies.filter(g=>g.team===team&&g.name.toLowerCase().includes(ql)).map(g=>({...g,type:'goalie',pos:'G'}));
-  const PC=({p})=>(<div onClick={()=>onPlayer(p)} className="ec" style={{...card,padding:'13px 15px',cursor:'pointer'}}>
-    <div style={{display:'flex',alignItems:'center',gap:13}}><PlayerAvatar pos={p.pos} team={p.team} name={p.name} size={42}/>
-      <div style={{flex:1}}><div style={{fontWeight:600,color:T.ink}}>{p.name}</div><div style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{p.num?`#${p.num} · `:''}{p.pos}</div></div></div>
-    <div style={{display:'flex',gap:16,marginTop:11,fontFamily:MONO,fontSize:12,color:T.mut}}>
-      {p.type==='goalie'?<><span><b style={{color:T.ink}}>{p.svp}</b> SV%</span><span>{p.gaa} GAA</span><span>{p.w}-{p.l}</span><span>{p.gp} GP</span></>
-        :<><span><b style={{color:T.ink}}>{p.p}</b> P</span><span>{p.g} G</span><span>{p.a} A</span><span>{p.gp} GP</span></>}</div>
-  </div>);
-  const Grp=({label,list})=>list.length?(<div style={{marginBottom:20}}><div style={{...ML,marginBottom:11}}>{label} · {list.length}</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(228px,1fr))',gap:12}}>{list.map(p=><PC key={p.id} p={p}/>)}</div></div>):null;
+  const [scope,setScope]=uS('Skaters');
+  const [team,setTeam]=uS('all');
+  const [pos,setPos]=uS('All');
+  const [q,setQ]=uS('');
+  const [sortK,setSortK]=uS('name');
+  const [sortDir,setSortDir]=uS('asc');
+  const [showAll,setShowAll]=uS(false);
+  const ql=q.trim().toLowerCase();
+  const isG=scope==='Goalies';
+  // league-wide pool (globally hydrated to real skater/goalie data on deploy). Computed
+  // fresh each render so it always reflects the latest live swap.
+  const base=isG?(D.goalies||[]).map(g=>({...g,type:'goalie',pos:'G'})):(D.allPlayers||[]);
+  const val=(p,k)=>k==='name'?p.name.toLowerCase():k==='team'?ct(p.team):k==='pos'?(p.pos||''):k==='svp'?(parseFloat(p.svp)||0):k==='gaa'?(parseFloat(p.gaa)||0):(+p[k]||0);
+  const dir=sortDir==='asc'?1:-1;
+  const rows=base.filter(p=>p&&p.name)
+    .filter(p=>team==='all'||p.team===team)
+    .filter(p=>isG||pos==='All'||(pos==='F'?(p.pos!=='D'&&p.pos!=='G'):p.pos===pos))
+    .filter(p=>!ql||p.name.toLowerCase().includes(ql))
+    .sort((a,b)=>{const x=val(a,sortK),y=val(b,sortK);if(x<y)return -dir;if(x>y)return dir;return a.name.localeCompare(b.name);});
+  const cols=isG?[['Player','name','l'],['Team','team','l'],['GP','gp'],['W','w'],['L','l'],['SV%','svp'],['GAA','gaa'],['SO','so']]
+                :[['Player','name','l'],['Team','team','l'],['Pos','pos'],['GP','gp'],['G','g'],['A','a'],['P','p'],['+/-','pm']];
+  const sortBy=k=>{if(sortK===k){setSortDir(d=>d==='asc'?'desc':'asc');}else{setSortK(k);setSortDir((k==='name'||k==='team'||k==='pos'||k==='gaa')?'asc':'desc');}};
+  const disp=(p,k)=>k==='pm'?((p.pm>0?'+':'')+(p.pm||0)):k==='svp'?p.svp:k==='gaa'?p.gaa:(p[k]!=null?p[k]:'—');
+  const CAP=200; const shown=showAll?rows:rows.slice(0,CAP);
+  const sel={fontFamily:'inherit',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'8px 12px',color:T.ink,fontSize:13};
   return(<div>
-    <PageHead k="Players" t="Roster" serif="explorer"/>
-    <div style={{...card,padding:16,marginBottom:20,display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}}>
-      <select value={team} onChange={e=>setTeam(e.target.value)} style={{fontFamily:'inherit',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'8px 12px',color:T.ink,fontSize:13}}>{teams.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search roster" style={{fontFamily:'inherit',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'8px 12px',color:T.ink,fontSize:13,outline:'none',flex:1,minWidth:150}}/>
-      {['All','Forwards','Defensemen','Goalies'].map(f=><Pill key={f} on={filter===f} onClick={()=>setFilter(f)}>{f}</Pill>)}
+    <PageHead k="Players" t="Player" serif="directory"/>
+    <div style={{...card,padding:14,marginBottom:18,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+      <div style={{display:'flex',gap:6}}>{['Skaters','Goalies'].map(s=><Pill key={s} on={scope===s} onClick={()=>{setScope(s);setPos('All');setSortK('name');setSortDir('asc');setShowAll(false);}}>{s}</Pill>)}</div>
+      <select value={team} onChange={e=>{setTeam(e.target.value);setShowAll(false);}} style={sel}><option value="all">All teams</option>{teams.map(a=><option key={a} value={a}>{ct(a)} {nk(a)}</option>)}</select>
+      {!isG&&<div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['All','F','C','LW','RW','D'].map(pp=><Pill key={pp} on={pos===pp} onClick={()=>{setPos(pp);setShowAll(false);}}>{pp==='F'?'Forwards':pp==='D'?'Defense':pp}</Pill>)}</div>}
+      <input value={q} onChange={e=>{setQ(e.target.value);setShowAll(false);}} placeholder="Search players" style={{...sel,flex:1,minWidth:160,outline:'none'}}/>
     </div>
-    {(filter==='All'||filter==='Forwards')&&<Grp label="Forwards" list={fwd}/>}
-    {(filter==='All'||filter==='Defensemen')&&<Grp label="Defensemen" list={def}/>}
-    {(filter==='All'||filter==='Goalies')&&<Grp label="Goalies" list={goalies}/>}
+    <div style={{...card,overflow:'hidden'}}>
+      <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}><span style={ML}>{rows.length} {isG?'goalies':'skaters'}{team!=='all'?` · ${ct(team)} ${nk(team)}`:''}</span><span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>tap a column to sort · tap a row for detail</span></div>
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:620,borderCollapse:'collapse',fontSize:13.5}}>
+        <thead><tr><th style={{padding:'10px 10px',textAlign:'left',width:34,...ML}}>#</th>{cols.map(([h,k,al])=><th key={h} onClick={()=>sortBy(k)} style={{padding:'10px 10px',textAlign:al==='l'?'left':'center',fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',color:sortK===k?T.ink:undefined,...ML}}>{h}{sortK===k?(sortDir==='asc'?' ↑':' ↓'):''}</th>)}</tr></thead>
+        <tbody>{shown.map((p,i)=><tr key={p.id||(p.name+i)} onClick={()=>onPlayer(p)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}>
+          <td style={{padding:'9px 10px',fontFamily:MONO,fontSize:11,color:T.faint}}>{i+1}</td>
+          {cols.map(([h,k])=>{
+            if(k==='name')return(<td key={h} style={{padding:'8px 10px'}}><span style={{display:'inline-flex',alignItems:'center',gap:9,minWidth:0}}><PlayerAvatar pos={p.pos} team={p.team} name={p.name} size={26}/><span style={{fontWeight:600,color:T.ink,whiteSpace:'nowrap'}}>{p.name}</span>{p.num?<span style={{fontFamily:MONO,fontSize:10.5,color:T.faint}}>#{p.num}</span>:null}</span></td>);
+            if(k==='team')return(<td key={h} style={{padding:'8px 10px'}}><span style={{display:'inline-flex',alignItems:'center',gap:7}}><Badge ab={p.team} size={18}/><span style={{color:T.mut,fontFamily:MONO,fontSize:12}}>{p.team}</span></span></td>);
+            return(<td key={h} style={{padding:'8px 10px',textAlign:'center',fontFamily:MONO,color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{disp(p,k)}</td>);
+          })}
+        </tr>)}</tbody>
+      </table></div>
+      {rows.length>CAP&&!showAll&&<div style={{padding:'12px 16px',borderTop:`1px solid ${T.line}`,textAlign:'center'}}><button onClick={()=>setShowAll(true)} className="el" style={{fontFamily:MONO,fontSize:12,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:8,padding:'7px 14px',color:T.ink,cursor:'pointer'}}>Show all {rows.length}</button></div>}
+      {rows.length===0&&<div style={{padding:'24px 16px',textAlign:'center',fontFamily:MONO,fontSize:12,color:T.faint}}>No players match these filters.</div>}
+    </div>
   </div>);
 }
 

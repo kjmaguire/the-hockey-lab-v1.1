@@ -7,8 +7,11 @@
  * What it does:
  *  1. Reads public/app.html and finds every <script type="text/babel" src="…​.jsx">.
  *  2. Compiles each referenced .jsx → a sibling .compiled.js with esbuild
- *     (JSX → React.createElement, minified). No bundling: the modules keep
- *     sharing one global script scope exactly as they do under runtime Babel.
+ *     (JSX → React.createElement, minified), then wraps each module in an
+ *     IIFE. The wrap is REQUIRED: the modules share top-level names (T, card,
+ *     Badge, Spark, …) that collide as global `const`s once Babel's per-script
+ *     isolation is gone. They communicate via window.* (E_TOK/E_UI/E_PAGES/BC),
+ *     so function-scoping each module is safe and prevents the collision.
  *  3. Writes public/app.prod.html — identical to app.html but with the Babel
  *     CDN <script> dropped and each .jsx swapped for its .compiled.js, and
  *     React/ReactDOM switched to their production builds.
@@ -45,7 +48,9 @@ while ((m = RE.exec(html)) !== null) {
     legalComments: 'none',
   });
   const outRel = rel.replace(/\.jsx$/, '.compiled.js');
-  await writeFile(path.join(PUB, outRel), res.code, 'utf8');
+  // Wrap in an IIFE so the modules' shared top-level names don't collide in the
+  // single global script scope (see header note). They wire up through window.*.
+  await writeFile(path.join(PUB, outRel), `(function(){\n${res.code}\n})();\n`, 'utf8');
   compiled.push(outRel);
 }
 

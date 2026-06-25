@@ -4,6 +4,22 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>The Hockey Lab</title>
+<meta name="description" content="The Hockey Lab — an independent editorial NHL analytics app: live scores, standings, advanced stats, NHL Edge player &amp; puck tracking, playoffs, the draft board and the all-time record book."/>
+<meta name="theme-color" content="#f5f4f0" media="(prefers-color-scheme: light)"/>
+<meta name="theme-color" content="#141519" media="(prefers-color-scheme: dark)"/>
+<link rel="icon" href="favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png"/>
+<link rel="icon" type="image/png" sizes="64x64" href="favicon-64x64.png"/>
+<link rel="apple-touch-icon" href="favicon-256x256.png"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="The Hockey Lab"/>
+<meta property="og:title" content="The Hockey Lab — editorial NHL analytics"/>
+<meta property="og:description" content="Live NHL scores, standings, advanced stats, Edge tracking, playoffs, draft and records — in one editorial analytics app."/>
+<meta property="og:image" content="favicon-256x256.png"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="The Hockey Lab — editorial NHL analytics"/>
+<meta name="twitter:description" content="Live NHL scores, standings, advanced stats, Edge tracking, playoffs, draft and records — in one editorial analytics app."/>
+<meta name="twitter:image" content="favicon-256x256.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet"/>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
@@ -66,25 +82,82 @@
     main{padding-left:16px!important;padding-right:16px!important;padding-top:20px!important;}
     h1{font-size:28px!important;}
     .g2{grid-template-columns:1fr!important;}
+    /* comfortable touch targets for the header icon buttons */
     header button{min-height:42px;min-width:42px;}
   }
   @media(max-width:400px){
     h1{font-size:24px!important;}
   }
 </style>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"The Hockey Lab","alternateName":"Hockey Lab","description":"Independent editorial NHL analytics — live scores, standings, advanced stats, NHL Edge player and puck tracking, playoffs, the draft board and the all-time record book.","inLanguage":"en-US"},{"@type":"Organization","name":"The Hockey Lab","description":"An independent editorial NHL analytics app. Not affiliated with the NHL.","logo":"favicon-256x256.png"}]}</script>
 </head>
 <body>
 <a href="#main" class="skip-link">Skip to content</a>
 <div id="root"></div>
-<script>window.__V='20260602k';</script>
-<script src="redesign/broadcast-data.js?v=20260602k"></script>
-<script src="redesign/editorial-ext.js?v=20260602k"></script>
-<script src="redesign/nhl-client.js?v=20260602k"></script>
-<script src="redesign/editorial-live.js?v=20260602k"></script>
-<script src="redesign/editorial-analytics.js?v=20260602k"></script>
-<script src="redesign/editorial-pages.compiled.js?v=20260602k"></script>
-<script src="redesign/shot-map.compiled.js?v=20260602k"></script>
-<script src="redesign/editorial-news.compiled.js?v=20260602k"></script>
-<script src="redesign/editorial-app.compiled.js?v=20260602k"></script>
+<script>window.__V='20260602m';</script>
+<script src="redesign/broadcast-data.js?v=20260602m"></script>
+<script src="redesign/editorial-ext.js?v=20260602m"></script>
+<script src="redesign/nhl-client.js?v=20260602m"></script>
+<script src="redesign/editorial-live.js?v=20260602m"></script>
+<script src="redesign/editorial-analytics.js?v=20260602m"></script>
+<script src="redesign/editorial-pages.compiled.js?v=20260602m"></script>
+<script src="redesign/shot-map.compiled.js?v=20260602m"></script>
+<script src="redesign/editorial-news.compiled.js?v=20260602m"></script>
+<script src="redesign/editorial-app.compiled.js?v=20260602m"></script>
+<noscript>
+<div style="max-width:680px;margin:0 auto;padding:48px 24px;font-family:Geist,system-ui,sans-serif;color:#15161b">
+<h1 style="font-size:32px;letter-spacing:-.02em;margin:0 0 12px">The Hockey Lab</h1>
+<p style="font-size:16px;line-height:1.6;color:#444;margin:0 0 18px">An independent editorial NHL analytics app — live scores, standings, advanced stats, NHL Edge player &amp; puck tracking, playoffs, the draft board and the all-time record book. Please enable JavaScript to use the app.</p>
+<ul style="font-size:15px;line-height:1.9;color:#444;padding-left:20px">
+<li>Live scores &amp; game center</li>
+<li>League standings &amp; team pages</li>
+<li>Skater &amp; goalie leaders and advanced analytics</li>
+<li>Playoff bracket, draft board &amp; the record book</li>
+</ul>
+<p style="font-size:15px;line-height:1.6;color:#444;margin-top:14px"><a href="/learn" style="color:#c0392b;font-weight:600">Hockey analytics, explained →</a> — a plain-English glossary of expected goals, Corsi, high-danger chances and NHL Edge tracking.</p>
+</div>
+</noscript>
+<script>
+/* SEO: per-view title, meta description, canonical and social tags (SPA routes by hash). */
+(function(){
+  var BASE='The Hockey Lab', T=' — '+BASE;
+  var S={
+    highlights:['Highlights','Tonight’s NHL scoreboard, game of the night and the national-TV slate.'],
+    news:['News','The latest NHL headlines, trades and injury news.'],
+    scores:['Scores','Live NHL scores, game center and the full schedule.'],
+    standings:['Standings','Full NHL standings by division, conference and wild card.'],
+    teams:['Teams','All 32 NHL clubs — records, rosters and team pages.'],
+    players:['Players','NHL player directory, profiles and season statistics.'],
+    stats:['Stats','NHL skater and goalie leaders and advanced analytics.'],
+    iq:['Hockey IQ','NHL Edge analytics — skating speed, shot speed and zone time.'],
+    playoffs:['Playoffs','The Stanley Cup playoff bracket and series results.'],
+    draft:['Draft','NHL draft board, prospect rankings and pick order.'],
+    records:['Records','All-time NHL records, trophies and single-season marks.'],
+    legal:['About','About The Hockey Lab — an independent NHL analytics project.']
+  };
+  var DESC='An independent editorial NHL analytics app — live scores, standings, advanced stats, NHL Edge player & puck tracking, playoffs, draft and the record book.';
+  function team(ab){try{return window.BC&&BC.city?BC.city(ab)+' '+BC.nick(ab):ab;}catch(e){return ab;}}
+  function player(id){try{var P=(window.BC&&((BC.allPlayers||[]).concat(BC.goalies||[])))||[];var m=P.find(function(x){return String(x.id)===String(id);});return m?m.name:'Player';}catch(e){return 'Player';}}
+  function meta(n,v,prop){var s=prop?'meta[property="'+n+'"]':'meta[name="'+n+'"]',m=document.querySelector(s);if(!m){m=document.createElement('meta');m.setAttribute(prop?'property':'name',n);document.head.appendChild(m);}m.setAttribute('content',v);}
+  function apply(title,desc){
+    document.title=title;
+    meta('description',desc);meta('og:title',title,true);meta('og:description',desc,true);
+    meta('twitter:title',title);meta('twitter:description',desc);
+    try{var u=location.origin+'/';var l=document.querySelector('link[rel="canonical"]');if(!l){l=document.createElement('link');l.rel='canonical';document.head.appendChild(l);}l.href=u;meta('og:url',u,true);}catch(e){}
+  }
+  function upd(){
+    var h=(location.hash||'').replace(/^#/,'');
+    if(!h){apply(BASE+' — editorial NHL analytics',DESC);return;}
+    var a=h.split('/'),k=a[0],arg=a[1];
+    if(k==='team'&&arg){var t=team(arg);apply(t+T,t+' — NHL team page: record, roster, schedule, stats and shot zones.');return;}
+    if(k==='player'&&arg){var n=player(arg);apply(n+T,n+' — NHL player profile, season stats and NHL Edge tracking.');return;}
+    if(k==='game'){apply('Game center'+T,'NHL game center — live score, box score, play-by-play and Edge tracking.');return;}
+    var s=S[k];apply((s?s[0]:BASE)+T,s?s[1]:DESC);
+  }
+  window.addEventListener('hashchange',upd);
+  window.addEventListener('load',function(){setTimeout(upd,250);});
+  upd();
+})();
+</script>
 </body>
 </html>

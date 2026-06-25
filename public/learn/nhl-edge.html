@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>NHL Edge Tracking, Explained — Skating Speed, Shot Speed &amp; Distance | The Hockey Lab</title>
+<meta name="description" content="A guide to NHL Edge player and puck tracking: what skating speed, top speed, distance skated, shot speed, shift length and zone time measure — and how to read them during a live game."/>
+<meta name="robots" content="index,follow,max-image-preview:large"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet"/>
+<link rel="icon" href="../favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png"/>
+<link rel="apple-touch-icon" href="../favicon-256x256.png"/>
+<meta property="og:type" content="article"/>
+<meta property="og:site_name" content="The Hockey Lab"/>
+<meta property="og:title" content="NHL Edge Tracking, Explained"/>
+<meta property="og:description" content="Skating speed, shot speed, distance and shift data — how to read the NHL's player and puck tracking era."/>
+<meta property="og:image" content="../favicon-256x256.png"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="NHL Edge Tracking, Explained"/>
+<meta name="twitter:description" content="Skating speed, shot speed, distance and shift data — how to read the NHL's player and puck tracking era."/>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+{"@type":"Article","headline":"NHL Edge Tracking, Explained","description":"A guide to NHL Edge player and puck tracking: skating speed, top speed, distance skated, shot speed, shift length and zone time, and how to read them during a live game.","inLanguage":"en-US","author":{"@type":"Organization","name":"The Hockey Lab"},"publisher":{"@type":"Organization","name":"The Hockey Lab","logo":{"@type":"ImageObject","url":"../favicon-256x256.png"}}},
+{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"The Hockey Lab","item":"/"},{"@type":"ListItem","position":2,"name":"Learn","item":"/learn"},{"@type":"ListItem","position":3,"name":"NHL Edge tracking","item":"/learn/nhl-edge"}]},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"How fast do NHL players skate?","acceptedAnswer":{"@type":"Answer","text":"NHL Edge tracking regularly clocks top skating speeds above 22 mph, with the fastest skaters reaching roughly 24–25 mph on a burst. A '20+ mph burst' counter tracks how often a skater crosses that threshold in a game."}},
+{"@type":"Question","name":"How fast is an NHL shot?","acceptedAnswer":{"@type":"Answer","text":"Tracked shot speeds in NHL games commonly reach the 90s of miles per hour, with the hardest one-timers from elite shooters approaching and occasionally passing 100 mph. NHL Edge reports the speed the puck leaves the stick."}},
+{"@type":"Question","name":"What does NHL Edge measure?","acceptedAnswer":{"@type":"Answer","text":"NHL Edge captures skating speed and top speed, total distance skated, shot speed, shift length, time on ice and on-ice positioning using sensors in the puck and players' sweaters, sampled many times per second."}}
+]}
+]}</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  :root{--bg:#f5f4f0;--paper:#fffefb;--ink:#15161b;--mut:#5b5c64;--faint:#8a8b92;--line:#e6e4dd;--line2:#d8d6ce;--red:#c0392b;}
+  html{scroll-behavior:smooth;}
+  body{background:var(--bg);color:var(--ink);font-family:'Geist',system-ui,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.6;}
+  a{color:inherit;}
+  a:focus-visible,button:focus-visible{outline:2.5px solid var(--ink);outline-offset:2px;border-radius:4px;}
+  .skip-link{position:fixed;left:8px;top:-60px;z-index:50;background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;transition:top .15s;}
+  .skip-link:focus{top:8px;}
+  .mono{font-family:'Geist Mono',ui-monospace,monospace;}
+  header.site{position:sticky;top:0;z-index:20;background:rgba(245,244,240,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  header.site .in{max-width:920px;margin:0 auto;padding:0 24px;height:58px;display:flex;align-items:center;gap:14px;}
+  .logo{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:700;}
+  .logo .mark{width:28px;height:28px;border-radius:7px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+  header.site nav{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  header.site nav a{text-decoration:none;color:var(--mut);font-weight:600;font-size:13.5px;padding:7px 12px;border-radius:8px;}
+  header.site nav a:hover{color:var(--ink);background:#ece9e2;}
+  header.site nav a.cta{background:var(--ink);color:#fff;}
+  main{max-width:760px;margin:0 auto;padding:30px 24px 64px;}
+  .crumbs{font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--faint);margin-bottom:26px;}
+  .crumbs a{text-decoration:none;color:var(--mut);}
+  .crumbs a:hover{color:var(--red);}
+  .eyebrow{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--red);margin-bottom:14px;}
+  h1{font-size:44px;line-height:1.06;letter-spacing:-.03em;font-weight:600;margin-bottom:18px;}
+  h1 em{font-family:'Newsreader',Georgia,serif;font-style:italic;font-weight:500;}
+  .lede{font-size:19px;color:var(--mut);line-height:1.55;max-width:62ch;margin-bottom:34px;}
+  .lede a{color:var(--ink);text-decoration:underline;text-underline-offset:2px;}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 40px;}
+  .stats .c{background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:16px 16px;}
+  .stats .v{font-size:30px;font-weight:600;letter-spacing:-.02em;}
+  .stats .v small{font-size:14px;color:var(--mut);font-weight:500;}
+  .stats .l{font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:6px;}
+  section.term{padding:28px 0;border-top:1px solid var(--line);}
+  section.term h2{font-size:26px;letter-spacing:-.02em;font-weight:600;margin-bottom:6px;scroll-margin-top:74px;}
+  section.term .tag{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:14px;}
+  section.term p{font-size:16.5px;color:#33343a;margin-bottom:14px;}
+  section.term p strong{color:var(--ink);}
+  .callout{background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:10px;padding:14px 18px;margin:18px 0;font-size:15.5px;color:#33343a;}
+  .faq{margin-top:46px;padding-top:32px;border-top:2px solid var(--ink);}
+  .faq h2{font-size:29px;letter-spacing:-.02em;margin-bottom:18px;}
+  details{border-bottom:1px solid var(--line);padding:14px 0;}
+  details summary{font-weight:600;font-size:17px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:12px;}
+  details summary::-webkit-details-marker{display:none;}
+  details summary:after{content:'+';font-family:'Geist Mono',monospace;color:var(--red);font-size:20px;line-height:1;}
+  details[open] summary:after{content:'\2013';}
+  details p{margin-top:10px;color:#33343a;font-size:15.5px;}
+  .next{display:flex;flex-wrap:wrap;gap:14px;margin-top:44px;}
+  .next a{flex:1;min-width:230px;text-decoration:none;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px 20px;transition:border-color .15s,transform .15s;}
+  .next a:hover{border-color:var(--line2);transform:translateY(-2px);}
+  .next .k{font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--red);margin-bottom:7px;}
+  .next .t{font-size:18px;font-weight:600;letter-spacing:-.01em;margin-bottom:4px;}
+  .next .d{font-size:14px;color:var(--mut);}
+  footer.site{border-top:1px solid var(--line);}
+  footer.site .in{max-width:760px;margin:0 auto;padding:28px 24px 44px;color:var(--faint);font-family:'Geist Mono',monospace;font-size:11.5px;line-height:1.8;}
+  footer.site a{color:var(--mut);text-decoration:none;}
+  @media(max-width:620px){h1{font-size:33px;}.stats{grid-template-columns:1fr;}.lede{font-size:17px;}}
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<header class="site">
+  <div class="in">
+    <a href="/" class="logo"><span class="mark">H</span><span>The Hockey Lab</span></a>
+    <nav>
+      <a href="/learn">Learn</a>
+      <a href="/" class="cta">Open the app</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+  <div class="crumbs"><a href="/">Home</a> / <a href="/learn">Learn</a> / NHL Edge tracking</div>
+  <div class="eyebrow">The Lab · Guide</div>
+  <h1>NHL Edge tracking, <em>explained</em></h1>
+  <p class="lede">Sensors in the puck and in every player's sweater turned the live game into a stream of numbers. Here's what NHL Edge actually measures — skating speed, shot speed, distance and shift data — and how to read it. For the wider vocabulary, start with the <a href="/learn">analytics glossary</a>.</p>
+
+  <div class="stats">
+    <div class="c"><div class="v">24<small> mph</small></div><div class="l">elite top skating speed</div></div>
+    <div class="c"><div class="v">100<small> mph</small></div><div class="l">hardest tracked shots</div></div>
+    <div class="c"><div class="v">60×</div><div class="l">samples per second</div></div>
+  </div>
+
+  <section class="term">
+    <h2>Skating speed &amp; top speed</h2>
+    <div class="tag">Miles per hour · per shift, per game</div>
+    <p><strong>Skating speed</strong> is exactly what it sounds like — how fast a player is moving — sampled continuously. The headline number is <strong>top speed</strong>, the fastest a skater hit on a given shift or game. The league's quickest players touch roughly <strong>24–25 mph</strong> on a breakaway or rush; defensemen activating off the blue line post eye-catching numbers too.</p>
+    <p>A related counter, the <strong>20+ mph burst</strong>, tallies how often a skater crosses that high-speed threshold in a game — a measure of explosiveness and how relentlessly a player attacks open ice, not just one peak reading.</p>
+  </section>
+
+  <section class="term">
+    <h2>Distance skated</h2>
+    <div class="tag">Miles · per game, per shift</div>
+    <p><strong>Distance skated</strong> totals the ground a player covers. Over a full game a busy forward can travel several miles; across both teams the combined figure climbs fast. Distance pairs naturally with speed and shift data: a player logging big mileage on short, high-speed shifts is being used very differently from one grinding out long, lower-tempo minutes.</p>
+  </section>
+
+  <section class="term">
+    <h2>Shot speed</h2>
+    <div class="tag">Miles per hour · the puck off the stick</div>
+    <p><strong>Shot speed</strong> measures how fast the puck leaves the stick. Tracked shots routinely sit in the 80s and 90s; the hardest one-timers from the league's biggest shooters approach and sometimes pass <strong>100 mph</strong>. It's a fun number on its own, but it also adds context to shot quality — a blistering one-timer from the slot is a very different problem for a goalie than a wrister from the wall.</p>
+    <div class="callout">On a game center you'll often see the <strong>hardest shot</strong> and <strong>top skating speed</strong> of the night surfaced as live highlights — the moments tracking data makes legible in real time.</div>
+  </section>
+
+  <section class="term">
+    <h2>Shifts, time on ice &amp; zone time</h2>
+    <div class="tag">Seconds · usage and deployment</div>
+    <p>Tracking also sharpens the basics. <strong>Shift length</strong> and <strong>time on ice</strong> show how a coach is deploying a player; <strong>zone time</strong> breaks down how much of a shift was spent in the offensive, neutral and defensive zones. Together they explain the <em>why</em> behind a box score — whether a quiet night was about role and matchups rather than effort.</p>
+  </section>
+
+  <section class="term">
+    <h2>Why it matters</h2>
+    <div class="tag">Reading the tracking era</div>
+    <p>On their own, speed and distance are trivia. Their value is context: they turn "he looked fast" into a number, reveal which defensemen can truly defend the rush, and show when a team on a back-to-back is a step slow. Combined with shot-quality models like <a href="/learn#xg">expected goals</a>, tracking data is how the modern game gets measured beyond the scoreboard.</p>
+  </section>
+
+  <div class="faq">
+    <h2>Common questions</h2>
+    <details open><summary>How fast do NHL players skate?</summary><p>NHL Edge regularly clocks top speeds above 22 mph, with the fastest skaters reaching roughly 24–25 mph on a burst. A "20+ mph burst" counter tracks how often a skater crosses that threshold in a game.</p></details>
+    <details><summary>How fast is an NHL shot?</summary><p>Tracked shot speeds commonly reach the 90s of miles per hour, with the hardest one-timers from elite shooters approaching and occasionally passing 100 mph. Edge reports the speed the puck leaves the stick.</p></details>
+    <details><summary>What does NHL Edge measure?</summary><p>Skating speed and top speed, total distance skated, shot speed, shift length, time on ice and on-ice positioning — captured by sensors in the puck and players' sweaters, sampled many times per second.</p></details>
+  </div>
+
+  <div class="next">
+    <a href="/learn"><div class="k">Guide</div><div class="t">Hockey analytics glossary</div><div class="d">xG, Corsi, high-danger chances, PDO, GSAx and more in plain English.</div></a>
+    <a href="/"><div class="k">Live</div><div class="t">Open The Hockey Lab</div><div class="d">See Edge tracking live in game centers and on player pages.</div></a>
+  </div>
+</main>
+<footer class="site">
+  <div class="in">
+    <a href="/">The Hockey Lab</a> · <a href="/learn">Analytics glossary</a><br/>
+    © 2026 The Hockey Lab · Independent project — not affiliated with the NHL · Figures are general, widely reported ranges for educational context.
+  </div>
+</footer>
+</body>
+</html>

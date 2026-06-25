@@ -2323,156 +2323,275 @@ function PlayersPage({
   onPlayer
 }) {
   const teams = uM(() => [...D.ABBR].sort((a, b) => ct(a).localeCompare(ct(b))), []);
-  const [team, setTeam] = uS(teams[0]);
-  const [filter, setFilter] = uS('All');
+  const [scope, setScope] = uS('Skaters');
+  const [team, setTeam] = uS('all');
+  const [pos, setPos] = uS('All');
   const [q, setQ] = uS('');
-  const ql = q.toLowerCase();
-  const liveRoster = window.E_useLive(D.teamRoster(team), () => new Promise(res => {
-    window.BC.ensureRoster(team, () => res(window.BC.teamRoster(team)));
-  }), [team]);
-  const roster = liveRoster.filter(p => p.name.toLowerCase().includes(ql));
-  const fwd = roster.filter(p => p.pos !== 'D' && p.pos !== 'G'),
-    def = roster.filter(p => p.pos === 'D');
-  const goalies = D.goalies.filter(g => g.team === team && g.name.toLowerCase().includes(ql)).map(g => ({
+  const [sortK, setSortK] = uS('name');
+  const [sortDir, setSortDir] = uS('asc');
+  const [showAll, setShowAll] = uS(false);
+  const ql = q.trim().toLowerCase();
+  const isG = scope === 'Goalies';
+  const base = isG ? (D.goalies || []).map(g => ({
     ...g,
     type: 'goalie',
     pos: 'G'
-  }));
-  const PC = ({
-    p
-  }) => React.createElement("div", {
-    onClick: () => onPlayer(p),
-    className: "ec",
-    style: {
-      ...card,
-      padding: '13px 15px',
-      cursor: 'pointer'
+  })) : D.allPlayers || [];
+  const val = (p, k) => k === 'name' ? p.name.toLowerCase() : k === 'team' ? ct(p.team) : k === 'pos' ? p.pos || '' : k === 'svp' ? parseFloat(p.svp) || 0 : k === 'gaa' ? parseFloat(p.gaa) || 0 : +p[k] || 0;
+  const dir = sortDir === 'asc' ? 1 : -1;
+  const rows = base.filter(p => p && p.name).filter(p => team === 'all' || p.team === team).filter(p => isG || pos === 'All' || (pos === 'F' ? p.pos !== 'D' && p.pos !== 'G' : p.pos === pos)).filter(p => !ql || p.name.toLowerCase().includes(ql)).sort((a, b) => {
+    const x = val(a, sortK),
+      y = val(b, sortK);
+    if (x < y) return -dir;
+    if (x > y) return dir;
+    return a.name.localeCompare(b.name);
+  });
+  const cols = isG ? [['Player', 'name', 'l'], ['Team', 'team', 'l'], ['GP', 'gp'], ['W', 'w'], ['L', 'l'], ['SV%', 'svp'], ['GAA', 'gaa'], ['SO', 'so']] : [['Player', 'name', 'l'], ['Team', 'team', 'l'], ['Pos', 'pos'], ['GP', 'gp'], ['G', 'g'], ['A', 'a'], ['P', 'p'], ['+/-', 'pm']];
+  const sortBy = k => {
+    if (sortK === k) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortK(k);
+      setSortDir(k === 'name' || k === 'team' || k === 'pos' || k === 'gaa' ? 'asc' : 'desc');
     }
-  }, React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 13
-    }
-  }, React.createElement(PlayerAvatar, {
-    pos: p.pos,
-    team: p.team,
-    name: p.name,
-    size: 42
-  }), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      color: T.ink
-    }
-  }, p.name), React.createElement("div", {
-    style: {
-      fontFamily: MONO,
-      fontSize: 11.5,
-      color: T.mut
-    }
-  }, p.num ? `#${p.num} · ` : '', p.pos))), React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 16,
-      marginTop: 11,
-      fontFamily: MONO,
-      fontSize: 12,
-      color: T.mut
-    }
-  }, p.type === 'goalie' ? React.createElement(React.Fragment, null, React.createElement("span", null, React.createElement("b", {
-    style: {
-      color: T.ink
-    }
-  }, p.svp), " SV%"), React.createElement("span", null, p.gaa, " GAA"), React.createElement("span", null, p.w, "-", p.l), React.createElement("span", null, p.gp, " GP")) : React.createElement(React.Fragment, null, React.createElement("span", null, React.createElement("b", {
-    style: {
-      color: T.ink
-    }
-  }, p.p), " P"), React.createElement("span", null, p.g, " G"), React.createElement("span", null, p.a, " A"), React.createElement("span", null, p.gp, " GP"))));
-  const Grp = ({
-    label,
-    list
-  }) => list.length ? React.createElement("div", {
-    style: {
-      marginBottom: 20
-    }
-  }, React.createElement("div", {
-    style: {
-      ...ML,
-      marginBottom: 11
-    }
-  }, label, " \xB7 ", list.length), React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill,minmax(228px,1fr))',
-      gap: 12
-    }
-  }, list.map(p => React.createElement(PC, {
-    key: p.id,
-    p: p
-  })))) : null;
+  };
+  const disp = (p, k) => k === 'pm' ? (p.pm > 0 ? '+' : '') + (p.pm || 0) : k === 'svp' ? p.svp : k === 'gaa' ? p.gaa : p[k] != null ? p[k] : '—';
+  const CAP = 200;
+  const shown = showAll ? rows : rows.slice(0, CAP);
+  const sel = {
+    fontFamily: 'inherit',
+    background: T.paper,
+    border: `1px solid ${T.line2}`,
+    borderRadius: 9,
+    padding: '8px 12px',
+    color: T.ink,
+    fontSize: 13
+  };
   return React.createElement("div", null, React.createElement(PageHead, {
     k: "Players",
-    t: "Roster",
-    serif: "explorer"
+    t: "Player",
+    serif: "directory"
   }), React.createElement("div", {
     style: {
       ...card,
-      padding: 16,
-      marginBottom: 20,
+      padding: 14,
+      marginBottom: 18,
       display: 'flex',
-      gap: 12,
+      gap: 10,
       flexWrap: 'wrap',
       alignItems: 'center'
     }
-  }, React.createElement("select", {
-    value: team,
-    onChange: e => setTeam(e.target.value),
+  }, React.createElement("div", {
     style: {
-      fontFamily: 'inherit',
-      background: T.paper,
-      border: `1px solid ${T.line2}`,
-      borderRadius: 9,
-      padding: '8px 12px',
-      color: T.ink,
-      fontSize: 13
+      display: 'flex',
+      gap: 6
     }
-  }, teams.map(a => React.createElement("option", {
+  }, ['Skaters', 'Goalies'].map(s => React.createElement(Pill, {
+    key: s,
+    on: scope === s,
+    onClick: () => {
+      setScope(s);
+      setPos('All');
+      setSortK('name');
+      setSortDir('asc');
+      setShowAll(false);
+    }
+  }, s))), React.createElement("select", {
+    value: team,
+    onChange: e => {
+      setTeam(e.target.value);
+      setShowAll(false);
+    },
+    style: sel
+  }, React.createElement("option", {
+    value: "all"
+  }, "All teams"), teams.map(a => React.createElement("option", {
     key: a,
     value: a
-  }, ct(a), " ", nk(a)))), React.createElement("input", {
-    value: q,
-    onChange: e => setQ(e.target.value),
-    placeholder: "Search roster",
+  }, ct(a), " ", nk(a)))), !isG && React.createElement("div", {
     style: {
-      fontFamily: 'inherit',
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, ['All', 'F', 'C', 'LW', 'RW', 'D'].map(pp => React.createElement(Pill, {
+    key: pp,
+    on: pos === pp,
+    onClick: () => {
+      setPos(pp);
+      setShowAll(false);
+    }
+  }, pp === 'F' ? 'Forwards' : pp === 'D' ? 'Defense' : pp))), React.createElement("input", {
+    value: q,
+    onChange: e => {
+      setQ(e.target.value);
+      setShowAll(false);
+    },
+    placeholder: "Search players",
+    style: {
+      ...sel,
+      flex: 1,
+      minWidth: 160,
+      outline: 'none'
+    }
+  })), React.createElement("div", {
+    style: {
+      ...card,
+      overflow: 'hidden'
+    }
+  }, React.createElement("div", {
+    style: {
+      padding: '10px 16px',
+      borderBottom: `1px solid ${T.line}`,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 8
+    }
+  }, React.createElement("span", {
+    style: ML
+  }, rows.length, " ", isG ? 'goalies' : 'skaters', team !== 'all' ? ` · ${ct(team)} ${nk(team)}` : ''), React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10,
+      color: T.faint
+    }
+  }, "tap a column to sort \xB7 tap a row for detail")), React.createElement("div", {
+    style: {
+      overflowX: 'auto'
+    }
+  }, React.createElement("table", {
+    style: {
+      width: '100%',
+      minWidth: 620,
+      borderCollapse: 'collapse',
+      fontSize: 13.5
+    }
+  }, React.createElement("thead", null, React.createElement("tr", null, React.createElement("th", {
+    style: {
+      padding: '10px 10px',
+      textAlign: 'left',
+      width: 34,
+      ...ML
+    }
+  }, "#"), cols.map(([h, k, al]) => React.createElement("th", {
+    key: h,
+    onClick: () => sortBy(k),
+    style: {
+      padding: '10px 10px',
+      textAlign: al === 'l' ? 'left' : 'center',
+      fontWeight: 600,
+      cursor: 'pointer',
+      whiteSpace: 'nowrap',
+      color: sortK === k ? T.ink : undefined,
+      ...ML
+    }
+  }, h, sortK === k ? sortDir === 'asc' ? ' ↑' : ' ↓' : '')))), React.createElement("tbody", null, shown.map((p, i) => React.createElement("tr", {
+    key: p.id || p.name + i,
+    onClick: () => onPlayer(p),
+    className: "er",
+    style: {
+      cursor: 'pointer',
+      borderTop: `1px solid ${T.line}`
+    }
+  }, React.createElement("td", {
+    style: {
+      padding: '9px 10px',
+      fontFamily: MONO,
+      fontSize: 11,
+      color: T.faint
+    }
+  }, i + 1), cols.map(([h, k]) => {
+    if (k === 'name') return React.createElement("td", {
+      key: h,
+      style: {
+        padding: '8px 10px'
+      }
+    }, React.createElement("span", {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 9,
+        minWidth: 0
+      }
+    }, React.createElement(PlayerAvatar, {
+      pos: p.pos,
+      team: p.team,
+      name: p.name,
+      size: 26
+    }), React.createElement("span", {
+      style: {
+        fontWeight: 600,
+        color: T.ink,
+        whiteSpace: 'nowrap'
+      }
+    }, p.name), p.num ? React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 10.5,
+        color: T.faint
+      }
+    }, "#", p.num) : null));
+    if (k === 'team') return React.createElement("td", {
+      key: h,
+      style: {
+        padding: '8px 10px'
+      }
+    }, React.createElement("span", {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 7
+      }
+    }, React.createElement(Badge, {
+      ab: p.team,
+      size: 18
+    }), React.createElement("span", {
+      style: {
+        color: T.mut,
+        fontFamily: MONO,
+        fontSize: 12
+      }
+    }, p.team)));
+    return React.createElement("td", {
+      key: h,
+      style: {
+        padding: '8px 10px',
+        textAlign: 'center',
+        fontFamily: MONO,
+        color: k === 'p' ? T.ink : T.mut,
+        fontWeight: k === 'p' ? 700 : 400
+      }
+    }, disp(p, k));
+  })))))), rows.length > CAP && !showAll && React.createElement("div", {
+    style: {
+      padding: '12px 16px',
+      borderTop: `1px solid ${T.line}`,
+      textAlign: 'center'
+    }
+  }, React.createElement("button", {
+    onClick: () => setShowAll(true),
+    className: "el",
+    style: {
+      fontFamily: MONO,
+      fontSize: 12,
       background: T.paper,
       border: `1px solid ${T.line2}`,
-      borderRadius: 9,
-      padding: '8px 12px',
+      borderRadius: 8,
+      padding: '7px 14px',
       color: T.ink,
-      fontSize: 13,
-      outline: 'none',
-      flex: 1,
-      minWidth: 150
+      cursor: 'pointer'
     }
-  }), ['All', 'Forwards', 'Defensemen', 'Goalies'].map(f => React.createElement(Pill, {
-    key: f,
-    on: filter === f,
-    onClick: () => setFilter(f)
-  }, f))), (filter === 'All' || filter === 'Forwards') && React.createElement(Grp, {
-    label: "Forwards",
-    list: fwd
-  }), (filter === 'All' || filter === 'Defensemen') && React.createElement(Grp, {
-    label: "Defensemen",
-    list: def
-  }), (filter === 'All' || filter === 'Goalies') && React.createElement(Grp, {
-    label: "Goalies",
-    list: goalies
-  }));
+  }, "Show all ", rows.length)), rows.length === 0 && React.createElement("div", {
+    style: {
+      padding: '24px 16px',
+      textAlign: 'center',
+      fontFamily: MONO,
+      fontSize: 12,
+      color: T.faint
+    }
+  }, "No players match these filters.")));
 }
 function PlayerDetailPage({
   p,

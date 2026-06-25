@@ -335,12 +335,45 @@ export default {
       return handleNhl(url);
     }
 
+    // SEO: robots.txt + sitemap.xml generated from the live origin (domain-agnostic,
+    // so there's no hard-coded host to drift). Served before the static-asset layer
+    // so they override any committed fallback copy. Diagnostics pages are disallowed.
+    if (url.pathname === '/robots.txt') {
+      const body =
+        `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /mappers-test.html\nDisallow: /api-health.html\n\nSitemap: ${url.origin}/sitemap.xml\n`;
+      return new Response(body, {
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400', ...SECURITY_HEADERS },
+      });
+    }
+    if (url.pathname === '/sitemap.xml') {
+      // The hash-routed app views aren't separately crawlable, so the app counts as
+      // one URL (the root). The static /learn guides ARE real, indexable pages.
+      const o = url.origin;
+      const rows: [string, string, string][] = [
+        ['/', '1.0', 'hourly'],
+        ['/learn', '0.7', 'monthly'],
+        ['/learn/nhl-edge', '0.6', 'monthly'],
+      ];
+      const body =
+        `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+        rows.map(([p, pr, cf]) => `  <url><loc>${o}${p}</loc><changefreq>${cf}</changefreq><priority>${pr}</priority></url>`).join('\n') +
+        `\n</urlset>\n`;
+      return new Response(body, {
+        headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600', ...SECURITY_HEADERS },
+      });
+    }
+
     // Everything else → static assets. Prefer a precompiled *.prod.html for the app
-    // route (faster first paint, no runtime Babel → stricter CSP). Falls back to the
-    // build-free app.html when no prod build is present, so this is always safe.
+    // entry points (faster first paint, no runtime Babel → stricter CSP). This covers
+    // BOTH /app and the site root "/" (index.html is the same runtime-Babel app, so
+    // serving prod there spares every homepage visitor the ~3MB Babel download + the
+    // in-browser transpile of ~550KB of JSX). Falls back to the build-free HTML when
+    // no prod build is present, so this is always safe.
     let resp: Response | undefined;
     let servedProd = false;
-    if (url.pathname === '/app' || url.pathname === '/app.html') {
+    const wantsApp = url.pathname === '/app' || url.pathname === '/app.html'
+      || url.pathname === '/' || url.pathname === '/index.html';
+    if (wantsApp) {
       const prodReq = new Request(new URL('/app.prod.html' + url.search, url), request);
       const prodResp = await env.ASSETS.fetch(prodReq);
       if (prodResp.status !== 404) { resp = prodResp; servedProd = true; }
@@ -355,6 +388,26 @@ export default {
         const htmlResp = await env.ASSETS.fetch(htmlReq);
         if (htmlResp.status !== 404) resp = htmlResp;
       }
+    }
+
+    // SEO: inject an absolute canonical + og:url into every served HTML page. The app
+    // shell is one URL served at both "/" and "/app" (hash views share it) → canonical
+    // to the site root, consolidating the duplicates. Standalone pages (the /learn
+    // guides) get a self-canonical with any .html stripped to the clean path. Origin-
+    // derived, so there's no hard-coded host to drift.
+    if ((resp.headers.get('content-type') || '').includes('text/html')) {
+      const isApp = servedProd || url.pathname === '/' || url.pathname === '/index.html'
+        || url.pathname === '/app' || url.pathname === '/app.html';
+      const cleanPath = url.pathname.replace(/\/index\.html$/, '/').replace(/\.html$/, '');
+      const canonical = isApp ? `${url.origin}/` : `${url.origin}${cleanPath}`;
+      resp = new HTMLRewriter()
+        .on('head', {
+          element(e) {
+            e.append(`<link rel="canonical" href="${canonical}"/>`, { html: true });
+            e.append(`<meta property="og:url" content="${canonical}"/>`, { html: true });
+          },
+        })
+        .transform(resp);
     }
 
     return withAppHeaders(resp, servedProd);

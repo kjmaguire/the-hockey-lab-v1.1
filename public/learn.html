@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Hockey Analytics, Explained — A Glossary &amp; Guide | The Hockey Lab</title>
+<meta name="description" content="A plain-English glossary of modern NHL analytics: expected goals (xG), Corsi and Fenwick, high-danger chances, PDO, zone starts, save percentage, GSAx and NHL Edge tracking — what each metric means and how to read it."/>
+<meta name="robots" content="index,follow,max-image-preview:large"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet"/>
+<link rel="icon" href="favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png"/>
+<link rel="apple-touch-icon" href="favicon-256x256.png"/>
+<meta property="og:type" content="article"/>
+<meta property="og:site_name" content="The Hockey Lab"/>
+<meta property="og:title" content="Hockey Analytics, Explained — A Glossary &amp; Guide"/>
+<meta property="og:description" content="Expected goals, Corsi, high-danger chances, PDO, GSAx and NHL Edge tracking — modern hockey analytics in plain English."/>
+<meta property="og:image" content="favicon-256x256.png"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Hockey Analytics, Explained — A Glossary &amp; Guide"/>
+<meta name="twitter:description" content="Expected goals, Corsi, high-danger chances, PDO, GSAx and NHL Edge tracking — modern hockey analytics in plain English."/>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+{"@type":"Article","headline":"Hockey Analytics, Explained — A Glossary & Guide","description":"A plain-English glossary of modern NHL analytics: expected goals, Corsi and Fenwick, high-danger chances, PDO, zone starts, save percentage, GSAx and NHL Edge tracking.","inLanguage":"en-US","author":{"@type":"Organization","name":"The Hockey Lab"},"publisher":{"@type":"Organization","name":"The Hockey Lab","logo":{"@type":"ImageObject","url":"favicon-256x256.png"}}},
+{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"The Hockey Lab","item":"/"},{"@type":"ListItem","position":2,"name":"Learn","item":"/learn"}]},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"What are expected goals (xG) in hockey?","acceptedAnswer":{"@type":"Answer","text":"Expected goals (xG) estimate the probability that a given shot becomes a goal, based on factors like shot location, distance, angle, shot type and whether it followed a rebound or rush. Summing every shot's probability gives a team's expected goals for a game — a measure of chance quality, not just chance quantity."}},
+{"@type":"Question","name":"What is the difference between Corsi and Fenwick?","acceptedAnswer":{"@type":"Answer","text":"Corsi counts all shot attempts — shots on goal, missed shots and blocked shots. Fenwick is the same but excludes blocked shots. Both are used as proxies for puck possession and territorial control, usually expressed as a percentage of total attempts while a player or team is on the ice."}},
+{"@type":"Question","name":"What is a high-danger scoring chance?","acceptedAnswer":{"@type":"Answer","text":"A high-danger chance is a shot attempt from the most dangerous areas of the ice — typically the slot, directly in front of the net — where the probability of scoring is highest. High-danger save percentage measures how often a goalie stops those premium chances."}},
+{"@type":"Question","name":"What is NHL Edge tracking?","acceptedAnswer":{"@type":"Answer","text":"NHL Edge is the league's player and puck tracking system. Sensors in the puck and on player sweaters capture skating speed, distance skated, shot speed, shift length and on-ice positioning many times per second, turning live games into a stream of measurable data."}}
+]}
+]}</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  :root{--bg:#f5f4f0;--paper:#fffefb;--ink:#15161b;--mut:#5b5c64;--faint:#8a8b92;--line:#e6e4dd;--line2:#d8d6ce;--red:#c0392b;}
+  html{scroll-behavior:smooth;}
+  body{background:var(--bg);color:var(--ink);font-family:'Geist',system-ui,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.6;}
+  a{color:inherit;}
+  a:focus-visible,button:focus-visible{outline:2.5px solid var(--ink);outline-offset:2px;border-radius:4px;}
+  .skip-link{position:fixed;left:8px;top:-60px;z-index:50;background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-weight:600;font-size:13px;text-decoration:none;transition:top .15s;}
+  .skip-link:focus{top:8px;}
+  .mono{font-family:'Geist Mono',ui-monospace,monospace;}
+  header.site{position:sticky;top:0;z-index:20;background:rgba(245,244,240,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);}
+  header.site .in{max-width:920px;margin:0 auto;padding:0 24px;height:58px;display:flex;align-items:center;gap:14px;}
+  .logo{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:700;}
+  .logo .mark{width:28px;height:28px;border-radius:7px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+  header.site nav{margin-left:auto;display:flex;gap:6px;align-items:center;}
+  header.site nav a{text-decoration:none;color:var(--mut);font-weight:600;font-size:13.5px;padding:7px 12px;border-radius:8px;}
+  header.site nav a:hover{color:var(--ink);background:#ece9e2;}
+  header.site nav a.cta{background:var(--ink);color:#fff;}
+  main{max-width:760px;margin:0 auto;padding:46px 24px 64px;}
+  .eyebrow{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--red);margin-bottom:14px;}
+  h1{font-size:46px;line-height:1.05;letter-spacing:-.03em;font-weight:600;margin-bottom:18px;}
+  h1 em{font-family:'Newsreader',Georgia,serif;font-style:italic;font-weight:500;}
+  .lede{font-size:19px;color:var(--mut);line-height:1.55;max-width:62ch;margin-bottom:30px;}
+  .lede a{color:var(--ink);text-decoration:underline;text-underline-offset:2px;}
+  .toc{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px 22px;margin-bottom:42px;}
+  .toc h2{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:500;margin-bottom:12px;}
+  .toc ol{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:8px 26px;counter-reset:t;}
+  .toc li{counter-increment:t;}
+  .toc a{text-decoration:none;color:var(--ink);font-weight:500;font-size:15px;display:flex;gap:10px;align-items:baseline;}
+  .toc a:before{content:counter(t,decimal-leading-zero);font-family:'Geist Mono',monospace;font-size:11px;color:var(--red);}
+  .toc a:hover{color:var(--red);}
+  section.term{padding:30px 0;border-top:1px solid var(--line);}
+  section.term h2{font-size:27px;letter-spacing:-.02em;font-weight:600;margin-bottom:6px;scroll-margin-top:74px;}
+  section.term .tag{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:14px;}
+  section.term p{font-size:16.5px;color:#33343a;margin-bottom:14px;}
+  section.term p strong{color:var(--ink);}
+  .key{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px;}
+  .key span{font-family:'Geist Mono',monospace;font-size:12px;background:#efece4;border:1px solid var(--line2);border-radius:7px;padding:4px 9px;color:var(--mut);}
+  .callout{background:var(--paper);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:10px;padding:14px 18px;margin:18px 0;font-size:15.5px;color:#33343a;}
+  .faq{margin-top:48px;padding-top:34px;border-top:2px solid var(--ink);}
+  .faq h2{font-size:30px;letter-spacing:-.02em;margin-bottom:18px;}
+  details{border-bottom:1px solid var(--line);padding:14px 0;}
+  details summary{font-weight:600;font-size:17px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:12px;}
+  details summary::-webkit-details-marker{display:none;}
+  details summary:after{content:'+';font-family:'Geist Mono',monospace;color:var(--red);font-size:20px;line-height:1;}
+  details[open] summary:after{content:'\2013';}
+  details p{margin-top:10px;color:#33343a;font-size:15.5px;}
+  .next{display:flex;flex-wrap:wrap;gap:14px;margin-top:46px;}
+  .next a{flex:1;min-width:230px;text-decoration:none;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px 20px;transition:border-color .15s,transform .15s;}
+  .next a:hover{border-color:var(--line2);transform:translateY(-2px);}
+  .next .k{font-family:'Geist Mono',monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--red);margin-bottom:7px;}
+  .next .t{font-size:18px;font-weight:600;letter-spacing:-.01em;margin-bottom:4px;}
+  .next .d{font-size:14px;color:var(--mut);}
+  footer.site{border-top:1px solid var(--line);}
+  footer.site .in{max-width:760px;margin:0 auto;padding:28px 24px 44px;color:var(--faint);font-family:'Geist Mono',monospace;font-size:11.5px;line-height:1.8;}
+  footer.site a{color:var(--mut);text-decoration:none;}
+  @media(max-width:620px){h1{font-size:34px;}.toc ol{grid-template-columns:1fr;}.lede{font-size:17px;}}
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<header class="site">
+  <div class="in">
+    <a href="/" class="logo"><span class="mark">H</span><span>The Hockey Lab</span></a>
+    <nav>
+      <a href="/learn">Learn</a>
+      <a href="/" class="cta">Open the app</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+  <div class="eyebrow">The Lab · Learn</div>
+  <h1>Hockey analytics, <em>explained</em></h1>
+  <p class="lede">Modern hockey is measured in more than goals. This is a plain-English guide to the numbers behind the game — the shot-quality models, possession proxies and tracking metrics you'll see across <a href="/">The Hockey Lab</a>. No spreadsheets required.</p>
+
+  <div class="toc">
+    <h2>On this page</h2>
+    <ol>
+      <li><a href="#xg">Expected goals (xG)</a></li>
+      <li><a href="#corsi">Corsi &amp; Fenwick</a></li>
+      <li><a href="#hdcf">High-danger chances</a></li>
+      <li><a href="#pdo">PDO</a></li>
+      <li><a href="#zone">Zone starts</a></li>
+      <li><a href="#svp">Save percentage &amp; GSAx</a></li>
+      <li><a href="#edge">NHL Edge tracking</a></li>
+      <li><a href="#faq">Common questions</a></li>
+    </ol>
+  </div>
+
+  <section class="term" id="xg">
+    <h2>Expected goals (xG)</h2>
+    <div class="tag">Shot quality · per shot, per game, per season</div>
+    <p><strong>Expected goals</strong> answer a simple question: how likely was that shot to go in? A model assigns every unblocked shot a scoring probability from the things that actually matter — distance from the net, angle, shot type, whether it came off a rebound or an odd-man rush, and the game situation.</p>
+    <p>Add up those probabilities and you get a team's xG for a game. A side that generates <strong>3.2 xG</strong> created chances worth a little more than three goals, regardless of how many actually went in. Comparing xG to real goals separates finishing and goaltending luck from the underlying quality of chances.</p>
+    <div class="key"><span>0.04 xG</span><span>point shot, screened</span><span>0.18 xG</span><span>slot wrist shot</span><span>0.34 xG</span><span>rebound in tight</span></div>
+  </section>
+
+  <section class="term" id="corsi">
+    <h2>Corsi &amp; Fenwick</h2>
+    <div class="tag">Possession proxy · shot-attempt share</div>
+    <p><strong>Corsi</strong> counts every shot attempt — shots on goal, misses and blocks — for and against while a player or team is on the ice. <strong>Fenwick</strong> is the same idea but drops blocked shots. Neither is about scoring; both are stand-ins for which team is spending more time with the puck in the offensive zone.</p>
+    <p>They're usually shown as a percentage. A 55% Corsi share (often written <strong>CF%</strong>) means a team took 55% of all attempts in its minutes — a sign it controlled play. At 5-on-5, sustained possession tends to lead to goals, which is why these "shot-attempt" numbers became the entry point to hockey analytics.</p>
+  </section>
+
+  <section class="term" id="hdcf">
+    <h2>High-danger chances</h2>
+    <div class="tag">Chance quality · the slot</div>
+    <p>Not all shots are equal. A <strong>high-danger chance</strong> is an attempt from the most dangerous real estate on the ice — the slot, in close, where goals come from most often. Tracking how many high-danger chances a team creates and allows says more about who's actually threatening to score than raw shot totals do.</p>
+    <div class="callout">When you see a goalie's <strong>high-danger save percentage</strong>, that's the share of those premium chances they stopped — the truest test of a goaltender on a given night.</div>
+  </section>
+
+  <section class="term" id="pdo">
+    <h2>PDO</h2>
+    <div class="tag">Luck check · shooting % + save %</div>
+    <p><strong>PDO</strong> adds a team's shooting percentage to its save percentage at even strength. Because one team's shot is the other team's save chance, the league average is always almost exactly <strong>100</strong> (sometimes written 1.000). A team running well above 100 is usually getting hot shooting or goaltending that won't last; well below tends to bounce back. It's a quick gut-check for whether results are sustainable.</p>
+  </section>
+
+  <section class="term" id="zone">
+    <h2>Zone starts</h2>
+    <div class="tag">Usage · where shifts begin</div>
+    <p><strong>Zone starts</strong> describe where a player's shifts begin on faceoffs — offensive, neutral or defensive zone. A player buried with defensive-zone starts has a harder assignment than a teammate launched into the offensive zone, so zone usage adds crucial context to every other number. It's the difference between a stat and a fair comparison.</p>
+  </section>
+
+  <section class="term" id="svp">
+    <h2>Save percentage &amp; GSAx</h2>
+    <div class="tag">Goaltending · stops vs. expectation</div>
+    <p><strong>Save percentage (SV%)</strong> is the share of shots a goalie stops — .910 means 91 of every 100. Useful, but it treats a harmless point shot and a point-blank rebound the same. <strong>Goals saved above expected (GSAx)</strong> fixes that: it compares goals allowed to the expected goals (xG) a goalie faced. A positive GSAx means they stopped more than an average goalie would have, given the quality of shots — the modern standard for valuing goaltending.</p>
+  </section>
+
+  <section class="term" id="edge">
+    <h2>NHL Edge tracking</h2>
+    <div class="tag">Player &amp; puck tracking · live</div>
+    <p>The newest layer of data comes from the puck and the players themselves. <strong>NHL Edge</strong> uses sensors to capture skating speed, distance skated, shot speed, shift lengths and on-ice positioning many times per second — turning a live game into a measurable stream. It's how you learn a defenseman hit 24 mph on a breakout or that a shot left the stick at 98 mph.</p>
+    <p>We lean on Edge data throughout the app's game centers and player pages. For a full breakdown of what it measures and how to read it, see <a href="/learn/nhl-edge"><strong>NHL Edge tracking, explained</strong></a>.</p>
+  </section>
+
+  <div class="faq" id="faq">
+    <h2>Common questions</h2>
+    <details open><summary>What are expected goals (xG)?</summary><p>Expected goals estimate the probability that a given shot becomes a goal, based on factors like shot location, distance, angle, shot type and whether it followed a rebound or a rush. Summing every shot's probability gives a team's expected goals — a measure of chance quality, not just quantity.</p></details>
+    <details><summary>What's the difference between Corsi and Fenwick?</summary><p>Corsi counts all shot attempts — shots on goal, missed shots and blocked shots. Fenwick is the same but excludes blocks. Both proxy for puck possession and are usually shown as a percentage of total attempts while a player or team is on the ice.</p></details>
+    <details><summary>What is a high-danger scoring chance?</summary><p>A shot attempt from the most dangerous areas — typically the slot, directly in front of the net — where the probability of scoring is highest. High-danger save percentage measures how often a goalie stops those premium chances.</p></details>
+    <details><summary>What is NHL Edge tracking?</summary><p>NHL Edge is the league's player and puck tracking system. Sensors in the puck and on player sweaters capture skating speed, distance, shot speed, shift length and positioning many times per second, turning live games into measurable data.</p></details>
+  </div>
+
+  <div class="next">
+    <a href="/learn/nhl-edge"><div class="k">Guide</div><div class="t">NHL Edge tracking, explained</div><div class="d">Skating speed, shot speed, distance and what the tracking era really measures.</div></a>
+    <a href="/"><div class="k">Live</div><div class="t">Open The Hockey Lab</div><div class="d">See these metrics live across scores, game centers, team and player pages.</div></a>
+  </div>
+</main>
+<footer class="site">
+  <div class="in">
+    <a href="/">The Hockey Lab</a> · <a href="/learn/nhl-edge">NHL Edge guide</a><br/>
+    © 2026 The Hockey Lab · Independent project — not affiliated with the NHL · Definitions are educational summaries of widely used public hockey-analytics concepts.
+  </div>
+</footer>
+</body>
+</html>
