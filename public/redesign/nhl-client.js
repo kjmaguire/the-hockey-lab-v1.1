@@ -910,26 +910,52 @@
       return { ok: !!p, recognized: mapped ? Object.keys(mapped) : [], rows: mapped, topLevelKeys, shape: shapeOf(p, 0), sample: p };
     } catch (e) { return { ok: false, error: String(e) }; } },
     // LIVE league EDGE leaderboard from the real top-10 endpoints (defensive scan → null keeps mock):
-    edgeBoardLive: async (metric) => { if (!liveEdgeOK()) return null; try {
-      const PATHS = {
-        top: 'skater-skating-speed-top-10/all/all', shot: 'skater-shot-speed-top-10/all/all',
-        savg: 'skater-shot-speed-top-10/all/all', dist: 'skater-skating-distance-top-10/all/all',
-        b20: 'skater-skating-speed-top-10/all/all', b22: 'skater-skating-speed-top-10/all/all',
-        oz: 'skater-zone-time-top-10/all/all',
+    // LIVE league EDGE boards — ONE pass over the top scorers' per-player tracking
+    // (the only EDGE feed that resolves), building every metric board at once and
+    // memoizing per season (10 min). edgeBoardLive() reads a single metric from it;
+    // editorial-live overlays the whole thing onto D.edgeLeaders/D.edgeBoard.
+    edgeBoardAll: (() => {
+      let cache = null;
+      const EX = {
+        top:  (p) => (p && p.skatingSpeed && p.skatingSpeed.speedMax) ? num(p.skatingSpeed.speedMax.imperial) : null,
+        shot: (p) => (p && p.topShotSpeed) ? num(p.topShotSpeed.imperial) : null,
+        dist: (p) => (p && p.totalDistanceSkated) ? num(p.totalDistanceSkated.imperial) : null,
+        b20:  (p) => (p && p.skatingSpeed && p.skatingSpeed.burstsOver20) ? num(p.skatingSpeed.burstsOver20.value) : null,
+        oz:   (p) => (p && p.zoneTimeDetails && num(p.zoneTimeDetails.offensiveZonePctg) != null) ? num(p.zoneTimeDetails.offensiveZonePctg) * 100 : null,
       };
-      const path = PATHS[metric]; if (!path) return null;
-      const d = await get(`edge/${path}`);
-      let arr = Array.isArray(d) ? d : null;
-      if (!arr && d && typeof d === 'object') { for (const k of Object.keys(d)) { if (Array.isArray(d[k]) && d[k].length && typeof d[k][0] === 'object') { arr = d[k]; break; } } }
-      if (!arr) return null;
-      const rows = arr.slice(0, 20).map((o) => {
-        const name = dflt(o.fullName) || [dflt(o.firstName), dflt(o.lastName)].filter(Boolean).join(' ') || dflt(o.name) || dflt(o.skaterFullName) || '';
-        const team = normTeam(o.teamAbbrev || o.teamAbbrevs || o.team);
-        let v = null; for (const k of Object.keys(o)) { if (/value|speed|distance|burst|zone|max|top/i.test(k)) { const n = num(o[k]); if (n != null) { v = n; break; } } }
-        return name ? { id: dflt(o.playerId) || name, name, team, pos: dflt(o.positionCode) || dflt(o.position) || '', _v: v != null ? +(+v).toFixed(1) : '—' } : null;
-      }).filter(Boolean);
-      return rows.length ? rows : null;
-    } catch (_) { return null; } },
+      const DP = { top: 1, shot: 1, dist: 1, b20: 0, oz: 1 };
+      const mapLimit = async (items, limit, fn) => {
+        const out = new Array(items.length); let i = 0;
+        const worker = async () => { while (i < items.length) { const idx = i++; out[idx] = await fn(items[idx]); } };
+        await Promise.all(Array.from({ length: Math.min(limit, items.length || 1) }, worker));
+        return out;
+      };
+      return async () => {
+        if (!liveEdgeOK()) return null;
+        const ssn = activeSeason();
+        if (cache && cache.ssn === ssn && Date.now() - cache.t < 600000) return cache.boards;
+        const pool = ((window.BC && window.BC.allPlayers) || []).filter((p) => p && p.id && p.pos !== 'G').slice(0, 50);
+        if (pool.length < 8) return null;
+        const got = await mapLimit(pool, 6, async (pl) => {
+          try { const d = await get(`edge/skater-detail/${pl.id}`); return d ? { pl, d } : null; } catch (_) { return null; }
+        });
+        const valid = got.filter(Boolean);
+        if (valid.length < 5) return null;
+        const boards = {};
+        Object.keys(EX).forEach((m) => {
+          const rows = valid.map((x) => { const v = EX[m](x.d); return v != null ? { pl: x.pl, v } : null; })
+            .filter(Boolean).sort((a, b) => b.v - a.v).slice(0, 20)
+            .map((x) => ({ ...x.pl, _v: +(+x.v).toFixed(DP[m]) }));
+          if (rows.length >= 5) boards[m] = rows;
+        });
+        if (!Object.keys(boards).length) return null;
+        cache = { ssn, t: Date.now(), boards };
+        return boards;
+      };
+    })(),
+    edgeBoardLive: async (metric) => {
+      try { const all = await window.NHL.edgeBoardAll(); return (all && all[metric]) || null; } catch (_) { return null; }
+    },
 
     // ---- LIVE OVERLAYS (mock-fallback handled by each caller) ----
     // Player-detail EDGE tracking (partial overlay; page merges over mock):

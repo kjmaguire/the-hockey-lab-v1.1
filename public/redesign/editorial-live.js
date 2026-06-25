@@ -76,6 +76,22 @@
     if (ab && !BC.TEAMS[ab]) BC.TEAMS[ab] = [name || ab, city || ab, '#64748b'];
   };
 
+  // Overlay a REAL EDGE board over the projection. Installs a passthrough on
+  // BC.edgeLeaders/edgeBoard immediately (returns mock until live lands), then fills
+  // BC._liveEB from ONE per-player tracking pass and re-renders. Idempotent.
+  let _ebWrapped = false;
+  function overlayEdgeBoard(onReady) {
+    if (!(NHL && NHL.edgeBoardAll)) return;
+    if (!_ebWrapped) {
+      const mEL = BC.edgeLeaders, mEB = BC.edgeBoard;
+      BC._liveEB = BC._liveEB || {};
+      if (typeof mEL === 'function') BC.edgeLeaders = (m) => (BC._liveEB[m] && BC._liveEB[m].length) ? BC._liveEB[m] : mEL(m);
+      if (typeof mEB === 'function') BC.edgeBoard = (m) => (BC._liveEB[m] && BC._liveEB[m].length) ? BC._liveEB[m] : mEB(m);
+      _ebWrapped = true;
+    }
+    NHL.edgeBoardAll().then((boards) => { BC._liveEB = (boards && Object.keys(boards).length) ? boards : {}; if (typeof onReady === 'function') onReady(); }).catch(() => {});
+  }
+
   async function hydrate(onReady) {
     let changed = false;
 
@@ -133,9 +149,11 @@
       } catch (_) { /* team stats stay projected */ }
       // recompute every standings/player-derived cache from the live data
       try { if (BC.resetDerived) BC.resetDerived(); } catch (_) {}
+      // real EDGE board overlay (skater speed/shot/distance/bursts/zone), built from
+      // per-player tracking — replaces the projection in D.edgeLeaders/D.edgeBoard for
+      // the analytics-desk cards AND the IQ leaderboard once it lands (non-blocking).
+      try { overlayEdgeBoard(onReady); } catch (_) {}
     }
-
-    // ---- live score slates around today (drives Scores + Highlights) ----
     // Mark every offset we hear back on as fetched — even an empty slate — so the
     // board shows the real "no games" state instead of mock's fabricated games.
     if (BC.LIVE) {
@@ -203,6 +221,7 @@
       Object.keys(inflightRoster).forEach((k) => delete inflightRoster[k]);
       // recompute every standings/player-derived cache (leaders, rosters, seeding, draft, news, team stats)
       try { if (BC.resetDerived) BC.resetDerived(); } catch (_) {}
+      try { overlayEdgeBoard(onReady); } catch (_) {}
       onReady && onReady();
     } catch (_) { onReady && onReady(); }
   };
