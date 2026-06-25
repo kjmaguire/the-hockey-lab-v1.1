@@ -184,7 +184,7 @@
     BC._seasonId = s; // set FIRST so activeSeason()/liveEdgeOK() resolve to the chosen season
     try {
       // ---- standings (current → now; past → as of that season's reg-season end) ----
-      const path = (!s || s === cur) ? 'standings/now' : `standings/${s.slice(4, 8)}-04-15`;
+      const path = (!s || s === cur) ? 'standings/now' : `standings/${s.slice(4, 8)}-04-10`;
       const rows = NHL._map.mapStandings(await NHL.get(path));
       if (rows && rows.length) {
         rows.forEach((r) => ensureTeam(r.ab, r._name, r._city));

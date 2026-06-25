@@ -470,17 +470,26 @@
   function edgeMetric(payload, nameKeys) {
     const want = nameKeys.map((s) => s.toLowerCase());
     let found = null;
+    // Pull a {val,pct,avg} triple from a node OR its descendants. EDGE often nests
+    // the actual number one level below the category key (e.g. skatingSpeed.maxSpeed
+    // .value), so a matched category is searched in-depth, not just at its surface.
+    const valueIn = (node, depth) => {
+      if (!node || typeof node !== 'object' || depth > 5) return null;
+      const v = num(node.value) ?? num(node.val) ?? num(node.amount) ?? num(node.result)
+        ?? num(node.metric) ?? num(node.miles) ?? num(node.mph) ?? num(node.seconds) ?? num(node.percentage);
+      if (v != null) {
+        return { val: v, pct: num(node.percentile) ?? num(node.pct) ?? null,
+          avg: num(node.leagueAverage) ?? num(node.leagueAvg) ?? num(node.average) ?? null };
+      }
+      for (const k of Object.keys(node)) { const r = valueIn(node[k], depth + 1); if (r) return r; }
+      return null;
+    };
     const visit = (o, depth) => {
       if (!o || found || typeof o !== 'object' || depth > 6) return;
       for (const k of Object.keys(o)) {
-        const child = o[k];
-        if (want.some((w) => k.toLowerCase().includes(w)) && child && typeof child === 'object') {
-          const val = num(child.value) ?? num(child.val) ?? num(child.amount) ?? num(child.result) ?? num(child.metric);
-          if (val != null) {
-            found = { val, pct: num(child.percentile) ?? num(child.pct) ?? null,
-              avg: num(child.leagueAverage) ?? num(child.leagueAvg) ?? num(child.average) ?? null };
-            return;
-          }
+        if (want.some((w) => k.toLowerCase().includes(w))) {
+          const r = valueIn(o[k], 0);
+          if (r) { found = r; return; }
         }
       }
       for (const k of Object.keys(o)) visit(o[k], depth + 1);
@@ -491,13 +500,13 @@
   function mapEdgeSkater(payload) {
     if (!payload) return null;
     // name-key scans broadened — EDGE category labels drift by season/build (see edgeDebug)
-    const top = edgeMetric(payload, ['topskat', 'maxskat', 'topspeed', 'skatingspeed', 'maxskatingspeed', 'topskatingspeed', 'maxspeed', 'skatspeed']);
-    const shot = edgeMetric(payload, ['shotspeed', 'topshot', 'hardestshot', 'maxshotspeed', 'topshotspeed', 'hardestshotspeed', 'fastestshot']);
+    const top = edgeMetric(payload, ['skatingspeed', 'topskat', 'maxskat', 'topspeed', 'maxskatingspeed', 'topskatingspeed', 'maxspeed', 'skatspeed']);
+    const shot = edgeMetric(payload, ['topshotspeed', 'shotspeed', 'topshot', 'hardestshot', 'maxshotspeed', 'hardestshotspeed', 'fastestshot']);
     const avgshot = edgeMetric(payload, ['avgshotspeed', 'averageshotspeed', 'meanshotspeed', 'avgshot', 'averageshot']);
-    const dist = edgeMetric(payload, ['skatingdistance', 'totaldistance', 'distance', 'milesskated', 'skatdist', 'distskated']);
-    const b20 = edgeMetric(payload, ['burst', 'speedburst', 'over20', 'speedbursts', 'bursts20', 'speedburstsover20', 'numbursts']);
-    const b22 = edgeMetric(payload, ['over22', 'burst22', 'speedbursts22', 'bursts22', 'speedburstsover22']);
-    const oz = edgeMetric(payload, ['offensivezone', 'ozone', 'o-zone', 'zonetimeoff', 'offzone', 'ozonetime', 'timeonoffense', 'offensivezonetime']);
+    const dist = edgeMetric(payload, ['totaldistanceskated', 'skatingdistance', 'totaldistance', 'distance', 'milesskated', 'skatdist', 'distskated']);
+    const b20 = edgeMetric(payload, ['burstsover20', 'over20', 'burst', 'speedburst', 'speedbursts', 'bursts20', 'numbursts']);
+    const b22 = edgeMetric(payload, ['burstsover22', 'over22', 'burst22', 'speedbursts22', 'bursts22']);
+    const oz = edgeMetric(payload, ['zonetimedetails', 'offensivezone', 'ozone', 'o-zone', 'zonetimeoff', 'offzone', 'ozonetime', 'offensivezonetime']);
     if (!top && !shot && !dist && !oz) return null; // nothing recognizable → keep mock
     const speed = [];
     const row = (l, m, fmt) => { if (m) speed.push([l, fmt(m.val), m.pct != null ? Math.round(m.pct) : '—', m.avg != null ? fmt(m.avg) : '—']); };
@@ -515,8 +524,10 @@
   }
   function mapEdgeGoalie(payload) {
     if (!payload) return null;
+    // Real goalie EDGE nests save quality inside `stats` / `shotLocationSummary` /
+    // `shotLocationDetails`, so these scans dig into those category nodes.
     const hd = edgeMetric(payload, ['highdanger', 'high-danger', 'hidanger', 'hdsavepct', 'highdangersave']);
-    const md = edgeMetric(payload, ['middanger', 'mid-danger', 'mediumdanger', 'mdsavepct', 'middangersave']);
+    const md = edgeMetric(payload, ['middanger', 'mid-danger', 'mediumdanger', 'mdsavepct', 'middangersave', 'mediumdangersave']);
     const ld = edgeMetric(payload, ['lowdanger', 'low-danger', 'ldsavepct', 'lowdangersave']);
     // richer goalie EDGE — goals saved above expected, rebound control, HD shots faced
     const gsax = edgeMetric(payload, ['goalssavedabove', 'gsax', 'gsaa', 'savedaboveexpected', 'goalssavedaboveexpected']);
@@ -752,8 +763,17 @@
     // Standings page switch years on its own without changing data for the rest of the app.
     standingsForSeason: async (s) => {
       const cur = (window.NHL && window.NHL._season) ? String(window.NHL._season) : null;
-      const path = (!s || String(s) === cur) ? 'standings/now' : `standings/${String(s).slice(4, 8)}-04-15`;
-      return mapStandings(await get(path));
+      if (!s || String(s) === cur) return mapStandings(await get('standings/now'));
+      // Past season: standings/{date} is EMPTY for off-season dates, so we ask as of a
+      // late-but-in-season date, then fall back earlier if the season ended sooner.
+      const endYr = String(s).slice(4, 8);
+      for (const md of ['-04-10', '-03-25', '-03-01', '-02-01']) {
+        try {
+          const rows = mapStandings(await get(`standings/${endYr}${md}`));
+          if (rows && rows.length) return rows;
+        } catch (_) { /* try the next date */ }
+      }
+      return [];
     },
     scores: scoreSlate,
     schedule: async (offset) => (await get(`schedule?date=${ymd(offset)}`)),
@@ -818,7 +838,15 @@
       const p = await get(`edge/${isG ? 'goalie' : 'skater'}-detail/${id}`);
       const mapped = isG ? mapEdgeGoalie(p) : mapEdgeSkater(p);
       const topLevelKeys = p && typeof p === 'object' ? Object.keys(p) : [];
-      return { ok: !!p, recognized: mapped ? Object.keys(mapped) : [], rows: mapped, topLevelKeys, sample: p };
+      // Nested shape (2 levels deep, sample scalars) — paste this to tune the key
+      // scans precisely against the real payload. Arrays summarized by length+keys.
+      const shapeOf = (o, depth) => {
+        if (o == null || typeof o !== 'object') return o;
+        if (Array.isArray(o)) return o.length ? `[${o.length}] ` + (typeof o[0] === 'object' && o[0] ? `{${Object.keys(o[0]).slice(0, 10).join(',')}}` : typeof o[0]) : '[]';
+        if (depth >= 2) return `{${Object.keys(o).slice(0, 14).join(',')}}`;
+        const out = {}; for (const k of Object.keys(o)) out[k] = shapeOf(o[k], depth + 1); return out;
+      };
+      return { ok: !!p, recognized: mapped ? Object.keys(mapped) : [], rows: mapped, topLevelKeys, shape: shapeOf(p, 0), sample: p };
     } catch (e) { return { ok: false, error: String(e) }; } },
     // LIVE league EDGE leaderboard from the real top-10 endpoints (defensive scan → null keeps mock):
     edgeBoardLive: async (metric) => { if (!liveEdgeOK()) return null; try {

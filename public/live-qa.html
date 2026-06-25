@@ -194,7 +194,7 @@
         var rec=d.recognized||[], raw=d.topLevelKeys||[];
         var st = rec.length>=3 ? 'pass' : (rec.length>0?'partial':'fail');
         return {status:st, note:'recognized '+rec.length+' / '+raw.length+' raw keys',
-          keys:'<b>mapped:</b> '+(rec.join(', ')||'—')+'<br/><b>raw keys:</b> '+(raw.slice(0,40).join(', ')||'—')}; } },
+          keys:'<b>mapped:</b> '+(rec.join(', ')||'—')+'<br/><b>raw keys:</b> '+(raw.slice(0,40).join(', ')||'—')+'<br/><b>shape:</b> '+(d.shape?JSON.stringify(d.shape).replace(/</g,'&lt;').slice(0,1600):'—')}; } },
      { name:'EDGE goalie · edgeDebug', call:"NHL.edgeDebug(goalieId,'goalie')", run: async function(){
         if(!ctx.goalieId) return {status:'skip',note:'no goalie id'};
         var d=await NHL.edgeDebug(ctx.goalieId,'goalie');
@@ -202,7 +202,7 @@
         var rec=d.recognized||[], raw=d.topLevelKeys||[];
         var st = rec.length>=2 ? 'pass' : (rec.length>0?'partial':'fail');
         return {status:st, note:'recognized '+rec.length+' / '+raw.length+' raw keys',
-          keys:'<b>mapped:</b> '+(rec.join(', ')||'—')+'<br/><b>raw keys:</b> '+(raw.slice(0,40).join(', ')||'—')}; } },
+          keys:'<b>mapped:</b> '+(rec.join(', ')||'—')+'<br/><b>raw keys:</b> '+(raw.slice(0,40).join(', ')||'—')+'<br/><b>shape:</b> '+(d.shape?JSON.stringify(d.shape).replace(/</g,'&lt;').slice(0,1600):'—')}; } },
      { name:'EDGE skater overlay → edgeSkaterMapped', call:'NHL.edgeSkaterMapped(skaterId)', run: async function(){
         if(!ctx.skaterId) return {status:'skip',note:'no skater id'};
         var d=await NHL.edgeSkaterMapped(ctx.skaterId);
