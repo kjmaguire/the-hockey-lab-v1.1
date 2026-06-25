@@ -270,6 +270,31 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
     {kind:'recap',time:'4d',title:`Recap: special teams carry the ${nk(ab)}`,text:`A 2-for-3 power play and a perfect penalty kill were the difference on the night.`},
   ];},[ab,roster]);
   const social=window.E_useLive(socialMock,()=>(window.NHL&&window.NHL.teamSocial)?window.NHL.teamSocial(ab):null,[ab]);
+  // ---- History: a past season's roster + stats + an auto-generated "Season story" ----
+  const histSeasonsMock=uM(()=>{const cy=2024;return Array.from({length:8},(_,i)=>({id:`${cy-i}${cy-i+1}`,label:`${cy-i}\u2013${String(cy-i+1).slice(2)}`,playoffs:true}));},[]);
+  const histSeasons=window.E_useLive(histSeasonsMock,()=>(window.NHL&&window.NHL.clubStatsSeasons)?window.NHL.clubStatsSeasons(ab):null,[ab]);
+  const [histSel,setHistSel]=React.useState(null);
+  React.useEffect(()=>{ if(histSeasons&&histSeasons.length&&!histSel) setHistSel(histSeasons[0].id); },[histSeasons]);
+  const histMock=uM(()=>{ if(!histSel) return null;
+    const sk=(roster||[]).filter(p=>p.pos!=='G').slice(0,18).map((p,i)=>{const g=Math.max(0,38-i*2),a=Math.max(1,52-i*3);return{id:p.id,name:p.name,pos:p.pos,gp:82-(i%6),g,a,p:g+a,pm:18-i,pim:8+i*3,ppg:Math.max(0,11-i),shots:160-i*7};}).sort((a,b)=>b.p-a.p);
+    const go=D.goalies.filter(g=>g.team===ab).slice(0,2).map((g,i)=>({id:g.id,name:g.name,gp:52-i*22,w:31-i*12,l:16+i*2,otl:5,svp:g.svp,gaa:g.gaa,so:4-i}));
+    return {season:histSel,skaters:sk,goalies:go};
+  },[histSel,ab,roster]);
+  const histData=window.E_useLive(histMock,()=>(histSel&&window.NHL&&window.NHL.clubStatsForSeason)?window.NHL.clubStatsForSeason(ab,histSel,2):null,[histSel,ab]);
+  // Real all-time franchise W/L (records.nhl.com) for the Records tab; mock in preview.
+  const franchiseMock=uM(()=>{const f=D.teamFranchiseRecords(ab);const a=f&&f.allTime;return a?{gp:null,w:a.wins,l:null,winPct:a.winPct,first:null,seasons:a.seasons,playoffs:null}:null;},[ab]);
+  const franchise=window.E_useLive(franchiseMock,()=>(window.NHL&&window.NHL.teamFranchiseMapped)?window.NHL.teamFranchiseMapped(ab).then(d=>d?d.allTime:null):null,[ab]);
+  // Free, data-driven season narrative (no API). Reads the real box score into prose.
+  const seasonStory=(d,label)=>{ if(!d) return ''; const sk=d.skaters||[],go=d.goalies||[]; if(!sk.length&&!go.length) return '';
+    const team=`${ct(ab)} ${nk(ab)}`; const top=sk[0],g2=sk[1]; const topG=[...go].sort((a,b)=>(b.w||0)-(a.w||0))[0];
+    const totG=sk.reduce((s,p)=>s+(p.g||0),0); const snipers=[...sk].sort((a,b)=>(b.g||0)-(a.g||0))[0];
+    const out=[];
+    if(top) out.push(`In ${label}, ${top.name} paced the ${team} with ${top.p} points (${top.g} goals, ${top.a} assists) over ${top.gp} games`+(g2?`, with ${g2.name} close behind at ${g2.p}.`:'.'));
+    if(snipers&&top&&snipers.id!==top.id) out.push(`${snipers.name} led the team in goals with ${snipers.g}.`);
+    if(topG&&topG.gp) out.push(`Between the pipes, ${topG.name} went ${topG.w}\u2013${topG.l}${topG.otl?`\u2013${topG.otl}`:''}`+(topG.svp?` with a ${typeof topG.svp==='number'?topG.svp.toFixed(3).slice(1):topG.svp} save percentage`:'')+(topG.so?` and ${topG.so} shutouts.`:'.'));
+    out.push(`As a group the roster combined for ${totG} goals across the season.`);
+    return out.join(' ');
+  };
   return(<div>
     <button onClick={onBack} className="el" style={{background:'none',border:'none',color:T.mut,cursor:'pointer',fontFamily:MONO,fontSize:12,padding:'0 0 18px'}}>← back to teams</button>
     <div style={{...card,padding:0,overflow:'hidden',marginBottom:16}}>
@@ -283,7 +308,30 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12,marginBottom:16}}>
       <Stat l="Record" v={`${t.w}-${t.l}-${t.otl}`}/><Stat l="League rank" v={`#${D.rankOf[ab]}`}/><Stat l="Goal diff" v={`${t.diff>=0?'+':''}${t.diff}`}/><Stat l="Last 10" v={t.last10}/>
     </div>
-    <Tabs tabs={['Hub','Buzz','Stats','Shot zones','Schedule','Roster','Prospects','Records']} active={tab} onChange={setTab}/>
+    <Tabs tabs={['Hub','Buzz','Stats','Shot zones','Schedule','Roster','Prospects','History','Records']} active={tab} onChange={setTab}/>
+    {tab==='History'&&(()=>{
+      const sel=(histSeasons||[]).find(s=>s.id===histSel);
+      const story=seasonStory(histData,sel?sel.label:'');
+      const sk=(histData&&histData.skaters)||[],go=(histData&&histData.goalies)||[];
+      const fmtSv=v=>v==null?'\u2014':(typeof v==='number'?v.toFixed(3).slice(1):v);
+      return <div>
+        <div style={{display:'flex',alignItems:'center',gap:11,marginBottom:16,flexWrap:'wrap'}}>
+          <div style={{...ML}}>Season</div>
+          <select value={histSel||''} onChange={e=>setHistSel(e.target.value)} style={{fontFamily:MONO,fontSize:13,fontWeight:600,background:T.bg,border:`1px solid ${T.line2}`,borderRadius:8,padding:'7px 10px',color:T.ink,cursor:'pointer'}}>
+            {(histSeasons||[]).map(s=><option key={s.id} value={s.id}>{s.label}{s.playoffs?' \u00b7 made playoffs':''}</option>)}
+          </select>
+          <span style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.06em',textTransform:'uppercase',color:'#b5762a',border:'1px solid rgba(181,118,42,.35)',borderRadius:5,padding:'2px 7px'}} title="Historical skater & goalie stats pulled live from the NHL on deploy">History · beta</span>
+        </div>
+        {story&&<div className="ec" style={{...card,padding:'16px 18px',marginBottom:16,borderLeft:`3px solid ${c2(ab)}`}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><span style={{fontFamily:MONO,fontSize:10,letterSpacing:'.1em',textTransform:'uppercase',color:T.red}}>Season story</span><span style={{fontFamily:MONO,fontSize:9.5,color:T.faint}}>auto-generated from the box score</span></div>
+          <div style={{fontFamily:SERIF,fontSize:16.5,lineHeight:1.5,color:T.ink}}>{story}</div>
+        </div>}
+        {RT({title:`Skaters \u00b7 ${sel?sel.label:''}`,rows:sk,cols:[['Pos','pos'],['GP','gp'],['G','g'],['A','a'],['P','p'],['+/-','pm']]})}
+        {go.length>0&&<div style={{marginBottom:18}}><div style={{...ML,marginBottom:8}}>Goalies · {sel?sel.label:''}</div><div style={{...card,overflow:'hidden'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13.5}}><thead><tr><th style={{padding:'9px 14px',textAlign:'left',...ML}}>Goalie</th>{[['GP','gp'],['W','w'],['L','l'],['SO','so'],['SV%','svp'],['GAA','gaa']].map(([h])=><th key={h} style={{padding:'9px',textAlign:'center',...ML}}>{h}</th>)}</tr></thead><tbody>{go.map(p=><tr key={p.id} onClick={()=>onPlayer(p)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontWeight:500}}>{p.name}</td>{[['GP','gp'],['W','w'],['L','l'],['SO','so'],['SV%','svp'],['GAA','gaa']].map(([h,k])=><td key={h} style={{textAlign:'center',color:T.mut}}>{k==='svp'?fmtSv(p[k]):k==='gaa'?(p[k]!=null?(+p[k]).toFixed(2):'\u2014'):p[k]}</td>)}</tr>)}</tbody></table></div></div>}
+        {!sk.length&&!go.length&&<div style={{...card,padding:'40px 18px',textAlign:'center',color:T.mut,fontSize:14}}>No stats on file for this season.</div>}
+        <div style={{fontFamily:MONO,fontSize:10.5,color:T.faint,marginTop:6,lineHeight:1.6}}>Season story is generated from the season's real box score — no external AI. Historical stats load live from the NHL on deploy.</div>
+      </div>;
+    })()}
     {tab==='Hub'&&(()=>{
       const news=D.teamNews(ab);
       const NACC={pos:'#1a8a4f',neg:T.red,gold:'#b5762a',edge:'#1a8a4f',brand:c2(ab),mut:T.faint};
@@ -410,6 +458,19 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
           <Banner label="Conference title" years={ti.conference} tone={T.ink} bg={T.bg} bd={T.line2}/>
           <Banner label="Division title" years={ti.division} tone={T.mut} bg={T.bg} bd={T.line2}/>
         </div>:<div style={{...card,padding:'15px 18px',marginBottom:18,fontFamily:MONO,fontSize:12,color:T.mut}}>No Stanley Cups or Presidents' Trophies on record yet.</div>}
+        {franchise&&<React.Fragment>
+          <div style={{...ML,marginBottom:10}}>All-time franchise record</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:8}}>
+            {franchise.gp!=null&&<Big l="Games" v={Number(franchise.gp).toLocaleString()}/>}
+            {franchise.w!=null&&<Big l="Wins" v={Number(franchise.w).toLocaleString()}/>}
+            {franchise.l!=null&&<Big l="Losses" v={Number(franchise.l).toLocaleString()}/>}
+            {franchise.winPct&&<Big l="Win %" v={franchise.winPct}/>}
+            {franchise.first&&<Big l="Since" v={franchise.first}/>}
+            {franchise.seasons&&<Big l="Seasons" v={franchise.seasons}/>}
+          </div>
+          {franchise.playoffs&&<div style={{fontFamily:MONO,fontSize:11.5,color:T.mut,marginBottom:18}}>Playoffs all-time: {franchise.playoffs.w}–{franchise.playoffs.l} across {Number(franchise.playoffs.gp).toLocaleString()} games</div>}
+          <div style={{height:6}}/>
+        </React.Fragment>}
         <div style={{...ML,marginBottom:10}}>Franchise career leaders</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
           {rec.career.map((c,i)=><div key={i} style={{...card,padding:'15px 16px'}}><div style={{...ML,fontSize:9.5}}>{c.cat}</div><div style={{fontSize:18,fontWeight:600,color:T.ink,marginTop:6}}>{c.rows[0]?c.rows[0].name:'—'}</div></div>)}
@@ -495,7 +556,16 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
       <div style={{display:'flex',alignItems:'center',gap:18,padding:'24px'}}>
         <PlayerAvatar pos={p.pos} team={p.team} name={p.name} size={64}/>
         <div><h1 style={{fontSize:30,fontWeight:600,letterSpacing:'-.02em',color:T.ink}}>{p.name}</h1>
-        <button onClick={()=>onTeam(p.team)} className="el" style={{background:'none',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8,color:T.mut,fontSize:13,padding:'4px 0'}}><Badge ab={p.team} size={20}/>{ct(p.team)} {nk(p.team)} · {p.pos}</button></div>
+        <button onClick={()=>onTeam(p.team)} className="el" style={{background:'none',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:8,color:T.mut,fontSize:13,padding:'4px 0'}}><Badge ab={p.team} size={20}/>{ct(p.team)} {nk(p.team)} · {p.pos}</button>
+        {ex.bio&&<div style={{display:'flex',flexWrap:'wrap',gap:'4px 14px',marginTop:6,fontFamily:MONO,fontSize:11.5,color:T.faint}}>
+          {ex.bio.number!=null&&<span>#{ex.bio.number}</span>}
+          {ex.bio.ht&&<span>{ex.bio.ht}{ex.bio.wt?`, ${ex.bio.wt}`:''}</span>}
+          {ex.bio.shoots&&<span>{isG?'Catches':'Shoots'} {ex.bio.shoots}</span>}
+          {ex.bio.age!=null&&<span>Age {ex.bio.age}</span>}
+          {ex.bio.born&&<span>{ex.bio.born}</span>}
+          {ex.bio.draft&&<span>Draft: {ex.bio.draft}</span>}
+        </div>}
+        </div>
       </div>
     </div>
     {/* featured */}
@@ -549,9 +619,10 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
     {window.E_ShotZones&&<window.E_ShotZones scope={isG?'goalie':'skater'} id={p.id} teamAb={p.team} name={p.name}/>}
     {/* career + last5 */}
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}} className="g2">
-      <div style={{...card,overflow:'hidden'}}><div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>Career</div><div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>{(isG?[['GP',ex.career.gp],['W',ex.career.w],['L',ex.career.l],['SO','—']]:[['GP',ex.career.gp],['G',ex.career.g],['A',ex.career.a],['P',ex.career.p]]).map(([l,v])=><div key={l} style={{padding:'14px',textAlign:'center'}}><div style={ML}>{l}</div><div style={{fontSize:22,fontWeight:600,marginTop:3}}>{v}</div></div>)}</div></div>
+      <div style={{...card,overflow:'hidden'}}><div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>Career</div><div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>{(isG?[['GP',ex.career.gp],['W',ex.career.w],['L',ex.career.l],['SO',ex.career.so!=null?ex.career.so:'—']]:[['GP',ex.career.gp],['G',ex.career.g],['A',ex.career.a],['P',ex.career.p]]).map(([l,v])=><div key={l} style={{padding:'14px',textAlign:'center'}}><div style={ML}>{l}</div><div style={{fontSize:22,fontWeight:600,marginTop:3}}>{v}</div></div>)}</div></div>
       <div style={{...card,overflow:'hidden'}}><div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>Last 5</div>{ex.last5.map((row,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 18px',borderTop:i?`1px solid ${T.line}`:'none',fontSize:13}}><span style={{display:'inline-flex',alignItems:'center',gap:8,color:T.mut}}><span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>{row.date}</span>{row.home?'vs':'@'} <Badge ab={row.opp} size={18}/></span><span style={{fontWeight:600,color:row.result[0]==='W'?'#1a8a4f':T.red}}>{row.result}</span><span style={{fontFamily:MONO,fontSize:12,color:T.mut}}>{row.p} P</span></div>)}</div>
     </div>
+    {ex.careerPO&&<Sec k="Career · playoffs"><div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>{(isG?[['GP',ex.careerPO.gp],['W',ex.careerPO.w],['L',ex.careerPO.l],['SO',ex.careerPO.so]]:[['GP',ex.careerPO.gp],['G',ex.careerPO.g],['A',ex.careerPO.a],['P',ex.careerPO.p]]).map(([l,v])=><div key={l} style={{padding:'14px',textAlign:'center'}}><div style={ML}>{l}</div><div style={{fontSize:22,fontWeight:600,marginTop:3}}>{v}</div></div>)}</div></Sec>}
     {/* season history */}
     <Sec k="Season history"><div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:480,borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}>{(isG?['Season','Team','GP','W','L','SV%','GAA']:['Season','Team','GP','G','A','P','+/-']).map((h,i)=><th key={h} style={{padding:'9px 14px',textAlign:i<2?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead><tbody>{ex.history.map((s,i)=><tr key={i} style={{borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontFamily:MONO,fontSize:12}}>{s.s}</td><td style={{padding:'9px 14px'}}><Badge ab={s.team} size={18}/></td>{(isG?['gp','w','l','svp','gaa']:['gp','g','a','p','pm']).map(k=><td key={k} style={{textAlign:'center',color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{k==='pm'?(s[k]>=0?'+':'')+s[k]:s[k]}</td>)}</tr>)}</tbody></table></div></Sec>
     {/* awards */}
@@ -1658,6 +1729,9 @@ window.E_UI={Eyebrow,PageHead,Badge,Spark,Pill,PlayerAvatar};
 function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs,booting}){
   const fav=favs||[];
   const today=D.slate(0);
+  // League spotlight — featured players (live via NHL.spotlightMapped; mock = top scorers so preview shows the strip)
+  const spotMock=uM(()=>{const ss=D.skaterLeaders('p').slice(0,8);return ss.map(p=>({id:p.id,name:p.name,pos:p.pos,num:p.num,team:p.team,headshot:null}));},[]);
+  const spotlight=window.E_useLive(spotMock,()=>(window.NHL&&window.NHL.spotlightMapped)?window.NHL.spotlightMapped():null,[]);
   const live=today.filter(g=>g.st==='live');
   const [railView,setRailView]=uS('Tonight');
   const [ldrCat,setLdrCat]=uS('Points');
@@ -1729,6 +1803,19 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs,booting}){
 
   return(<div>
     <PageHead k="The Lab" t="Tonight around the" serif="league"/>
+    {spotlight&&spotlight.length>0&&<div style={{marginBottom:18}}>
+      <div style={{...ML,marginBottom:10}}>League spotlight</div>
+      <div style={{display:'flex',gap:10,overflowX:'auto',paddingBottom:4,WebkitOverflowScrolling:'touch'}}>
+        {spotlight.slice(0,12).map(p=><div key={p.id} onClick={()=>onPlayer({id:p.id,name:p.name,team:p.team,pos:p.pos})} className="ec" style={{...card,flex:'0 0 auto',width:150,cursor:'pointer',overflow:'hidden'}}>
+          <div style={{height:3,background:c2(p.team)}}/>
+          <div style={{padding:'12px 13px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>{p.headshot?<img src={p.headshot} alt="" width={34} height={34} loading="lazy" style={{borderRadius:99,objectFit:'cover',background:T.line}}/>:<Badge ab={p.team} size={30}/>}<span style={{fontFamily:MONO,fontSize:10.5,color:T.faint}}>{p.team}{p.num?` · #${p.num}`:''}</span></div>
+            <div style={{fontWeight:700,fontSize:13.5,lineHeight:1.2,color:T.ink}}>{p.name}</div>
+            <div style={{fontFamily:MONO,fontSize:10.5,color:T.mut,marginTop:3}}>{p.pos||'\u2014'}</div>
+          </div>
+        </div>)}
+      </div>
+    </div>}
     {fav.length>0&&<div style={{marginBottom:18}}>
       <div style={{...ML,marginBottom:10}}>Your teams</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(255px,1fr))',gap:12}}>

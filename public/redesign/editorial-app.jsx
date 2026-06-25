@@ -131,6 +131,35 @@ function ProvTag({kind}){
 }
 function Star({on,onClick}){return <button onClick={e=>{e.stopPropagation();onClick();}} style={{background:'none',border:'none',cursor:'pointer',padding:3,lineHeight:0,color:on?T.red:T.faint}} aria-label="follow"><svg width="14" height="14" viewBox="0 0 24 24" fill={on?T.red:'none'} stroke="currentColor" strokeWidth="2"><polygon points="12 2 15 9 22 9 16 14 18 22 12 17 6 22 8 14 2 9 9 9"/></svg></button>;}
 
+// Shared betting-odds store: loads NHL.oddsMapped() once, keys by gameId, lets any game
+// card subscribe. Read-only DraftKings lines via the proxy; silent if unavailable.
+const _oddsStore={map:null,partner:null,loading:false,subs:new Set()};
+function loadOdds(){
+  if(_oddsStore.map||_oddsStore.loading) return;
+  if(!(window.NHL&&window.BC&&window.BC.LIVE&&window.NHL.oddsMapped)) return;
+  _oddsStore.loading=true;
+  window.NHL.oddsMapped('US').then(d=>{ const m={}; if(d&&d.games){ d.games.forEach(g=>{m[g.gameId]=g;}); _oddsStore.partner=d.partner; } _oddsStore.map=m; _oddsStore.loading=false; _oddsStore.subs.forEach(fn=>fn()); }).catch(()=>{_oddsStore.loading=false;});
+}
+function useOdds(gameId){
+  const [,force]=useState(0);
+  useEffect(()=>{ const fn=()=>force(x=>x+1); _oddsStore.subs.add(fn); loadOdds(); return()=>{_oddsStore.subs.delete(fn);}; },[]);
+  return _oddsStore.map?_oddsStore.map[gameId]:null;
+}
+function OddsChip({g}){
+  const o=useOdds(g.id);
+  if(!o) return null;
+  const ml=s=>s&&s.odds&&s.odds.ml!=null?s.odds.ml:null;
+  const a=ml(o.away),h=ml(o.home); if(a==null&&h==null) return null;
+  const p=_oddsStore.partner||{};
+  return <div title={`Odds via ${p.name||'DraftKings'}`} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 16px 10px'}}>
+    <span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.07em',textTransform:'uppercase',color:T.faint}}>{p.name||'Odds'}</span>
+    <span style={{display:'inline-flex',gap:6,fontFamily:MONO,fontSize:11}}>
+      <span style={{padding:'2px 7px',borderRadius:6,border:`1px solid ${T.line2}`,color:T.ink}}>{g.a} {a!=null?a:'\u2014'}</span>
+      <span style={{padding:'2px 7px',borderRadius:6,border:`1px solid ${T.line2}`,color:T.ink}}>{g.h} {h!=null?h:'\u2014'}</span>
+    </span>
+  </div>;
+}
+
 function GameCard({g,favs,toggleFav,onOpen}){
   const s=useLive(g);
   const le=useLiveEdge(g);
@@ -165,6 +194,7 @@ function GameCard({g,favs,toggleFav,onOpen}){
         {x&&<button onClick={()=>setExp(e=>!e)} style={{fontFamily:MONO,fontSize:10,letterSpacing:'.05em',textTransform:'uppercase',background:'none',border:'none',color:T.faint,cursor:'pointer'}}>{exp?'hide ▲':'details ▼'}</button>}
       </div>
     </div>
+    {g.st==='pre'&&<OddsChip g={g}/>}
     {exp&&x&&<div style={{borderTop:`1px solid ${T.line}`,background:T.bg,padding:'12px 16px',fontFamily:MONO,fontSize:11.5,color:T.mut,lineHeight:1.7}}>
       {g.st!=='pre'&&<div style={{marginBottom:6}}>line: <span style={{color:T.ink}}>{g.a} {x.line.away.join('-')} · {g.h} {x.line.home.join('-')}</span></div>}
       <div>leaders: <span style={{color:T.ink}}>{x.leaders.away.name} ({g.a}, {x.leaders.away.p}P) · {x.leaders.home.name} ({g.h}, {x.leaders.home.p}P)</span></div>
@@ -701,7 +731,14 @@ function App(){
   const _liveS=(window.NHL&&window.NHL._season)?String(window.NHL._season):null;
   if(season==='cur'&&_liveS&&/^\d{8}$/.test(_liveS))curIdRef.current=_liveS;
   const curId=curIdRef.current||_liveS||'20252026';
-  const SEASONS=useMemo(()=>{const top=parseInt(curId.slice(0,4),10)||2025;const a=[];for(let y=top;y>=2010;y--)a.push(`${y}${y+1}`);return a;},[curId]);
+  // Authoritative season list from the NHL when live (standings-season), else a computed
+  // modern-era range. Loaded once; falls back silently so the dropdown always works.
+  const [liveSeasons,setLiveSeasons]=useState(null);
+  useEffect(()=>{ let on=true; if(window.NHL&&window.BC&&window.BC.LIVE&&window.NHL.seasonsList){ window.NHL.seasonsList().then(ids=>{ if(on&&ids&&ids.length) setLiveSeasons(ids); }).catch(()=>{}); } return()=>{on=false;}; },[]);
+  const SEASONS=useMemo(()=>{
+    if(liveSeasons&&liveSeasons.length){ const top=String(curId); return [top,...liveSeasons.filter(s=>s!==top)]; }
+    const top=parseInt(curId.slice(0,4),10)||2025;const a=[];for(let y=top;y>=2010;y--)a.push(`${y}${y+1}`);return a;
+  },[curId,liveSeasons]);
   const seasonLabel=v=>v==='cur'?`${curId.slice(0,4)}\u2013${curId.slice(6,8)}`:`${v.slice(0,4)}\u2013${v.slice(6,8)}`;
   const changeSeason=v=>{ setSeason(v); const id=v==='cur'?curId:v; if(window.BC&&BC.LIVE&&BC.hydrateSeason){ setLoading(true); BC.hydrateSeason(id,()=>{setHv(x=>x+1);setLoading(false);}); } window.scrollTo(0,0); };
   const [legalDoc,setLegalDoc]=useState('terms');

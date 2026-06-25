@@ -331,7 +331,7 @@
     const isG = (d.position || '') === 'G';
     const ab = normTeam(d.currentTeamAbbrev);
     const nhlRows = (d.seasonTotals || []).filter((s) => s.gameTypeId === 2 && s.leagueAbbrev === 'NHL');
-    const history = nhlRows.slice().reverse().slice(0, 8).map((s) => {
+    const history = nhlRows.slice().reverse().map((s) => {
       const team = normTeam(s.teamAbbrev) || teamByName(dflt(s.teamCommonName) || dflt(s.teamName) || dflt(s.teamPlaceName)) || ab;
       return isG
         ? { s: fmtSeason(s.season), team, gp: s.gamesPlayed ?? 0, w: s.wins ?? 0, l: s.losses ?? 0,
@@ -340,11 +340,27 @@
     });
     const c = (d.careerTotals && d.careerTotals.regularSeason) || {};
     const career = isG
-      ? { gp: c.gamesPlayed ?? 0, w: c.wins ?? 0, l: c.losses ?? 0 }
-      : { gp: c.gamesPlayed ?? 0, g: c.goals ?? 0, a: c.assists ?? 0, p: c.points ?? 0 };
-    const awards = (d.awards || []).flatMap((a) => (a.seasons || []).map((se) => ({ name: dflt(a.trophy), yr: fmtSeason(se.seasonId).split('-')[0] }))).slice(0, 8);
+      ? { gp: c.gamesPlayed ?? 0, w: c.wins ?? 0, l: c.losses ?? 0, so: c.shutouts ?? 0, svp: (c.savePctg != null ? (+c.savePctg).toFixed(3).slice(1) : '—'), gaa: (c.goalsAgainstAvg != null ? (+c.goalsAgainstAvg).toFixed(2) : '—') }
+      : { gp: c.gamesPlayed ?? 0, g: c.goals ?? 0, a: c.assists ?? 0, p: c.points ?? 0, pm: c.plusMinus ?? 0, pim: c.pim ?? 0, ppg: c.powerPlayGoals ?? 0, gwg: c.gameWinningGoals ?? 0, shots: c.shots ?? 0 };
+    // career playoffs (shown only when the player has any)
+    const po = (d.careerTotals && d.careerTotals.playoffs) || null;
+    const careerPO = (po && (po.gamesPlayed || 0) > 0) ? (isG
+      ? { gp: po.gamesPlayed ?? 0, w: po.wins ?? 0, l: po.losses ?? 0, so: po.shutouts ?? 0 }
+      : { gp: po.gamesPlayed ?? 0, g: po.goals ?? 0, a: po.assists ?? 0, p: po.points ?? 0 }) : null;
+    const awards = (d.awards || []).flatMap((a) => (a.seasons || []).map((se) => ({ name: dflt(a.trophy), yr: fmtSeason(se.seasonId).split('-')[0] })));
+    // bio / vitals for the header
+    const dd = d.draftDetails || null;
+    const inches = num(d.heightInInches); const age = (() => { if (!d.birthDate) return null; const b = new Date(d.birthDate); if (isNaN(b)) return null; const n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; })();
+    const bio = {
+      ht: inches != null ? `${Math.floor(inches / 12)}'${inches % 12}"` : null,
+      wt: num(d.weightInPounds) != null ? `${num(d.weightInPounds)} lb` : null,
+      shoots: d.shootsCatches || null, age,
+      born: [dflt(d.birthCity), dflt(d.birthStateProvince), dflt(d.birthCountry)].filter(Boolean).join(', ') || null,
+      draft: dd ? `${dd.year} · Rd ${dd.round}, #${dd.overallPick}${dd.teamAbbrev ? ' ' + normTeam(dd.teamAbbrev) : ''}` : 'Undrafted',
+      number: d.sweaterNumber != null ? d.sweaterNumber : null,
+    };
     if (!history.length && !awards.length) return null;
-    return { history, career, awards };
+    return { history, career, careerPO, awards, bio };
   }
 
   // ---- game landing + boxscore -> box score / scoring / three stars / team stats / lineups ----
@@ -857,6 +873,51 @@
     roster: async (team, season) => mapRoster(await get('roster/' + team + (season ? '/' + season : ''))),
     rosterRaw: (team) => get(`roster/${team}`),
     clubStats: (team) => get(`club-stats/${team}`),
+    // Historical "Season story" data layer ----------------------------------------------
+    // Which seasons a club has stats for (drives the season picker). → [{id, label, playoffs}]
+    clubStatsSeasons: async (team) => { try {
+      const d = await get(`club-stats-season/${team}`);
+      const arr = Array.isArray(d) ? d : (d && d.seasons) || [];
+      const rows = arr.map((s) => { const id = String(s.season || s.id || s); const yr = id.slice(0, 4);
+        return { id, label: yr + '\u2013' + id.slice(6, 8), playoffs: Array.isArray(s.gameTypes) ? s.gameTypes.includes(3) : false }; })
+        .filter((s) => /^\d{8}$/.test(s.id)).sort((a, b) => b.id.localeCompare(a.id));
+      return rows.length ? rows : null;
+    } catch (_) { return null; } },
+    // A club's skaters + goalies for ONE past season (real names + stats). gameType 2=reg,3=playoffs.
+    clubStatsForSeason: async (team, season, gameType) => { try {
+      const d = await get(`club-stats/${team}?season=${season}&gameType=${gameType || 2}`);
+      if (!d) return null;
+      const nm = (p) => dflt(p.firstName) && dflt(p.lastName) ? `${dflt(p.firstName)} ${dflt(p.lastName)}` : (dflt(p.name) || dflt(p.skaterFullName) || '');
+      const skaters = (d.skaters || []).map((p) => ({
+        id: p.playerId, name: nm(p), pos: p.positionCode || p.position || '', gp: num(p.gamesPlayed) ?? 0,
+        g: num(p.goals) ?? 0, a: num(p.assists) ?? 0, p: num(p.points) ?? 0, pm: num(p.plusMinus) ?? 0,
+        pim: num(p.penaltyMinutes) ?? 0, ppg: num(p.powerPlayGoals) ?? 0, shots: num(p.shots) ?? 0,
+      })).filter((p) => p.name).sort((a, b) => b.p - a.p);
+      const goalies = (d.goalies || []).map((p) => ({
+        id: p.playerId, name: nm(p), gp: num(p.gamesPlayed) ?? 0, w: num(p.wins) ?? 0, l: num(p.losses) ?? 0,
+        otl: num(p.otLosses) ?? 0, svp: num(p.savePercentage) ?? num(p.savePctg) ?? null,
+        gaa: num(p.goalsAgainstAverage) ?? num(p.goalsAgainstAvg) ?? null, so: num(p.shutouts) ?? 0,
+      })).filter((p) => p.name).sort((a, b) => b.w - a.w);
+      return (skaters.length || goalies.length) ? { season: String(season), skaters, goalies } : null;
+    } catch (_) { return null; } },
+    // Real all-time franchise W/L from records.nhl.com (franchise-team-totals). Defensive:
+    // matches rows to the tricode, prefers the regular-season row, bails to null → mock.
+    teamFranchiseMapped: async (ab) => { try {
+      const d = await get('records/franchise-team-totals');
+      const arr = (d && (d.data || (Array.isArray(d) ? d : null))) || null; if (!arr || !arr.length) return null;
+      const mine = arr.filter((r) => normTeam(r.triCode || r.teamAbbrev || '') === ab || teamByName(dflt(r.teamName) || r.teamName) === ab);
+      if (!mine.length) return null;
+      const reg = mine.find((r) => r.gameTypeId === 2) || mine.slice().sort((a, b) => (num(b.gamesPlayed) || 0) - (num(a.gamesPlayed) || 0))[0];
+      const po = mine.find((r) => r.gameTypeId === 3);
+      const w = num(reg.wins), l = num(reg.losses), gp = num(reg.gamesPlayed);
+      if (w == null || gp == null) return null;
+      const first = reg.firstSeasonId ? String(reg.firstSeasonId).slice(0, 4) : null;
+      return { allTime: {
+        gp, w, l, ties: num(reg.ties), otl: num(reg.otLosses) ?? null,
+        winPct: gp ? (w / gp).toFixed(3).replace(/^0/, '') : null, first,
+        playoffs: (po && num(po.gamesPlayed)) ? { gp: num(po.gamesPlayed), w: num(po.wins) ?? 0, l: num(po.losses) ?? 0 } : null,
+      } };
+    } catch (_) { return null; } },
     clubSchedule: (team) => get(`club-schedule-view/${team}?view=month`),
     teamStats: (team) => get(`team-stats/${team}`),
     prospects: (team) => get(`prospects/${team}`),
@@ -1085,6 +1146,19 @@
     draftPicks: (season, round) => get(season ? `draft/picks/${season}?round=${round || 'all'}` : 'draft/picks'),
     draftTracker: () => get('draft/tracker'),
 
+    // Authoritative season list from the NHL (standings-season → descending season ids).
+    // Powers the header dropdown so it reflects real seasons instead of a hardcoded floor.
+    // Cached on window.NHL._seasonsCache; null/empty → caller keeps its computed range.
+    seasonsList: async () => { try {
+      if (window.NHL._seasonsCache) return window.NHL._seasonsCache;
+      const d = await get('standings-season');
+      const arr = (d && d.seasons) || [];
+      const ids = arr.map((s) => String(s.id)).filter((s) => /^\d{8}$/.test(s)).sort((a, b) => b.localeCompare(a));
+      if (!ids.length) return null;
+      window.NHL._seasonsCache = ids;
+      return ids;
+    } catch (_) { return null; } },
+
     // ---- stats API utilities (generic passthrough) ----
     stats: (path, query) => {
       const qs = query ? '?' + new URLSearchParams(query).toString() : '';
@@ -1092,6 +1166,35 @@
     },
     // extras the proxy now also exposes (see cloudflare functions):
     spotlight: () => get('spotlight'),
+    // Mapped league spotlight — featured players, clean view-model (null → caller keeps mock).
+    spotlightMapped: async () => { try {
+      const d = await get('spotlight');
+      const arr = Array.isArray(d) ? d : (d && d.players) || [];
+      const rows = arr.map((p) => ({
+        id: p.playerId, name: dflt(p.name) || [dflt(p.firstName), dflt(p.lastName)].filter(Boolean).join(' '),
+        pos: p.position || '', num: p.sweaterNumber || null, team: normTeam(p.teamTriCode || p.teamAbbrev),
+        headshot: p.headshot || null, slug: p.playerSlug || null,
+      })).filter((p) => p.id && p.name);
+      return rows.length ? rows : null;
+    } catch (_) { return null; } },
+    // Mapped betting odds — defensive scan of each team's `odds` object for moneyline/spread/
+    // total so it survives the field naming we couldn't fully drill (EDGE-style). null → no odds.
+    oddsMapped: async (country) => { try {
+      const d = await get(`partner-odds/${country || 'US'}`);
+      if (!d || !Array.isArray(d.games)) return null;
+      const bp = d.bettingPartner || {};
+      const pickOdds = (o) => { if (!o || typeof o !== 'object') return null;
+        const scan = (re) => { for (const k of Object.keys(o)) { if (re.test(k)) { const v = o[k]; const n = num(v) ?? num(v && (v.value ?? v.odds ?? v.price ?? v.american)); if (n != null) return n; } } return null; };
+        const dec = (v) => v == null ? null : (v > 0 ? '+' + v : String(v));
+        return { ml: dec(scan(/money|ml|american|price|win/i)), spread: scan(/spread|line|puck|handicap/i), total: scan(/total|over|under|o\/u/i) };
+      };
+      const games = d.games.map((g) => ({
+        gameId: g.gameId, start: g.startTimeUTC,
+        home: { ab: normTeam(g.homeTeam && (g.homeTeam.abbrev || g.homeTeam.triCode)), odds: pickOdds(g.homeTeam && g.homeTeam.odds) },
+        away: { ab: normTeam(g.awayTeam && (g.awayTeam.abbrev || g.awayTeam.triCode)), odds: pickOdds(g.awayTeam && g.awayTeam.odds) },
+      })).filter((g) => g.gameId);
+      return games.length ? { partner: { name: bp.name || 'Odds', logo: bp.imageUrl || null, url: bp.siteUrl || null, bg: bp.bgColor || '#000', fg: bp.textColor || '#fff' }, games } : null;
+    } catch (_) { return null; } },
     playoffBracket: () => get('playoff-bracket'),
     playoffSeries: (season) => get(`playoff-series-carousel/${season}`),
     playoffSeriesSchedule: (season, letter) => get(`schedule/playoff-series/${season}/${letter}`),

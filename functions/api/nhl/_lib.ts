@@ -53,6 +53,9 @@ export function ttlFor(url: string, payload?: any): number {
   if (/\/(meta|config|glossary|country|franchise)(\b|\/)/.test(url)) return TTL.day;
   if (/\/season(\b|\/)/.test(url)) return TTL.long;
   if (/\/draft\/(rankings|picks)\/\d{4}(\b|\/)/.test(url)) return TTL.day; // a specific draft year
+  // season-list metadata (which seasons exist / a club has stats for) — changes ~yearly.
+  // Must precede the /standings/ rule below, which would otherwise catch standings-season.
+  if (/\/(standings-season|club-stats-season)(\b|\/|$)/.test(url)) return TTL.long;
 
   const isNow = /\/now(\b|\/|$)/.test(url);
   const gs = gameStateOf(payload);
