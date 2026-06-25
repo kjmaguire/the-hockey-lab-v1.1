@@ -57,6 +57,8 @@ function cspFor(strict: boolean): string {
     "connect-src 'self' https://cloudflareinsights.com",
     "frame-ancestors 'self'",
     "base-uri 'self'",
+    "object-src 'none'",
+    "form-action 'self'",
   ].join('; ');
 }
 
@@ -424,8 +426,26 @@ export default {
     // Logpush). No storage; just surfaces what's actually breaking for real users.
     if (url.pathname === '/api/log') {
       if (request.method !== 'POST') return new Response(null, { status: 405 });
+      // Rate-limit the unauthenticated beacon so it can't be used to spam logs/metrics.
+      const lip = request.headers.get('cf-connecting-ip') || '';
+      if (!(await rateLimit(env.RATE_LIMIT, 'log:' + lip, 20))) return new Response(null, { status: 429 });
       try { const t = await request.text(); console.error('[client-error]', t.slice(0, 1000)); } catch { /* ignore */ }
       return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+    }
+
+    // security.txt (RFC 9116): standardized contact for vulnerability reports. Served at both
+    // the canonical /.well-known path and the legacy root path. Origin-derived so no host drifts.
+    if (url.pathname === '/.well-known/security.txt' || url.pathname === '/security.txt') {
+      const exp = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 19) + 'Z';
+      const body = [
+        '# Security contact for The Hockey Lab',
+        'Contact: mailto:security@' + url.hostname.replace(/^www\./, ''),
+        'Expires: ' + exp,
+        'Preferred-Languages: en',
+        'Canonical: ' + url.origin + '/.well-known/security.txt',
+        '',
+      ].join('\n');
+      return new Response(body, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400', ...SECURITY_HEADERS } });
     }
 
     if (url.pathname.startsWith('/api/social/team/')) {
