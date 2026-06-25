@@ -83,7 +83,7 @@
 
   function shapeOf(o,depth){
     if(o==null||typeof o!=='object') return o;
-    if(Array.isArray(o)) return o.length?('['+o.length+'] '+(typeof o[0]==='object'&&o[0]?shapeOf(o[0],depth+1):typeof o[0])):'[]';
+    if(Array.isArray(o)) return o.length?['len '+o.length, (typeof o[0]==='object'&&o[0])?shapeOf(o[0],depth+1):typeof o[0]]:[];
     if(depth>=3) return '{'+Object.keys(o).slice(0,18).join(',')+'}';
     var out={}; var ks=Object.keys(o).slice(0,40); for(var i=0;i<ks.length;i++) out[ks[i]]=shapeOf(o[ks[i]],depth+1); return out;
   }

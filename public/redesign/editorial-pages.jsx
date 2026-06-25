@@ -347,6 +347,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
       const posts=social;
       const Av=({size=40})=><span style={{width:size,height:size,borderRadius:99,background:c2(ab),display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:size*0.34,flexShrink:0}}>{ab}</span>;
       const XMark=({size=18})=><span style={{width:size,height:size,borderRadius:6,background:T.invBg,color:T.invFg,display:'inline-flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:size*0.62,flexShrink:0}}>X</span>;
+      const RedditMark=({size=18})=><span style={{width:size,height:size,borderRadius:6,background:'#ff4500',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:size*0.46,flexShrink:0}}>r/</span>;
       const Verified=()=><svg width="14" height="14" viewBox="0 0 24 24" style={{flexShrink:0}}><circle cx="12" cy="12" r="11" fill="#2a72c8"/><path d="M7 12.5l3.2 3.2L17 8.5" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>;
       const fmtN=n=>typeof n==='string'?n:(n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'K':String(n||0));
       const Stat=({icon,n})=><span style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:11,color:T.faint}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>{fmtN(n)}</span>;
@@ -365,16 +366,16 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
                   <div style={{display:'flex',alignItems:'center',gap:5}}>
                     <span style={{fontSize:13.5,fontWeight:700,color:T.ink,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct(ab)} {nk(ab)}</span>
                     <Verified/>
-                    <span style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:6}}><Badge ab={ab} size={14}/>{K==='x'?<XMark size={18}/>:<span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.06em',textTransform:'uppercase',color:K==='recap'?'#1a8a4f':'#1f5f8a',border:`1px solid ${(K==='recap'?'#1a8a4f':'#1f5f8a')}44`,borderRadius:5,padding:'2px 6px'}}>{K==='recap'?'Recap':(p.source||'News')}</span>}</span>
+                    <span style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:6}}><Badge ab={ab} size={14}/>{K==='x'?<XMark size={18}/>:K==='reddit'?<RedditMark/>:<span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.06em',textTransform:'uppercase',color:K==='recap'?'#1a8a4f':'#1f5f8a',border:`1px solid ${(K==='recap'?'#1a8a4f':'#1f5f8a')}44`,borderRadius:5,padding:'2px 6px'}}>{K==='recap'?'Recap':(p.source||'News')}</span>}</span>
                   </div>
-                  <div style={{fontFamily:MONO,fontSize:11,color:T.faint,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{K==='x'?`@${h}`:K==='recap'?'Game recap':(p.source||'Team news')} · {p.time}</div>
+                  <div style={{fontFamily:MONO,fontSize:11,color:T.faint,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{K==='x'?`@${h}`:K==='reddit'?p.handle:K==='recap'?'Game recap':(p.source||'Team news')} · {p.time}</div>
                 </div>
               </div>
               {p.title&&<div style={{fontFamily:SERIF,fontSize:17,lineHeight:1.3,color:T.ink,marginBottom:5}}>{p.title}</div>}
               <div style={{fontSize:14,lineHeight:1.5,color:K==='x'?T.ink:T.mut}}>{p.text}</div>
-              {K==='x'&&<div style={{display:'flex',alignItems:'center',gap:22,marginTop:12,paddingTop:11,borderTop:`1px solid ${T.line}`}}>
+              {(K==='x'||K==='reddit')&&<div style={{display:'flex',alignItems:'center',gap:22,marginTop:12,paddingTop:11,borderTop:`1px solid ${T.line}`}}>
                 <Stat icon={<path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 9 9 0 0 1-4-1L3 20l1.9-4.5A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5Z"/>} n={p.replies!=null?p.replies:Math.max(1,Math.round((parseFloat(p.rt)||12)*0.6))}/>
-                <Stat icon={<React.Fragment><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></React.Fragment>} n={p.rt}/>
+                {K==='x'&&<Stat icon={<React.Fragment><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></React.Fragment>} n={p.rt}/>}
                 <Stat icon={<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8Z"/>} n={p.likes}/>
               </div>}
             </div>);})}

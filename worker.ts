@@ -352,6 +352,28 @@ function parseGoogleNews(xml: string): any[] {
   }).filter((p) => p.title);
 }
 
+const SOCIAL_SUBREDDIT: Record<string, string> = {
+  ANA: 'AnaheimDucks', BOS: 'BostonBruins', BUF: 'sabres', CGY: 'CalgaryFlames', CAR: 'canes',
+  CHI: 'hawks', COL: 'ColoradoAvalanche', CBJ: 'BlueJackets', DAL: 'DallasStars', DET: 'DetroitRedWings',
+  EDM: 'EdmontonOilers', FLA: 'FloridaPanthers', LAK: 'losangeleskings', MIN: 'wildhockey', MTL: 'Habs',
+  NSH: 'Predators', NJD: 'devils', NYI: 'NewYorkIslanders', NYR: 'rangers', OTT: 'OttawaSenators',
+  PHI: 'Flyers', PIT: 'penguins', SJS: 'SanJoseSharks', SEA: 'SeattleKraken', STL: 'stlouisblues',
+  TBL: 'TampaBayLightning', TOR: 'leafs', UTA: 'utahhockey', VAN: 'canucks', VGK: 'goldenknights',
+  WSH: 'caps', WPG: 'winnipegjets',
+};
+function parseReddit(j: any, sub: string): any[] {
+  const ch = (j && j.data && j.data.children) || [];
+  return ch.map((c: any) => c && c.data).filter((d: any) => d && d.title && !d.stickied)
+    .map((d: any) => ({
+      kind: 'reddit', source: 'r/' + sub, handle: 'r/' + sub,
+      title: String(d.title || '').slice(0, 240),
+      text: String(d.selftext || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+      likes: d.ups || 0, replies: d.num_comments || 0,
+      time: d.created_utc ? relTime(new Date(d.created_utc * 1000).toISOString()) : '',
+      link: 'https://www.reddit.com' + (d.permalink || ''),
+    }));
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -377,21 +399,45 @@ export default {
     // so they override any committed fallback copy. Diagnostics pages are disallowed.
     // Social "Buzz" feed — free, key-less sources fetched server-side, merged + cached.
     // Increment 1: Google News RSS per team (Reddit/YouTube/recaps layer in next).
+    // Lightweight client error beacon sink → visible in Cloudflare logs (wrangler tail /
+    // Logpush). No storage; just surfaces what's actually breaking for real users.
+    if (url.pathname === '/api/log') {
+      if (request.method !== 'POST') return new Response(null, { status: 405 });
+      try { const t = await request.text(); console.error('[client-error]', t.slice(0, 1000)); } catch { /* ignore */ }
+      return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+    }
+
     if (url.pathname.startsWith('/api/social/team/')) {
       if (request.method !== 'GET') return errorJson('Method not allowed.', 405);
       const ab = decodeURIComponent(url.pathname.split('/').pop() || '').toUpperCase();
       const name = SOCIAL_TEAM_NAME[ab];
       if (!name) return errorJson('Unknown team.', 404);
-      try {
-        const q = encodeURIComponent(`${name} NHL`);
-        const rss = await fetch(`https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`, {
-          headers: { 'user-agent': 'Mozilla/5.0 (compatible; TheHockeyLab/1.0)' },
-          cf: { cacheTtl: 600, cacheEverything: true },
-        } as RequestInit);
-        if (!rss.ok) return json({ posts: [] }, 200, 600);
-        const posts = parseGoogleNews(await rss.text()).slice(0, 14);
-        return json({ posts }, 200, 600);
-      } catch { return json({ posts: [] }, 200, 600); }
+      const debug = url.searchParams.get('debug');
+      const sub = SOCIAL_SUBREDDIT[ab];
+      const newsP = (async () => {
+        try {
+          const q = encodeURIComponent(`${name} NHL`);
+          const r = await fetch(`https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`, {
+            headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36', accept: 'application/rss+xml,application/xml,text/xml,*/*' },
+            redirect: 'follow', cf: { cacheTtl: 600, cacheEverything: true },
+          } as RequestInit);
+          return r.ok ? parseGoogleNews(await r.text()).slice(0, 10) : [];
+        } catch { return []; }
+      })();
+      const redditP = (async () => {
+        if (!sub) return [];
+        try {
+          const r = await fetch(`https://www.reddit.com/r/${sub}/top.json?t=week&limit=12`, {
+            headers: { 'user-agent': 'web:thehockeylab:v1.0 (by /u/thehockeylab)', accept: 'application/json' },
+            cf: { cacheTtl: 600, cacheEverything: true },
+          } as RequestInit);
+          return r.ok ? parseReddit(await r.json(), sub).slice(0, 6) : [];
+        } catch { return []; }
+      })();
+      const [news, reddit] = await Promise.all([newsP, redditP]);
+      const posts = [...reddit, ...news];
+      if (debug) return json({ sub, redditCount: reddit.length, newsCount: news.length, total: posts.length }, 200, 5);
+      return json({ posts }, 200, 600);
     }
 
     if (url.pathname === '/robots.txt') {

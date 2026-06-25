@@ -826,7 +826,7 @@ function App(){
         <div style={{display:'flex',flexWrap:'wrap',gap:'8px 20px',marginBottom:16}}>
           {window.E_FOOTER_LINKS.map(([k,label])=><button key={k} onClick={()=>go('legal/'+k)} className="el" style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:MONO,fontSize:12,color:T.mut}}>{label}</button>)}
         </div>
-        <div style={{fontFamily:MONO,fontSize:11,color:T.faint,lineHeight:1.7}}>© 2026 The Hockey Lab · Independent project — not affiliated with the NHL · Data via public NHL APIs</div>
+        <div style={{fontFamily:MONO,fontSize:11,color:T.faint,lineHeight:1.7}}>© 2026 The Hockey Lab · Independent project — not affiliated with the NHL · Data via public NHL APIs · news via Google News &amp; Reddit · all sources linked, not affiliated</div>
       </div>
     </footer>
     <Palette open={pal} onClose={()=>setPal(false)} onTeam={openTeam} onPlayer={openPlayer} onGame={openGame}/>
