@@ -261,6 +261,15 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const Stat=({l,v})=><div style={{...card,padding:'15px 16px'}}><div style={ML}>{l}</div><div style={{fontSize:26,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
   const RT=({title,rows,cols})=>rows.length?<div style={{marginBottom:18}}><div style={{...ML,marginBottom:8}}>{title}</div><div style={{...card,overflow:'hidden'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}><th style={{padding:'9px 14px',textAlign:'left',fontWeight:600,...ML}}>Player</th>{cols.map(([h])=><th key={h} style={{padding:'9px',textAlign:'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead><tbody>{rows.map(p=><tr key={p.id} onClick={()=>onPlayer(p)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontWeight:500}}>{p.name} <span style={{color:T.faint,fontFamily:MONO,fontSize:11}}>#{p.num}</span></td>{cols.map(([h,k])=><td key={h} style={{textAlign:'center',color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{k==='pm'?(p[k]>=0?'+':'')+p[k]:p[k]}</td>)}</tr>)}</tbody></table></div></div>:null;
   const SC=[['Pos','pos'],['GP','gp'],['G','g'],['A','a'],['P','p'],['+/-','pm']],GC=[['GP','gp'],['W','w'],['L','l'],['SV%','svp'],['GAA','gaa']];
+  const socialMock=uM(()=>{const r=(roster||[]).filter(p=>p.pos!=='G');const p0=(r[0]&&r[0].name)||'the captain',p1=(r[1]&&r[1].name)||'a depth forward';return[
+    {kind:'x',time:'2h',likes:'3.4K',rt:'412',text:`\uD83D\uDEA8 GAME DAY \uD83D\uDEA8 The ${nk(ab)} are back at it tonight. Puck drop soon \u2014 let\u2019s go.`},
+    {kind:'recap',time:'1d',title:`Recap: ${ct(ab)} grind out a road win`,text:`${p0} and ${p1} powered a third-period push as ${ct(ab)} closed out a 4\u20132 victory.`},
+    {kind:'x',time:'1d',likes:'1.2K',rt:'88',text:`Morning skate is in the books. ${p1} draws back into the lineup tonight.`},
+    {kind:'news',time:'2d',source:'Beat',title:`${ct(ab)} sign depth forward to a two-way deal`,text:`The club added organizational depth down the middle ahead of the stretch run.`},
+    {kind:'x',time:'3d',likes:'5.8K',rt:'903',text:`WHAT A FINISH. ${p0} buries the overtime winner \uD83D\uDEA8`},
+    {kind:'recap',time:'4d',title:`Recap: special teams carry the ${nk(ab)}`,text:`A 2-for-3 power play and a perfect penalty kill were the difference on the night.`},
+  ];},[ab,roster]);
+  const social=window.E_useLive(socialMock,()=>(window.NHL&&window.NHL.teamSocial)?window.NHL.teamSocial(ab):null,[ab]);
   return(<div>
     <button onClick={onBack} className="el" style={{background:'none',border:'none',color:T.mut,cursor:'pointer',fontFamily:MONO,fontSize:12,padding:'0 0 18px'}}>← back to teams</button>
     <div style={{...card,padding:0,overflow:'hidden',marginBottom:16}}>
@@ -274,7 +283,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12,marginBottom:16}}>
       <Stat l="Record" v={`${t.w}-${t.l}-${t.otl}`}/><Stat l="League rank" v={`#${D.rankOf[ab]}`}/><Stat l="Goal diff" v={`${t.diff>=0?'+':''}${t.diff}`}/><Stat l="Last 10" v={t.last10}/>
     </div>
-    <Tabs tabs={['Hub','Stats','Shot zones','Schedule','Roster','Prospects','Records']} active={tab} onChange={setTab}/>
+    <Tabs tabs={['Hub','Buzz','Stats','Shot zones','Schedule','Roster','Prospects','Records']} active={tab} onChange={setTab}/>
     {tab==='Hub'&&(()=>{
       const news=D.teamNews(ab);
       const NACC={pos:'#1a8a4f',neg:T.red,gold:'#b5762a',edge:'#1a8a4f',brand:c2(ab),mut:T.faint};
@@ -323,6 +332,56 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
           </div>);})()}
       </div>);})()}
     {tab==='Stats'&&<TeamStatsTab ab={ab}/>}
+    {tab==='Buzz'&&(()=>{
+      const HANDLE={ANA:'AnaheimDucks',BOS:'NHLBruins',BUF:'BuffaloSabres',CGY:'NHLFlames',CAR:'Canes',CHI:'NHLBlackhawks',COL:'Avalanche',CBJ:'BlueJacketsNHL',DAL:'DallasStars',DET:'DetroitRedWings',EDM:'EdmontonOilers',FLA:'FlaPanthers',LAK:'LAKings',MIN:'mnwild',MTL:'CanadiensMTL',NSH:'PredsNHL',NJD:'NJDevils',NYI:'NYIslanders',NYR:'NYRangers',OTT:'Senators',PHI:'NHLFlyers',PIT:'penguins',SJS:'SanJoseSharks',SEA:'SeattleKraken',STL:'StLouisBlues',TBL:'TBLightning',TOR:'MapleLeafs',UTA:'utahmammoth',VAN:'Canucks',VGK:'GoldenKnights',WSH:'Capitals',WPG:'NHLJets'};
+      const h=HANDLE[ab]||(ct(ab).replace(/\s/g,'')+nk(ab));
+      const r=roster.filter(p=>p.pos!=='G');const p0=(r[0]&&r[0].name)||'the captain',p1=(r[1]&&r[1].name)||'a depth forward';
+      const sample=[
+        {kind:'x',time:'2h',likes:'3.4K',rt:'412',text:`\uD83D\uDEA8 GAME DAY \uD83D\uDEA8 The ${nk(ab)} are back at it tonight. Puck drop soon \u2014 let\u2019s go.`},
+        {kind:'recap',time:'1d',title:`Recap: ${ct(ab)} grind out a road win`,text:`${p0} and ${p1} powered a third-period push as ${ct(ab)} closed out a 4\u20132 victory.`},
+        {kind:'x',time:'1d',likes:'1.2K',rt:'88',text:`Morning skate is in the books. ${p1} draws back into the lineup tonight.`},
+        {kind:'news',time:'2d',source:'Beat',title:`${ct(ab)} sign depth forward to a two-way deal`,text:`The club added organizational depth down the middle ahead of the stretch run.`},
+        {kind:'x',time:'3d',likes:'5.8K',rt:'903',text:`WHAT A FINISH. ${p0} buries the overtime winner \uD83D\uDEA8`},
+        {kind:'recap',time:'4d',title:`Recap: special teams carry the ${nk(ab)}`,text:`A 2-for-3 power play and a perfect penalty kill were the difference on the night.`},
+      ];
+      const posts=social;
+      const Av=({size=40})=><span style={{width:size,height:size,borderRadius:99,background:c2(ab),display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:700,fontSize:size*0.34,flexShrink:0}}>{ab}</span>;
+      const XMark=({size=18})=><span style={{width:size,height:size,borderRadius:6,background:T.invBg,color:T.invFg,display:'inline-flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:size*0.62,flexShrink:0}}>X</span>;
+      const Verified=()=><svg width="14" height="14" viewBox="0 0 24 24" style={{flexShrink:0}}><circle cx="12" cy="12" r="11" fill="#2a72c8"/><path d="M7 12.5l3.2 3.2L17 8.5" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+      const fmtN=n=>typeof n==='string'?n:(n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'K':String(n||0));
+      const Stat=({icon,n})=><span style={{display:'inline-flex',alignItems:'center',gap:5,fontFamily:MONO,fontSize:11,color:T.faint}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>{fmtN(n)}</span>;
+      return <div>
+        <div style={{display:'flex',alignItems:'center',gap:11,marginBottom:16,flexWrap:'wrap'}}>
+          <Av/>
+          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:T.ink,fontSize:15}}>{ct(ab)} {nk(ab)}</div><a href={`https://x.com/${h}`} target="_blank" rel="noopener noreferrer" className="el" style={{fontFamily:MONO,fontSize:12,color:T.mut,textDecoration:'none'}}>@{h} ↗</a></div>
+          <span style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.06em',textTransform:'uppercase',color:'#b5762a',border:'1px solid rgba(181,118,42,.35)',borderRadius:5,padding:'2px 7px'}} title="Recaps are real NHL data; social posts fill in from the team’s public feed on deploy">Buzz · beta</span>
+        </div>
+        <div style={{display:'grid',gap:12}}>
+          {posts.map((p,i)=>{const K=p.kind||'x';const accent=K==='recap'?'#1a8a4f':K==='news'?'#1f5f8a':c2(ab);const tag=K==='x'?`@${h}`:K==='recap'?'\xB7 Game recap':`\xB7 ${p.source||'Team news'}`;return(
+            <div key={i} className="ec" style={{...card,padding:'14px 16px',borderLeft:`3px solid ${accent}`}}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:2}}>
+                <Av size={40}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:5}}>
+                    <span style={{fontSize:13.5,fontWeight:700,color:T.ink,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct(ab)} {nk(ab)}</span>
+                    <Verified/>
+                    <span style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:6}}><Badge ab={ab} size={14}/>{K==='x'?<XMark size={18}/>:<span style={{fontFamily:MONO,fontSize:9,letterSpacing:'.06em',textTransform:'uppercase',color:K==='recap'?'#1a8a4f':'#1f5f8a',border:`1px solid ${(K==='recap'?'#1a8a4f':'#1f5f8a')}44`,borderRadius:5,padding:'2px 6px'}}>{K==='recap'?'Recap':(p.source||'News')}</span>}</span>
+                  </div>
+                  <div style={{fontFamily:MONO,fontSize:11,color:T.faint,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{K==='x'?`@${h}`:K==='recap'?'Game recap':(p.source||'Team news')} · {p.time}</div>
+                </div>
+              </div>
+              {p.title&&<div style={{fontFamily:SERIF,fontSize:17,lineHeight:1.3,color:T.ink,marginBottom:5}}>{p.title}</div>}
+              <div style={{fontSize:14,lineHeight:1.5,color:K==='x'?T.ink:T.mut}}>{p.text}</div>
+              {K==='x'&&<div style={{display:'flex',alignItems:'center',gap:22,marginTop:12,paddingTop:11,borderTop:`1px solid ${T.line}`}}>
+                <Stat icon={<path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 9 9 0 0 1-4-1L3 20l1.9-4.5A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5Z"/>} n={p.replies!=null?p.replies:Math.max(1,Math.round((parseFloat(p.rt)||12)*0.6))}/>
+                <Stat icon={<React.Fragment><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></React.Fragment>} n={p.rt}/>
+                <Stat icon={<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8Z"/>} n={p.likes}/>
+              </div>}
+            </div>);})}
+        </div>
+        <div style={{fontFamily:MONO,fontSize:10.5,color:T.faint,marginTop:14,lineHeight:1.6}}>Game recaps come straight from NHL data. Social posts are sample content in preview and populate from the team’s public feed once deployed — rendered natively, no third-party scripts. Not affiliated with the teams.</div>
+      </div>;
+    })()}
     {tab==='Shot zones'&&window.E_ShotZones&&<window.E_ShotZones scope="team" id={ab} teamAb={ab} name={`${ct(ab)} ${nk(ab)}`}/>}
     {tab==='Schedule'&&<TeamSchedule ab={ab} onGame={onGame}/>}
     {tab==='Roster'&&<div><RT title="Forwards" rows={fwd} cols={SC}/><RT title="Defensemen" rows={def} cols={SC}/><RT title="Goalies" rows={tg} cols={GC}/></div>}
@@ -1447,7 +1506,16 @@ function DraftPage({onTeam}){
   // live tracker: prospect-ranking-based predicted FIRST ROUND (32 teams, reverse
   // standings), swapped to the real selection as each pick lands on draft night
   const predicted=uM(()=>{const rev=[...D.STANDINGS].slice().reverse();return rev.map((t,i)=>({pick:i+1,team:t.ab,name:(rankings[i]&&rankings[i].name)||'TBD',pos:(rankings[i]&&rankings[i].pos)||'',league:(rankings[i]&&rankings[i].league)||'',made:false}));},[rankings]);
-  const tracker=window.E_useLive(predicted,()=>window.NHL.draftLiveTracker().then(made=>{if(!made||!made.length)return null;const by={};made.forEach(m=>{by[m.pick]=m;});return predicted.map(p=>by[p.pick]?{...p,...by[p.pick],made:true}:p);}),[predicted]);
+  // Live draft tracker — polls the real selections every 20s while the tab is open
+  // (and once otherwise) so picks land automatically on draft night. Updates without
+  // the E_useLive mock-reset flicker; falls back to the predicted board until picks come in.
+  const [liveMade,setLiveMade]=uS(null);
+  React.useEffect(()=>{ if(!isUpcoming) return; let alive=true;
+    const pull=()=>{ if(window.NHL&&window.BC&&window.BC.LIVE&&window.NHL.draftLiveTracker) window.NHL.draftLiveTracker().then(made=>{ if(alive&&made&&made.length) setLiveMade(made); }).catch(()=>{}); };
+    pull(); const iv = tab==='Live tracker' ? setInterval(pull,20000) : null;
+    return ()=>{ alive=false; if(iv) clearInterval(iv); };
+  },[isUpcoming,tab,curDraftYear]);
+  const tracker=uM(()=>{ if(!liveMade||!liveMade.length) return predicted; const by={}; liveMade.forEach(m=>{by[m.pick]=m;}); return predicted.map(p=>by[p.pick]?{...p,...by[p.pick],made:true}:p); },[predicted,liveMade]);
   const madeCount=tracker.filter(p=>p.made).length;
   const upTabs=['Draft order','Prospect rankings','Mock first round','Live tracker'];
   React.useEffect(()=>{ setTab(isUpcoming?'Draft order':'Results'); setRound(1); },[year,isUpcoming]);

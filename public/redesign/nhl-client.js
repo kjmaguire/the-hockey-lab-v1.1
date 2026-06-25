@@ -1059,6 +1059,14 @@
     gameLanding: (id) => get(`gamecenter-landing/${id}`),
     gameStory: (id) => get(`game-story/${id}`),
     whereToWatch: () => get('where-to-watch'),
+    // Team "Buzz" social feed (free server-side sources via /api/social/*; null → mock).
+    teamSocial: async (ab) => { try {
+      const r = await fetch('/api/social/team/' + ab, { headers: { accept: 'application/json' } });
+      if (!r.ok) return null;
+      const d = await r.json();
+      const posts = (d && d.posts) || [];
+      return posts.length ? posts : null;
+    } catch (_) { return null; } },
     tvSchedule: (date) => get(date ? `tv-schedule/${date}` : 'tv-schedule'),
     partnerOdds: (country) => get(`partner-odds/${country || 'US'}`),
     shiftCharts: (gameId) => get(`shift-charts/${gameId}`),

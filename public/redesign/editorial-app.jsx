@@ -520,7 +520,8 @@ function GameDetail({g,onBack,onTeam}){
 
 /* national TV schedule — tonight's nationally-broadcast slate (mock; live via NHL.tvScheduleMapped) */
 function NationalTV(){
-  const mock=useMemo(()=>BC.tvSchedule?BC.tvSchedule():[],[]);
+  const isLive=!!(window.BC&&window.BC.LIVE);
+  const mock=useMemo(()=>(!isLive&&BC.tvSchedule)?BC.tvSchedule():[],[isLive]); // live: never fabricate — real schedule only
   const tv=window.E_useLive(mock,()=>window.NHL&&window.NHL.tvScheduleMapped?window.NHL.tvScheduleMapped():null,[]);
   if(!tv||!tv.length)return null;
   return(<div style={{...card,overflow:'hidden',margin:'4px 0 16px'}}>
@@ -761,7 +762,7 @@ function App(){
       </div>
     </div>
     <SchedCal offset={offset} setOffset={setOffset} favs={favs} view="week"/>
-    {offset===0&&<NationalTV/>}
+    {offset===0&&games.length>0&&<NationalTV/>}
     <div style={{display:'flex',gap:6,margin:'4px 0 16px',flexWrap:'wrap'}}>
       {[['all','All',baseGames.length],['live','Live',stN.live],['final','Final',stN.final],['pre','Upcoming',stN.pre]].map(([k,lab,n])=><button key={k} onClick={()=>setStatusF(k)} style={{fontFamily:MONO,fontSize:11,letterSpacing:'.04em',textTransform:'uppercase',padding:'6px 13px',borderRadius:999,border:`1px solid ${statusF===k?T.invBg:T.line2}`,background:statusF===k?T.invBg:'transparent',color:statusF===k?T.invFg:T.mut,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>{k==='live'&&n>0&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:statusF===k?T.invFg:T.red,display:'inline-block'}}/>}{lab}<span style={{opacity:.55}}>{n}</span></button>)}
     </div>

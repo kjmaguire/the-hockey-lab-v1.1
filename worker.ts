@@ -315,6 +315,43 @@ async function handleNhl(url: URL): Promise<Response> {
   return errorJson('Unknown NHL endpoint.', 404, { path: segments.join('/') });
 }
 
+// --- Social "Buzz" feed helpers (free, key-less sources fetched server-side) -------
+const SOCIAL_TEAM_NAME: Record<string, string> = {
+  ANA: 'Anaheim Ducks', BOS: 'Boston Bruins', BUF: 'Buffalo Sabres', CGY: 'Calgary Flames',
+  CAR: 'Carolina Hurricanes', CHI: 'Chicago Blackhawks', COL: 'Colorado Avalanche',
+  CBJ: 'Columbus Blue Jackets', DAL: 'Dallas Stars', DET: 'Detroit Red Wings',
+  EDM: 'Edmonton Oilers', FLA: 'Florida Panthers', LAK: 'Los Angeles Kings',
+  MIN: 'Minnesota Wild', MTL: 'Montreal Canadiens', NSH: 'Nashville Predators',
+  NJD: 'New Jersey Devils', NYI: 'New York Islanders', NYR: 'New York Rangers',
+  OTT: 'Ottawa Senators', PHI: 'Philadelphia Flyers', PIT: 'Pittsburgh Penguins',
+  SJS: 'San Jose Sharks', SEA: 'Seattle Kraken', STL: 'St. Louis Blues',
+  TBL: 'Tampa Bay Lightning', TOR: 'Toronto Maple Leafs', UTA: 'Utah Mammoth',
+  VAN: 'Vancouver Canucks', VGK: 'Vegas Golden Knights', WSH: 'Washington Capitals',
+  WPG: 'Winnipeg Jets',
+};
+function relTime(d: string): string {
+  const t = Date.parse(d); if (!t) return '';
+  const s = (Date.now() - t) / 1000;
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm';
+  if (s < 86400) return Math.round(s / 3600) + 'h';
+  return Math.round(s / 86400) + 'd';
+}
+function parseGoogleNews(xml: string): any[] {
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+  const strip = (s: string) => s.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim();
+  const g = (blk: string, tag: string) => { const m = blk.match(new RegExp('<' + tag + '(?:[^>]*)>([\\s\\S]*?)</' + tag + '>')); return m ? strip(m[1]) : ''; };
+  return items.map((m) => {
+    const blk = m[1];
+    const rawTitle = g(blk, 'title');
+    const src = g(blk, 'source');
+    // Google News titles end with " - Outlet"; lift the outlet out for a cleaner card
+    const cut = rawTitle.lastIndexOf(' - ');
+    const title = (cut > 20 ? rawTitle.slice(0, cut) : rawTitle).trim();
+    const outlet = src || (cut > 20 ? rawTitle.slice(cut + 3).trim() : '');
+    return { kind: 'news', source: outlet || 'Google News', title, text: outlet ? `via ${outlet}` : '', link: g(blk, 'link'), time: relTime(g(blk, 'pubDate')) };
+  }).filter((p) => p.title);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -338,6 +375,25 @@ export default {
     // SEO: robots.txt + sitemap.xml generated from the live origin (domain-agnostic,
     // so there's no hard-coded host to drift). Served before the static-asset layer
     // so they override any committed fallback copy. Diagnostics pages are disallowed.
+    // Social "Buzz" feed — free, key-less sources fetched server-side, merged + cached.
+    // Increment 1: Google News RSS per team (Reddit/YouTube/recaps layer in next).
+    if (url.pathname.startsWith('/api/social/team/')) {
+      if (request.method !== 'GET') return errorJson('Method not allowed.', 405);
+      const ab = decodeURIComponent(url.pathname.split('/').pop() || '').toUpperCase();
+      const name = SOCIAL_TEAM_NAME[ab];
+      if (!name) return errorJson('Unknown team.', 404);
+      try {
+        const q = encodeURIComponent(`${name} NHL`);
+        const rss = await fetch(`https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`, {
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; TheHockeyLab/1.0)' },
+          cf: { cacheTtl: 600, cacheEverything: true },
+        } as RequestInit);
+        if (!rss.ok) return json({ posts: [] }, 200, 600);
+        const posts = parseGoogleNews(await rss.text()).slice(0, 14);
+        return json({ posts }, 200, 600);
+      } catch { return json({ posts: [] }, 200, 600); }
+    }
+
     if (url.pathname === '/robots.txt') {
       const body =
         `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /mappers-test.html\nDisallow: /api-health.html\nDisallow: /live-qa.html\nDisallow: /dark-feeds.html\n\nSitemap: ${url.origin}/sitemap.xml\n`;
