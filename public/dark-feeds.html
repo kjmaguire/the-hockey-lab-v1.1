@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>The Hockey Lab — Dark Feed Discovery</title>
+<meta name="robots" content="noindex,nofollow"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet"/>
+<style>
+  :root{--bg:#f5f4f0;--paper:#fff;--ink:#15161b;--mut:#62636a;--faint:#9b9ca3;--line:#e6e4de;--line2:#dad8d0;--red:#e5341f;--green:#1a8a4f;--greenbg:#e7f5ec;--amber:#9a6b1a;--amberbg:#fdf6e6;--redbg:#fdecea;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);font-family:'Geist',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+  .mono{font-family:'Geist Mono',monospace;}
+  .wrap{max-width:1000px;margin:0 auto;padding:34px 24px 60px;}
+  header.top{display:flex;align-items:center;gap:10px;margin-bottom:24px;}
+  .logo{width:28px;height:28px;border-radius:7px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;}
+  header.top a{font-weight:700;text-decoration:none;}
+  header.top .links{margin-left:auto;display:flex;gap:14px;font-family:'Geist Mono',monospace;font-size:12px;}
+  header.top .links a{color:var(--mut);text-decoration:none;}
+  .eyebrow{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--red);}
+  h1{font-size:38px;font-weight:600;letter-spacing:-.03em;margin:6px 0 0;}
+  h1 i{font-family:'Newsreader',serif;font-style:italic;font-weight:500;}
+  .sub{color:var(--mut);font-size:15px;margin-top:10px;max-width:680px;line-height:1.5;}
+  .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:22px 0 16px;}
+  button.run{font-family:inherit;background:var(--ink);color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:600;font-size:14px;cursor:pointer;}
+  button.run:disabled{opacity:.55;cursor:default;}
+  button.copy{font-family:inherit;background:var(--paper);color:var(--ink);border:1px solid var(--line2);border-radius:10px;padding:11px 16px;font-weight:600;font-size:13px;cursor:pointer;}
+  .banner{border-radius:12px;padding:13px 16px;font-size:13.5px;line-height:1.5;border:1px solid var(--line2);background:var(--paper);}
+  .banner.preview{background:var(--amberbg);border-color:#f0e2c0;color:var(--amber);}
+  .banner.live{background:var(--greenbg);border-color:#bfe6cf;color:var(--green);}
+  .ctx{font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--faint);margin:8px 0 0;}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:16px;}
+  .row{padding:13px 16px;border-top:1px solid var(--line);}
+  .row:first-child{border-top:none;}
+  .row .head{display:flex;align-items:center;gap:12px;justify-content:space-between;}
+  .row .name{font-weight:600;font-size:14px;}
+  .row .path{font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--faint);margin-top:2px;}
+  .pill{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;padding:5px 10px;border-radius:999px;white-space:nowrap;border:1px solid var(--line2);color:var(--mut);background:var(--bg);min-width:78px;text-align:center;}
+  .pill.data{color:var(--green);background:var(--greenbg);border-color:#bfe6cf;}
+  .pill.empty{color:var(--amber);background:var(--amberbg);border-color:#f0e2c0;}
+  .pill.down{color:#c0392b;background:var(--redbg);border-color:#f3c9c2;}
+  .pill.run{color:var(--mut);}
+  pre.shape{font-family:'Geist Mono',monospace;font-size:11px;line-height:1.55;color:#33343a;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-top:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;}
+  footer{margin-top:30px;font-family:'Geist Mono',monospace;font-size:11px;color:var(--faint);line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <span class="logo">H</span><a href="/">The Hockey Lab</a>
+    <span class="links"><a href="live-qa.html">Mapper QA</a><a href="api-health.html">API health</a></span>
+  </header>
+  <div class="eyebrow">Diagnostics · payload discovery</div>
+  <h1>Dark feed <i>discovery</i></h1>
+  <p class="sub">Probes every NHL feed the app proxies but doesn't yet ingest, and dumps each one's real JSON shape (2 levels deep, with sample scalars). Run this on the deployed site, then send the output back — it's everything needed to write accurate mappers without guessing.</p>
+  <div class="bar">
+    <button class="run" id="run">Re-run discovery</button>
+    <button class="copy" id="copy">Copy all shapes</button>
+    <span class="mono" id="clock" style="font-size:12px;color:var(--mut);"></span>
+  </div>
+  <div class="banner" id="banner">Booting…</div>
+  <div class="ctx" id="ctx"></div>
+  <div class="card" id="out"></div>
+  <footer>
+    DATA = reachable with rows · EMPTY = reachable, no content (off-day/season) · DOWN = unreachable / non-JSON (in preview there's no proxy, so everything reads DOWN — deploy + reload).
+    <br/>© 2026 The Hockey Lab · internal diagnostic · noindex.
+  </footer>
+</div>
+
+<script src="redesign/broadcast-data.js"></script>
+<script src="redesign/editorial-ext.js"></script>
+<script src="redesign/nhl-client.js"></script>
+<script src="redesign/editorial-live.js"></script>
+<script>
+(function(){
+  var BC=window.BC, NHL=window.NHL;
+  var outEl=document.getElementById('out'), bannerEl=document.getElementById('banner'),
+      ctxEl=document.getElementById('ctx'), runBtn=document.getElementById('run'),
+      copyBtn=document.getElementById('copy'), clockEl=document.getElementById('clock');
+  var ctx={team:'TOR', gameId:null, player:null, season:'', postal:'M5V 3L9'};
+
+  function shapeOf(o,depth){
+    if(o==null||typeof o!=='object') return o;
+    if(Array.isArray(o)) return o.length?('['+o.length+'] '+(typeof o[0]==='object'&&o[0]?shapeOf(o[0],depth+1):typeof o[0])):'[]';
+    if(depth>=3) return '{'+Object.keys(o).slice(0,18).join(',')+'}';
+    var out={}; var ks=Object.keys(o).slice(0,40); for(var i=0;i<ks.length;i++) out[ks[i]]=shapeOf(o[ks[i]],depth+1); return out;
+  }
+  async function probe(path){
+    var t0=performance.now();
+    try{
+      var r=await fetch('/api/nhl/'+path,{headers:{accept:'application/json'}});
+      var ms=Math.round(performance.now()-t0);
+      var ct=r.headers.get('content-type')||'';
+      if(!r.ok) return {status:'down',ms:ms,note:'HTTP '+r.status};
+      if(ct.indexOf('json')<0) return {status:'down',ms:ms,note:'non-JSON (no proxy)'};
+      var j=await r.json();
+      if(j&&j.error) return {status:'down',ms:ms,note:String(j.message||'error').slice(0,50)};
+      var empty = j==null || (Array.isArray(j)&&!j.length) || (typeof j==='object'&&!Array.isArray(j)&&!Object.keys(j).length);
+      return {status:empty?'empty':'data', ms:ms, shape:shapeOf(j,0)};
+    }catch(e){ return {status:'down',ms:Math.round(performance.now()-t0),note:String(e.message||e).slice(0,50)}; }
+  }
+
+  function specs(){
+    var g=ctx.gameId, tm=ctx.team, ssn=ctx.season, pc=encodeURIComponent(ctx.postal);
+    return [
+      ['Betting odds','partner-odds'],
+      ['Betting odds (US)','partner-odds/US'],
+      ['Where to watch','where-to-watch'],
+      ['Player spotlight','spotlight'],
+      ['Schedule calendar','schedule-calendar'],
+      ['Standings — season list','standings-season'],
+      ['Team scoreboard','team-scoreboard/'+tm],
+      ['Roster — full season','roster-season/'+tm],
+      ['Club stats — season-by-season','club-stats-season/'+tm],
+      ['EDGE team · skating speed','edge-team/skating-speed/'+tm],
+      ['EDGE team · shot location','edge-team/shot-location/'+tm],
+      ['Game meta', g?('meta/game/'+g):'meta'],
+      ['League meta','meta'],
+      ['Location (geo)','location'],
+      ['Postal lookup','postal-lookup/'+pc],
+      ['WSC play-by-play', g?('wsc-pbp/'+g):null],
+      ['PPT replay', g?('ppt-replay/'+g):null],
+    ];
+  }
+
+  var lastShapes={};
+  function render(rows){
+    outEl.innerHTML='';
+    rows.forEach(function(r){
+      var div=document.createElement('div'); div.className='row';
+      var pill='<span class="pill '+(r.res?r.res.status:'down')+'">'+(r.res?r.res.status:'—').toUpperCase()+'</span>';
+      var shape = r.res&&r.res.shape!==undefined ? '<pre class="shape">'+JSON.stringify(r.res.shape,null,1).replace(/</g,'&lt;')+'</pre>' : '';
+      var note = r.res&&r.res.note?(' · '+r.res.note):'';
+      div.innerHTML='<div class="head"><div><div class="name">'+r.name+'</div><div class="path mono">/api/nhl/'+(r.path||'(skipped — no game id)')+note+'</div></div>'+pill+'</div>'+shape;
+      outEl.appendChild(div);
+    });
+  }
+
+  async function captureGame(){
+    for(var i=0;i<6;i++){ var o=[-1,-2,0,-3,-4,1][i];
+      try{ var gs=await NHL.scores(o); if(gs&&gs.length){ var pick=gs.filter(function(x){return x.st!=='pre';})[0]||gs[0]; if(pick){ctx.gameId=String(pick.id); if(pick.st!=='pre')return;} } }catch(e){}
+    }
+  }
+
+  async function run(){
+    runBtn.disabled=true; bannerEl.className='banner'; bannerEl.textContent='Booting data stack + probing…'; outEl.innerHTML=''; lastShapes={};
+    var ok=false;
+    try{ var pr=await fetch('/api/nhl/standings',{headers:{accept:'application/json'}}); ok=pr.ok&&(pr.headers.get('content-type')||'').indexOf('json')>=0; }catch(e){}
+    if(ok){ try{ await BC.hydrate(function(){}); }catch(e){} ctx.team=(BC.STANDINGS&&BC.STANDINGS[0]&&BC.STANDINGS[0].ab)||'TOR'; ctx.season=(NHL&&NHL._season)||''; await captureGame(); }
+    var list=specs(); var rows=[]; var counts={data:0,empty:0,down:0,skip:0};
+    for(var i=0;i<list.length;i++){
+      var name=list[i][0], path=list[i][1];
+      if(!path){ rows.push({name:name,path:null,res:null}); counts.skip++; render(rows); continue; }
+      var res=await probe(path);
+      counts[res.status]=(counts[res.status]||0)+1;
+      if(res.shape!==undefined) lastShapes[name]={path:path,shape:res.shape};
+      rows.push({name:name,path:path,res:res}); render(rows);
+    }
+    if(ok){ bannerEl.className='banner live'; bannerEl.innerHTML='<b>Proxy live.</b> Probed '+list.length+' feeds — '+counts.data+' data · '+counts.empty+' empty · '+counts.down+' down · '+counts.skip+' skipped. Hit “Copy all shapes” and send it back.'; }
+    else { bannerEl.className='banner preview'; bannerEl.innerHTML='<b>No proxy (design preview).</b> Every feed reads DOWN here — deploy to Cloudflare and reload to capture real shapes.'; }
+    ctxEl.textContent='samples — team '+ctx.team+' · game '+(ctx.gameId||'—')+' · season '+(ctx.season||'—')+' · postal '+ctx.postal;
+    clockEl.textContent='last run '+new Date().toLocaleTimeString();
+    runBtn.disabled=false;
+  }
+
+  copyBtn.addEventListener('click',function(){
+    var txt=Object.keys(lastShapes).map(function(k){return '### '+k+'  ('+lastShapes[k].path+')\n'+JSON.stringify(lastShapes[k].shape,null,1);}).join('\n\n');
+    try{ navigator.clipboard.writeText(txt); copyBtn.textContent='Copied ✓'; setTimeout(function(){copyBtn.textContent='Copy all shapes';},1500); }catch(e){ copyBtn.textContent='Copy failed'; }
+  });
+  runBtn.addEventListener('click',run);
+  run();
+})();
+</script>
+</body>
+</html>
