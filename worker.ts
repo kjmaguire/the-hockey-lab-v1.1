@@ -371,13 +371,12 @@ export default {
     // no prod build is present, so this is always safe.
     let resp: Response | undefined;
     let servedProd = false;
-    const wantsApp = url.pathname === '/app' || url.pathname === '/app.html'
-      || url.pathname === '/' || url.pathname === '/index.html';
-    if (wantsApp) {
-      const prodReq = new Request(new URL('/app.prod.html' + url.search, url), request);
-      const prodResp = await env.ASSETS.fetch(prodReq);
-      if (prodResp.status !== 404) { resp = prodResp; servedProd = true; }
-    }
+    // NOTE: this project is maintained WITHOUT a local build step, so a precompiled
+    // app.prod.html bundle goes stale the moment any .jsx changes. We therefore serve
+    // the runtime-Babel build (index.html / app.html) as the source of truth — always
+    // current, at the cost of an in-browser transpile on first paint. app.prod.html
+    // stays on disk for anyone who later runs `npm run build`; it's simply not preferred
+    // here. (servedProd stays false → the looser CSP that allows in-browser Babel.)
     if (!resp) {
       resp = await env.ASSETS.fetch(request);
       // Clean/extensionless route that didn't match (e.g. /app) → retry as .html

@@ -736,6 +736,7 @@ function HockeyIQPage({onPlayer,onTeam}){
   const [cmpA,setCmpA]=uS(skList[0].id); const [cmpB,setCmpB]=uS(skList[1].id);
   const [cmpGA,setCmpGA]=uS(goList[0].id); const [cmpGB,setCmpGB]=uS(goList[1].id);
   const [boardM,setBoardM]=uS('top'); // EDGE leaderboard metric — page-level so it survives the inline EdgeBoard remounting on each live poll
+  const [ebMore,setEbMore]=uS(false); // EDGE leaderboard: show top 5 unless expanded
   const [h2hMode,setH2hMode]=uS('Standard'); // merged team head-to-head: 'Standard' stats vs 'NHL EDGE' tracking, one shared team pair (tcA/tcB)
   const cmp=D.edgeCompare(cmpA,cmpB);
   const gcmp=D.goalieEdgeCompare(cmpGA,cmpGB);
@@ -752,18 +753,19 @@ function HockeyIQPage({onPlayer,onTeam}){
     {list.map((p,i)=><div key={p.id} onClick={()=>onPlayer(p)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
       <span style={{width:16,color:T.faint,fontFamily:MONO,fontSize:11}}>{i+1}</span><Badge ab={p.team} size={22}/><span style={{flex:1,color:T.ink,fontSize:13.5}}>{p.name}</span><span style={{fontWeight:700}}>{p[k]}</span></div>)}</div>);
   const EB_M=[['top','Top skating speed','mph'],['shot','Max shot speed','mph'],['savg','Avg shot speed','mph'],['dist','Distance','mi'],['b20','20+ bursts',''],['b22','22+ bursts',''],['oz','O-zone time','%']];
-  const EdgeBoard=()=>{const m=boardM,setM=setBoardM;const meta=EB_M.find(x=>x[0]===m)||EB_M[0];const rows=window.E_useLive(D.edgeBoard(m),()=>(window.NHL&&window.NHL.edgeBoardLive)?window.NHL.edgeBoardLive(m):Promise.resolve(null),[m]);return(
+  const EdgeBoard=()=>{const m=boardM,setM=setBoardM;const meta=EB_M.find(x=>x[0]===m)||EB_M[0];const rows=window.E_useLive(D.edgeBoard(m),()=>(window.NHL&&window.NHL.edgeBoardLive)?window.NHL.edgeBoardLive(m):Promise.resolve(null),[m]);const shown=ebMore?rows:rows.slice(0,5);return(
     <div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'13px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
         <span style={{fontSize:14,fontWeight:600}}>League EDGE leaderboard</span>
         <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{EB_M.map(([k,lab])=><button key={k} onClick={()=>setM(k)} style={{fontFamily:MONO,fontSize:10.5,padding:'4px 9px',borderRadius:999,border:`1px solid ${m===k?T.invBg:T.line2}`,background:m===k?T.invBg:'transparent',color:m===k?T.invFg:T.mut,cursor:'pointer'}}>{lab}</button>)}</div>
       </div>
-      {rows.map((p,i)=><div key={p.id} onClick={()=>onPlayer(p)} className="er" style={{display:'flex',alignItems:'center',gap:11,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
+      {shown.map((p,i)=><div key={p.id} onClick={()=>onPlayer(p)} className="er" style={{display:'flex',alignItems:'center',gap:11,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
         <span style={{width:20,fontFamily:MONO,fontSize:12,color:i<3?T.red:T.faint,fontWeight:i<3?700:400}}>{i+1}</span>
         <Badge ab={p.team} size={22}/><span style={{flex:1,minWidth:0,fontSize:13.5,color:T.ink,fontWeight:i<3?600:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
         <span style={{fontFamily:MONO,fontSize:11,color:T.faint,flexShrink:0}}>{p.team} · {p.pos}</span>
         <span style={{fontFamily:MONO,fontSize:13,fontWeight:700,color:T.ink,minWidth:60,textAlign:'right'}}>{p._v}{meta[2]?(' '+meta[2]):''}</span>
       </div>)}
+      {rows.length>5&&<button onClick={()=>setEbMore(v=>!v)} className="er" style={{width:'100%',padding:'10px 16px',borderTop:`1px solid ${T.line}`,background:'none',border:'none',cursor:'pointer',fontFamily:MONO,fontSize:11,letterSpacing:'.05em',textTransform:'uppercase',color:T.mut,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{ebMore?'Show less':`Show all ${rows.length}`}<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{transform:ebMore?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="m6 9 6 6 6-6"/></svg></button>}
     </div>);};
   const EdgeTeams=()=>{const dist=D.edgeTeamDistance();const spd=D.edgeTeamSpeed?D.edgeTeamSpeed():[];const TB=({title,rows,k,unit})=>(
     <div style={{...card,overflow:'hidden'}}><div style={{padding:'13px 16px',fontSize:14,fontWeight:600,borderBottom:`1px solid ${T.line}`}}>{title}</div>
