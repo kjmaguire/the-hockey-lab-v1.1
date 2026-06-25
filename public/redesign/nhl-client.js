@@ -497,7 +497,7 @@
     visit(payload, 0);
     return found;
   }
-  function mapEdgeSkater(payload) {
+  function mapEdgeSkaterGeneric(payload) {
     if (!payload) return null;
     // name-key scans broadened — EDGE category labels drift by season/build (see edgeDebug)
     const top = edgeMetric(payload, ['skatingspeed', 'topskat', 'maxskat', 'topspeed', 'maxskatingspeed', 'topskatingspeed', 'maxspeed', 'skatspeed']);
@@ -522,7 +522,7 @@
     if (oz) { const o = +(+oz.val).toFixed(1); const d = +((100 - o) * 0.46).toFixed(1); out.zones = [['Offensive', o], ['Neutral', +(100 - o - d).toFixed(1)], ['Defensive', d]]; }
     return Object.keys(out).length ? out : null; // partial overlay; caller merges over mock
   }
-  function mapEdgeGoalie(payload) {
+  function mapEdgeGoalieGeneric(payload) {
     if (!payload) return null;
     // Real goalie EDGE nests save quality inside `stats` / `shotLocationSummary` /
     // `shotLocationDetails`, so these scans dig into those category nodes.
@@ -542,6 +542,67 @@
     if (reb) saveQ.push(['Rebound control', `${(+reb.val).toFixed(0)}%`, reb.pct != null ? Math.round(reb.pct) : '—', '78%', '—']);
     if (hf) saveQ.push(['HD shots faced/60', `${(+hf.val).toFixed(1)}`, hf.pct != null ? Math.round(hf.pct) : '—', '11.2', '—']);
     return saveQ.length ? { saveQ } : null;
+  }
+  // Precise mapper for the REAL edge/skater-detail shape (confirmed via edgeDebug):
+  // numbers live under .imperial/.metric, percentiles are 0..1 fractions, leagueAvg is
+  // an {imperial,metric} object, and zoneTimeDetails uses flat *ZonePctg keys.
+  function mapEdgeSkaterReal(p) {
+    if (!p || typeof p !== 'object') return null;
+    const imp = (n) => (n ? (num(n.imperial) ?? num(n.value) ?? num(n.metric)) : null);
+    const pc = (n) => { const v = n ? num(n.percentile) : null; return v == null ? '\u2014' : (v <= 1 ? Math.round(v * 100) : Math.round(v)); };
+    const avg = (n) => { if (!n) return null; const la = n.leagueAvg ?? n.leagueAverage; return la == null ? null : (num(la.imperial) ?? num(la)); };
+    const speed = [];
+    const add = (label, node, unit, dp) => { if (!node) return; const v = imp(node); if (v == null) return; const a = avg(node); speed.push([label, v.toFixed(dp) + unit, pc(node), a != null ? a.toFixed(dp) + unit : '\u2014']); };
+    add('Top shot speed', p.topShotSpeed, ' mph', 1);
+    add('Max skating speed', p.skatingSpeed && p.skatingSpeed.speedMax, ' mph', 1);
+    const b = p.skatingSpeed && p.skatingSpeed.burstsOver20;
+    if (b && num(b.value) != null) speed.push(['Speed bursts 20+', String(Math.round(num(b.value))), pc(b), num(b.leagueAvg) != null ? String(Math.round(num(b.leagueAvg))) : '\u2014']);
+    add('Total distance', p.totalDistanceSkated, ' mi', 1);
+    add('Max game distance', p.distanceMaxGame, ' mi', 2);
+    const out = {};
+    if (speed.length) out.speed = speed;
+    const z = p.zoneTimeDetails;
+    if (z && num(z.offensiveZonePctg) != null) {
+      const o = +(num(z.offensiveZonePctg) * 100).toFixed(1);
+      let n = num(z.neutralZonePctg), d = num(z.defensiveZonePctg);
+      n = n != null ? +(n * 100).toFixed(1) : null;
+      d = d != null ? +(d * 100).toFixed(1) : null;
+      if (n == null && d != null) n = +(100 - o - d).toFixed(1);
+      if (d == null && n != null) d = +(100 - o - n).toFixed(1);
+      if (n == null && d == null) { n = +((100 - o) * 0.37).toFixed(1); d = +(100 - o - n).toFixed(1); }
+      out.zones = [['Offensive', o], ['Neutral', n], ['Defensive', d]];
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  function mapEdgeSkater(payload) {
+    if (!payload) return null;
+    return mapEdgeSkaterReal(payload) || mapEdgeSkaterGeneric(payload);
+  }
+  // Precise mapper for the REAL edge/goalie-detail shape: stats.* carry {value,
+  // percentile,leagueAvg}; shotLocationSummary[] carries save% by danger zone.
+  function mapEdgeGoalieReal(p) {
+    if (!p || typeof p !== 'object') return null;
+    const pc = (v) => (v == null ? '\u2014' : (v <= 1 ? Math.round(v * 100) : Math.round(v)));
+    const sv = (v) => (v == null ? null : (v <= 1 ? v.toFixed(3).slice(1) : (v / 100).toFixed(3).slice(1)));
+    const saveQ = [];
+    const LBL = { highDanger: 'High-danger', mediumDanger: 'Mid-danger', mediumHighDanger: 'Mid-high danger', mediumLowDanger: 'Mid-low danger', lowDanger: 'Low-danger', eliteDanger: 'Elite-danger', high: 'High-danger', medium: 'Mid-danger', low: 'Low-danger' };
+    (Array.isArray(p.shotLocationSummary) ? p.shotLocationSummary : []).forEach((r) => {
+      const spct = num(r.savePctg); if (spct == null) return;
+      const code = String(r.locationCode || '').trim();
+      const label = (LBL[code] || (code ? code.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim() : 'Zone')) + ' SV%';
+      saveQ.push([label, sv(spct), pc(num(r.savePctgPercentile)), num(r.savePctgLeagueAvg) != null ? sv(num(r.savePctgLeagueAvg)) : '\u2014', '\u2014']);
+    });
+    const st = p.stats || {};
+    const statRow = (key, label, fmt) => { const n = st[key]; const v = n ? num(n.value) : null; if (v == null) return; saveQ.push([label, fmt(v), pc(num(n.percentile)), num(n.leagueAvg) != null ? fmt(num(n.leagueAvg)) : '\u2014', '\u2014']); };
+    statRow('goalsAgainstAvg', 'GAA', (v) => v.toFixed(2));
+    statRow('gamesAbove900', 'Games .900+ SV%', (v) => String(Math.round(v)));
+    statRow('goalDifferentialPer60', 'Goal diff/60', (v) => (v >= 0 ? '+' : '') + v.toFixed(2));
+    statRow('goalSupportAvg', 'Goal support/gm', (v) => v.toFixed(2));
+    return saveQ.length ? { saveQ } : null;
+  }
+  function mapEdgeGoalie(payload) {
+    if (!payload) return null;
+    return mapEdgeGoalieReal(payload) || mapEdgeGoalieGeneric(payload);
   }
 
   // ---- playoff series carousel -> full bracket {east,west,final,cup} ----

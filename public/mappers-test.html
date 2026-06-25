@@ -44,11 +44,13 @@
   var M = (window.NHL && window.NHL._map) || {};
 
   // ---- mapEdgeSkater -------------------------------------------------------
+  // real edge/skater-detail shape (confirmed via edgeDebug on deploy)
   var skater = {
-    topSkatingSpeed: { value: 24.1, percentile: 88, leagueAverage: 21.9 },
-    topShotSpeed:    { value: 95.2, percentile: 92, leagueAverage: 80.1 },
-    skatingDistance: { value: 180.5, percentile: 70, leagueAverage: 160 },
-    offensiveZoneTime: { value: 55, percentile: 65 }
+    topShotSpeed: { imperial: 95.2, metric: 153.2, percentile: 0.92, leagueAvg: { imperial: 80.1, metric: 128.9 } },
+    skatingSpeed: { speedMax: { imperial: 24.1, metric: 38.8, percentile: 0.88, leagueAvg: { imperial: 21.9, metric: 35.2 } }, burstsOver20: { value: 42, percentile: 0.8, leagueAvg: 21 } },
+    totalDistanceSkated: { imperial: 180.5, metric: 290.5, percentile: 0.7, leagueAvg: { imperial: 160, metric: 257 } },
+    distanceMaxGame: { imperial: 4.9, metric: 7.9, percentile: 0.95, leagueAvg: { imperial: 3.8, metric: 6.1 } },
+    zoneTimeDetails: { offensiveZonePctg: 0.55, offensiveZonePercentile: 0.9, offensiveZoneLeagueAvg: 0.43, neutralZonePctg: 0.20, neutralZoneLeagueAvg: 0.17, defensiveZonePctg: 0.25, defensiveZoneLeagueAvg: 0.40 }
   };
   t('mapEdgeSkater: returns a partial overlay object', function () {
     return !!M.mapEdgeSkater && typeof M.mapEdgeSkater(skater) === 'object';
@@ -69,18 +71,25 @@
   });
 
   // ---- mapEdgeGoalie -------------------------------------------------------
+  // real edge/goalie-detail shape
   var goalie = {
-    highDangerSavePct: { value: 0.835, percentile: 90, leagueAverage: 0.812 },
-    midDangerSavePct:  { value: 0.915, percentile: 60 },
-    lowDangerSavePct:  { value: 0.978, percentile: 75 },
-    goalsSavedAboveExpected: { value: 6.2, percentile: 88 }
+    stats: { goalsAgainstAvg: { value: 2.31, percentile: 0.7, leagueAvg: 2.85 }, gamesAbove900: { value: 30, percentile: 0.8, leagueAvg: 22 }, goalDifferentialPer60: { value: 0.4, percentile: 0.75, leagueAvg: 0 }, goalSupportAvg: { value: 3.1, percentile: 0.6, leagueAvg: 2.9 } },
+    shotLocationSummary: [
+      { locationCode: 'highDanger', saves: 200, savePctg: 0.812, savePctgPercentile: 0.7, savePctgLeagueAvg: 0.79 },
+      { locationCode: 'mediumDanger', saves: 300, savePctg: 0.915, savePctgPercentile: 0.6, savePctgLeagueAvg: 0.90 },
+      { locationCode: 'lowDanger', saves: 400, savePctg: 0.978, savePctgPercentile: 0.65, savePctgLeagueAvg: 0.97 }
+    ]
   };
   t('mapEdgeGoalie: returns save-quality rows', function () {
     var r = M.mapEdgeGoalie(goalie); return !!(r && r.saveQ && r.saveQ.length >= 3);
   });
-  t('mapEdgeGoalie: maps the advanced GSAx metric', function () {
+  t('mapEdgeGoalie: maps high-danger save% from shotLocationSummary', function () {
     var r = M.mapEdgeGoalie(goalie);
-    return !!(r && r.saveQ.some(function (row) { return /saved a\.e\./i.test(row[0]); }));
+    return !!(r && r.saveQ.some(function (row) { return /high-danger sv%/i.test(row[0]); }));
+  });
+  t('mapEdgeGoalie: maps a stats metric (GAA)', function () {
+    var r = M.mapEdgeGoalie(goalie);
+    return !!(r && r.saveQ.some(function (row) { return /gaa/i.test(row[0]); }));
   });
   t('mapEdgeGoalie: no danger metrics → null', function () {
     return M.mapEdgeGoalie({ wins: { value: 30 } }) === null;
