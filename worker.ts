@@ -254,7 +254,18 @@ async function handleNhl(url: URL): Promise<Response> {
         return proxyWeb('meta');
       case 'draft': {
         const sub = b;
-        if (sub === 'rankings') return proxyWeb(c ? `draft/rankings/${c}/${q('category', '1')}` : `draft/rankings/now/${q('category', '1')}`);
+        if (sub === 'rankings') {
+          const cat = q('category');
+          if (c) return proxyWeb(`draft/rankings/${c}/${cat || '1'}`);
+          // For category 2/3/4 (international skaters/goalies), /now only returns cat 1.
+          // Use explicit current-draft year so all four Central Scouting lists are fetched.
+          if (cat && cat !== '1') {
+            const _d = new Date();
+            const _yr = _d.getMonth() >= 9 ? String(_d.getFullYear() + 1) : String(_d.getFullYear());
+            return proxyWeb(`draft/rankings/${_yr}/${cat}`);
+          }
+          return proxyWeb('draft/rankings/now');
+        }
         if (sub === 'picks') return proxyWeb(c ? `draft/picks/${c}/${q('round', 'all')}` : 'draft/picks/now');
         if (sub === 'tracker') return proxyWeb('draft-tracker/picks/now');
         break;
