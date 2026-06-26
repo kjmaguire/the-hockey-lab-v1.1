@@ -721,7 +721,33 @@
       gp: num(p.gamesPlayed) ?? 0, pts: num(p.points) ?? 0,
     });
     const grp = (arr) => (arr || []).map(one).filter((p) => p.name);
-    const f = grp(payload.forwards), d = grp(payload.defensemen), g = grp(payload.goalies);
+    const merge = (a, b) => [...(a || []), ...(b || [])];
+    let f, d, g;
+    if (Array.isArray(payload)) {
+      // flat array shape — split by position code
+      f = grp(payload.filter((p) => p.positionCode !== 'D' && p.positionCode !== 'G'));
+      d = grp(payload.filter((p) => p.positionCode === 'D'));
+      g = grp(payload.filter((p) => p.positionCode === 'G'));
+    } else if (payload.prospects) {
+      // nested {prospects:{forwards,...}} or {prospects:[...]} shape
+      const inner = payload.prospects;
+      if (Array.isArray(inner)) {
+        f = grp(inner.filter((p) => p.positionCode !== 'D' && p.positionCode !== 'G'));
+        d = grp(inner.filter((p) => p.positionCode === 'D'));
+        g = grp(inner.filter((p) => p.positionCode === 'G'));
+      } else {
+        f = grp(merge(inner.forwards, inner.forwardProspects));
+        d = grp(merge(inner.defensemen, inner.defenceProspects || inner.defenseProspects));
+        g = grp(merge(inner.goalies, inner.goalieProspects));
+      }
+    } else {
+      // standard shape: forwards/defensemen/goalies (domestic) PLUS
+      // forwardProspects/defenceProspects/goalieProspects (international) —
+      // NHL API uses both groupings; merge them so no one gets dropped.
+      f = grp(merge(payload.forwards, payload.forwardProspects));
+      d = grp(merge(payload.defensemen, payload.defenceProspects || payload.defenseProspects));
+      g = grp(merge(payload.goalies, payload.goalieProspects));
+    }
     if (!f.length && !d.length && !g.length) return null;
     return { forwards: f, defensemen: d, goalies: g };
   }
@@ -831,8 +857,65 @@
   // exists league-wide from 2021-22), so live EDGE overlays gate on this.
   function liveEdgeOK(){ return activeSeason() === curSeason(); }
 
+  // Synchronous peek into the request cache (warm = no network on next get()).
+  function peek(path){ const c = _cache.get(path); if (c) return c.data; if (IMMUTABLE.test(path)) { const ls = lsGet(path); if (ls !== undefined) return ls; } return undefined; }
+
+  // ---- PRELOAD EVERYTHING REACHABLE -------------------------------------------------
+  // After core hydrate, warm the whole app in the background (on idle): fetch + MAP
+  // every secondary page's data and seed it into window.__E_LIVE under the SAME keys
+  // the page components read via E_useLive(..., key). Result: when you navigate to a
+  // page its live data is already there \u2014 it renders live on first paint, the bundled
+  // fallback never shows. Calls also warm the underlying request cache, so even the
+  // un-keyed (volatile, always-fresh) overlays resolve instantly. Concurrency-limited
+  // so the burst doesn't hammer the proxy. Idempotent per season.
+  async function prefetchAll(){
+    const B = window.BC, N = window.NHL;
+    if (!B || !B.LIVE) return;
+    if (N._prefetching) return; N._prefetching = true;
+    const M = (window.__E_LIVE = window.__E_LIVE || {});
+    const seed = async (k, thunk) => { try { const v = await thunk(); if (v != null) M[k] = v; } catch (_) {} };
+    const pool = async (tasks, limit) => { let i = 0; const w = async () => { while (i < tasks.length) { const f = tasks[i++]; try { await f(); } catch (_) {} } }; await Promise.all(Array.from({ length: Math.min(limit, tasks.length || 1) }, w)); };
+    const tasks = [];
+    // league-wide pages
+    tasks.push(() => seed('playoffFull', () => N.playoffFull()));
+    tasks.push(() => seed('recordsMerged', () => N.recordsAllTime()));   // memo (page merges over its mock)
+    tasks.push(() => seed('awards', () => N.awardsMapped()));
+    tasks.push(() => seed('milestones', () => N.milestonesMapped()));
+    tasks.push(() => N.edgeBoardAll().catch(() => {}));                  // builds BC._liveEB + the per-metric boards below
+    ['top','shot','savg','dist','b20','b22','oz'].forEach((m) => tasks.push(() => seed('edgeBoard:' + m, () => N.edgeBoardLive(m))));
+    // current draft (matches DraftPage's curDraftYear)
+    const _NOW = new Date(); const _cdy = _NOW.getMonth() >= 9 ? _NOW.getFullYear() + 1 : _NOW.getFullYear();
+    tasks.push(() => seed('draftFull:' + _cdy, () => N.draftFull(_cdy)));
+    // every team's pages
+    (B.ABBR || []).forEach((ab) => {
+      tasks.push(() => seed('clubSched:' + ab, () => N.clubScheduleMapped(ab)));
+      tasks.push(() => seed('teamRecUp:' + ab, () => N.teamRecUp(ab)));
+      tasks.push(() => seed('prospects:' + ab, () => N.prospectsMapped(ab)));
+      tasks.push(() => seed('teamSocial:' + ab, () => N.teamSocial(ab)));
+      tasks.push(() => seed('clubSeasons:' + ab, () => N.clubStatsSeasons(ab)));
+      tasks.push(() => seed('franchise:' + ab, () => N.teamFranchiseMapped(ab).then((d) => d ? d.allTime : null)));
+      tasks.push(() => seed('roster:' + ab, () => new Promise((res) => { window.BC.ensureRoster(ab, () => res(window.BC.teamRoster(ab))); })));
+    });
+    // top players + goalies (player detail: card + EDGE + per-game log)
+    const sk = (B.allPlayers || []).slice(0, 80), go = (B.goalies || []).slice(0, 30);
+    sk.forEach((p) => {
+      tasks.push(() => seed('playerExtras:' + p.id, () => N.playerCard(p.id)));
+      tasks.push(() => seed('playerEdge:' + p.id, () => N.edgeSkaterMapped(p.id)));
+      tasks.push(() => seed('playerEgl:' + p.id, () => N.edgeGameLog(p.id)));
+    });
+    go.forEach((g) => {
+      tasks.push(() => seed('playerExtras:' + g.id, () => N.playerCard(g.id)));
+      tasks.push(() => seed('playerEdge:' + g.id, () => N.edgeGoalieMapped(g.id)));
+    });
+    // games on the visible slate (warms game-center cache; un-keyed overlays read it fresh)
+    (((B.slate ? B.slate(0) : []) || [])).forEach((g) => { if (g && g.st !== 'pre') { tasks.push(() => N.gameLive(g.id).catch(() => {})); tasks.push(() => N.gamePbp(g.id).catch(() => {})); } });
+    await pool(tasks, 5);
+    N._prefetching = false; N._prefetched = true;
+    try { window.dispatchEvent(new Event('e-live-ready')); } catch (_) {} // wake any overlays that mounted while we were warming
+  }
+
   window.NHL = {
-    BASE, get,
+    BASE, get, peek, prefetchAll,
     ymd, ordinal,
     activeSeason, liveEdgeOK,
     standings: async () => { const d = await get('standings'); if (d && d.currentSeason) window.NHL._season = String(d.currentSeason); return mapStandings(d); },

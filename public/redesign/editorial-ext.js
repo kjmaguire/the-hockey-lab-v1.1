@@ -299,7 +299,7 @@
   // Fictional draft-prospect names — not real prospects, avoids reproducing actual names.
   const PFN=['Gavin','Beckett','Porter','Cayden','Hudson','Maddox','Rowan','Jasper','Nico','Theo','Sawyer','Finn','Luca','Oskar','Bode','Cruz','Knox','Dax','Remy','Soren'];
   const PLN=['Ackerley','Vanchuk','Sutcliffe','Norquist','Delacroix','Hammond','Kovalenko','Brisbois','Tantalo','Wexler','Aittola','Strandberg','Maleski','Fontaine','Drummond','Pesonen','Vrabel','Lindahl','Carrick','Oswald'];
-  const PLEAGUES=['WHL','OHL','QMJHL','USHL','NCAA','Liiga','SHL','J20 Nationell'];
+  const PLEAGUES=['WHL','OHL','QMJHL','USHL','NCAA','Liiga','SHL','J20 Nationell','Czech Extraliga','MHL','HK Extraliga','Swiss NL','DEL','BCHL','AJHL'];
   const DRAFT_POS=['C','LW','RW','D','D','G'];
   B.draftRankings=()=>{ if(B._dr)return B._dr;
     const r=rng('draft2026');

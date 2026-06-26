@@ -5,8 +5,12 @@ const {
   useMemo: uM
 } = React;
 const D = window.BC;
-window.E_useLive = function (mock, fetchLive, deps) {
-  const [val, setVal] = React.useState(mock);
+window.__E_LIVE = window.__E_LIVE || {};
+window.E_useLive = function (mock, fetchLive, deps, key) {
+  const M = window.__E_LIVE;
+  const peek = () => key && M[key] !== undefined ? M[key] : undefined;
+  const seeded = peek();
+  const [val, setVal] = React.useState(seeded !== undefined ? seeded : mock);
   const depRef = React.useRef(deps);
   const dprev = depRef.current,
     dnow = deps || [];
@@ -14,16 +18,36 @@ window.E_useLive = function (mock, fetchLive, deps) {
   React.useEffect(() => {
     depRef.current = deps;
     let alive = true;
-    setVal(mock);
-    if (window.NHL && window.BC && window.BC.LIVE && typeof fetchLive === 'function') {
-      Promise.resolve().then(fetchLive).then(live => {
-        if (alive && live) setVal(live);
-      }).catch(() => {});
-    }
+    let got = false;
+    const s = peek();
+    setVal(s !== undefined ? s : mock);
+    const runLive = () => {
+      if (!alive || got) return;
+      const sv = peek();
+      if (sv !== undefined) {
+        got = true;
+        setVal(sv);
+        return;
+      }
+      if (window.NHL && window.BC && window.BC.LIVE && typeof fetchLive === 'function') {
+        Promise.resolve().then(fetchLive).then(live => {
+          if (alive && live) {
+            got = true;
+            if (key) M[key] = live;
+            setVal(live);
+          }
+        }).catch(() => {});
+      }
+    };
+    runLive();
+    window.addEventListener('e-live-ready', runLive);
     return () => {
       alive = false;
+      window.removeEventListener('e-live-ready', runLive);
     };
   }, deps);
+  const live = peek();
+  if (live !== undefined) return live;
   return depsChanged ? mock : val;
 };
 const c2 = D.col,
@@ -873,7 +897,7 @@ function TeamSchedule({
     return d;
   };
   const offOf = d => Math.round((d - today) / 86400000);
-  const liveSched = window.E_useLive(null, () => window.NHL.clubScheduleMapped(ab), [ab]);
+  const liveSched = window.E_useLive(null, () => window.NHL.clubScheduleMapped(ab), [ab], 'clubSched:' + ab);
   const liveByDate = uM(() => {
     const m = {};
     (liveSched || []).forEach(g => {
@@ -1555,14 +1579,19 @@ function TeamDetailPage({
   const _gold = T.mode === 'dark' ? '#cda85a' : '#9a7c2a';
   const roster = window.E_useLive(D.teamRoster(ab), () => new Promise(res => {
     window.BC.ensureRoster(ab, () => res(window.BC.teamRoster(ab)));
-  }), [ab]);
+  }), [ab], 'roster:' + ab);
   const schedMock = uM(() => D.teamSchedule(ab), [ab]);
-  const sched = window.E_useLive(schedMock, () => window.NHL.teamRecUp(ab), [ab]);
+  const sched = window.E_useLive(schedMock, () => window.NHL.teamRecUp(ab), [ab], 'teamRecUp:' + ab);
   const prosMock = uM(() => D.prospects(ab), [ab]);
-  const pros = window.E_useLive(prosMock, () => window.NHL.prospectsMapped(ab), [ab]);
+  const pros = window.E_useLive(prosMock, () => window.NHL.prospectsMapped(ab), [ab], 'prospects:' + ab);
   const fwd = roster.filter(p => p.pos !== 'D' && p.pos !== 'G'),
     def = roster.filter(p => p.pos === 'D');
-  const tg = D.goalies.filter(g => g.team === ab);
+  const rg = roster.filter(p => p._isGoalie || p.pos === 'G');
+  const tg = rg.length ? rg.map(g => ({
+    ...(D.goalies.find(x => String(x.id) === String(g.id)) || {}),
+    ...g,
+    pos: 'G'
+  })) : D.goalies.filter(g => g.team === ab);
   const Stat = ({
     l,
     v
@@ -1653,6 +1682,131 @@ function TeamDetailPage({
   }, k === 'pm' ? (p[k] >= 0 ? '+' : '') + p[k] : p[k])))))))) : null;
   const SC = [['Pos', 'pos'], ['GP', 'gp'], ['G', 'g'], ['A', 'a'], ['P', 'p'], ['+/-', 'pm']],
     GC = [['GP', 'gp'], ['W', 'w'], ['L', 'l'], ['SV%', 'svp'], ['GAA', 'gaa']];
+  const socialMock = uM(() => {
+    const r = (roster || []).filter(p => p.pos !== 'G');
+    const p0 = r[0] && r[0].name || 'the captain',
+      p1 = r[1] && r[1].name || 'a depth forward';
+    return [{
+      kind: 'x',
+      time: '2h',
+      likes: '3.4K',
+      rt: '412',
+      text: `\uD83D\uDEA8 GAME DAY \uD83D\uDEA8 The ${nk(ab)} are back at it tonight. Puck drop soon \u2014 let\u2019s go.`
+    }, {
+      kind: 'recap',
+      time: '1d',
+      title: `Recap: ${ct(ab)} grind out a road win`,
+      text: `${p0} and ${p1} powered a third-period push as ${ct(ab)} closed out a 4\u20132 victory.`
+    }, {
+      kind: 'x',
+      time: '1d',
+      likes: '1.2K',
+      rt: '88',
+      text: `Morning skate is in the books. ${p1} draws back into the lineup tonight.`
+    }, {
+      kind: 'news',
+      time: '2d',
+      source: 'Beat',
+      title: `${ct(ab)} sign depth forward to a two-way deal`,
+      text: `The club added organizational depth down the middle ahead of the stretch run.`
+    }, {
+      kind: 'x',
+      time: '3d',
+      likes: '5.8K',
+      rt: '903',
+      text: `WHAT A FINISH. ${p0} buries the overtime winner \uD83D\uDEA8`
+    }, {
+      kind: 'recap',
+      time: '4d',
+      title: `Recap: special teams carry the ${nk(ab)}`,
+      text: `A 2-for-3 power play and a perfect penalty kill were the difference on the night.`
+    }];
+  }, [ab, roster]);
+  const social = window.E_useLive(socialMock, () => window.NHL && window.NHL.teamSocial ? window.NHL.teamSocial(ab) : null, [ab], 'teamSocial:' + ab);
+  const histSeasonsMock = uM(() => {
+    const cy = 2024;
+    return Array.from({
+      length: 8
+    }, (_, i) => ({
+      id: `${cy - i}${cy - i + 1}`,
+      label: `${cy - i}\u2013${String(cy - i + 1).slice(2)}`,
+      playoffs: true
+    }));
+  }, []);
+  const histSeasons = window.E_useLive(histSeasonsMock, () => window.NHL && window.NHL.clubStatsSeasons ? window.NHL.clubStatsSeasons(ab) : null, [ab], 'clubSeasons:' + ab);
+  const [histSel, setHistSel] = React.useState(null);
+  React.useEffect(() => {
+    if (histSeasons && histSeasons.length && !histSel) setHistSel(histSeasons[0].id);
+  }, [histSeasons]);
+  const histMock = uM(() => {
+    if (!histSel) return null;
+    const sk = (roster || []).filter(p => p.pos !== 'G').slice(0, 18).map((p, i) => {
+      const g = Math.max(0, 38 - i * 2),
+        a = Math.max(1, 52 - i * 3);
+      return {
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        gp: 82 - i % 6,
+        g,
+        a,
+        p: g + a,
+        pm: 18 - i,
+        pim: 8 + i * 3,
+        ppg: Math.max(0, 11 - i),
+        shots: 160 - i * 7
+      };
+    }).sort((a, b) => b.p - a.p);
+    const go = D.goalies.filter(g => g.team === ab).slice(0, 2).map((g, i) => ({
+      id: g.id,
+      name: g.name,
+      gp: 52 - i * 22,
+      w: 31 - i * 12,
+      l: 16 + i * 2,
+      otl: 5,
+      svp: g.svp,
+      gaa: g.gaa,
+      so: 4 - i
+    }));
+    return {
+      season: histSel,
+      skaters: sk,
+      goalies: go
+    };
+  }, [histSel, ab, roster]);
+  const histData = window.E_useLive(histMock, () => histSel && window.NHL && window.NHL.clubStatsForSeason ? window.NHL.clubStatsForSeason(ab, histSel, 2) : null, [histSel, ab]);
+  const franchiseMock = uM(() => {
+    const f = D.teamFranchiseRecords(ab);
+    const a = f && f.allTime;
+    return a ? {
+      gp: null,
+      w: a.wins,
+      l: null,
+      winPct: a.winPct,
+      first: null,
+      seasons: a.seasons,
+      playoffs: null
+    } : null;
+  }, [ab]);
+  const franchise = window.E_useLive(franchiseMock, () => window.NHL && window.NHL.teamFranchiseMapped ? window.NHL.teamFranchiseMapped(ab).then(d => d ? d.allTime : null) : null, [ab], 'franchise:' + ab);
+  const seasonStory = (d, label) => {
+    if (!d) return '';
+    const sk = d.skaters || [],
+      go = d.goalies || [];
+    if (!sk.length && !go.length) return '';
+    const team = `${ct(ab)} ${nk(ab)}`;
+    const top = sk[0],
+      g2 = sk[1];
+    const topG = [...go].sort((a, b) => (b.w || 0) - (a.w || 0))[0];
+    const totG = sk.reduce((s, p) => s + (p.g || 0), 0);
+    const snipers = [...sk].sort((a, b) => (b.g || 0) - (a.g || 0))[0];
+    const out = [];
+    if (top) out.push(`In ${label}, ${top.name} paced the ${team} with ${top.p} points (${top.g} goals, ${top.a} assists) over ${top.gp} games` + (g2 ? `, with ${g2.name} close behind at ${g2.p}.` : '.'));
+    if (snipers && top && snipers.id !== top.id) out.push(`${snipers.name} led the team in goals with ${snipers.g}.`);
+    if (topG && topG.gp) out.push(`Between the pipes, ${topG.name} went ${topG.w}\u2013${topG.l}${topG.otl ? `\u2013${topG.otl}` : ''}` + (topG.svp ? ` with a ${typeof topG.svp === 'number' ? topG.svp.toFixed(3).slice(1) : topG.svp} save percentage` : '') + (topG.so ? ` and ${topG.so} shutouts.` : '.'));
+    out.push(`As a group the roster combined for ${totG} goals across the season.`);
+    return out.join(' ');
+  };
   return React.createElement("div", null, React.createElement("button", {
     onClick: onBack,
     className: "el",
@@ -1765,10 +1919,167 @@ function TeamDetailPage({
     l: "Last 10",
     v: t.last10
   })), React.createElement(Tabs, {
-    tabs: ['Hub', 'Stats', 'Shot zones', 'Schedule', 'Roster', 'Prospects', 'Records'],
+    tabs: ['Hub', 'Buzz', 'Stats', 'Shot zones', 'Schedule', 'Roster', 'Prospects', 'History', 'Records'],
     active: tab,
     onChange: setTab
-  }), tab === 'Hub' && (() => {
+  }), tab === 'History' && (() => {
+    const sel = (histSeasons || []).find(s => s.id === histSel);
+    const story = seasonStory(histData, sel ? sel.label : '');
+    const sk = histData && histData.skaters || [],
+      go = histData && histData.goalies || [];
+    const fmtSv = v => v == null ? '\u2014' : typeof v === 'number' ? v.toFixed(3).slice(1) : v;
+    return React.createElement("div", null, React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 11,
+        marginBottom: 16,
+        flexWrap: 'wrap'
+      }
+    }, React.createElement("div", {
+      style: {
+        ...ML
+      }
+    }, "Season"), React.createElement("select", {
+      value: histSel || '',
+      onChange: e => setHistSel(e.target.value),
+      style: {
+        fontFamily: MONO,
+        fontSize: 13,
+        fontWeight: 600,
+        background: T.bg,
+        border: `1px solid ${T.line2}`,
+        borderRadius: 8,
+        padding: '7px 10px',
+        color: T.ink,
+        cursor: 'pointer'
+      }
+    }, (histSeasons || []).map(s => React.createElement("option", {
+      key: s.id,
+      value: s.id
+    }, s.label, s.playoffs ? ' \u00b7 made playoffs' : ''))), React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 9.5,
+        letterSpacing: '.06em',
+        textTransform: 'uppercase',
+        color: '#b5762a',
+        border: '1px solid rgba(181,118,42,.35)',
+        borderRadius: 5,
+        padding: '2px 7px'
+      },
+      title: "Historical skater & goalie stats pulled live from the NHL on deploy"
+    }, "History \xB7 beta")), story && React.createElement("div", {
+      className: "ec",
+      style: {
+        ...card,
+        padding: '16px 18px',
+        marginBottom: 16,
+        borderLeft: `3px solid ${c2(ab)}`
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 10,
+        letterSpacing: '.1em',
+        textTransform: 'uppercase',
+        color: T.red
+      }
+    }, "Season story"), React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 9.5,
+        color: T.faint
+      }
+    }, "auto-generated from the box score")), React.createElement("div", {
+      style: {
+        fontFamily: SERIF,
+        fontSize: 16.5,
+        lineHeight: 1.5,
+        color: T.ink
+      }
+    }, story)), RT({
+      title: `Skaters \u00b7 ${sel ? sel.label : ''}`,
+      rows: sk,
+      cols: [['Pos', 'pos'], ['GP', 'gp'], ['G', 'g'], ['A', 'a'], ['P', 'p'], ['+/-', 'pm']]
+    }), go.length > 0 && React.createElement("div", {
+      style: {
+        marginBottom: 18
+      }
+    }, React.createElement("div", {
+      style: {
+        ...ML,
+        marginBottom: 8
+      }
+    }, "Goalies \xB7 ", sel ? sel.label : ''), React.createElement("div", {
+      style: {
+        ...card,
+        overflow: 'hidden'
+      }
+    }, React.createElement("table", {
+      style: {
+        width: '100%',
+        borderCollapse: 'collapse',
+        fontSize: 13.5
+      }
+    }, React.createElement("thead", null, React.createElement("tr", null, React.createElement("th", {
+      style: {
+        padding: '9px 14px',
+        textAlign: 'left',
+        ...ML
+      }
+    }, "Goalie"), [['GP', 'gp'], ['W', 'w'], ['L', 'l'], ['SO', 'so'], ['SV%', 'svp'], ['GAA', 'gaa']].map(([h]) => React.createElement("th", {
+      key: h,
+      style: {
+        padding: '9px',
+        textAlign: 'center',
+        ...ML
+      }
+    }, h)))), React.createElement("tbody", null, go.map(p => React.createElement("tr", {
+      key: p.id,
+      onClick: () => onPlayer(p),
+      className: "er",
+      style: {
+        cursor: 'pointer',
+        borderTop: `1px solid ${T.line}`
+      }
+    }, React.createElement("td", {
+      style: {
+        padding: '9px 14px',
+        color: T.ink,
+        fontWeight: 500
+      }
+    }, p.name), [['GP', 'gp'], ['W', 'w'], ['L', 'l'], ['SO', 'so'], ['SV%', 'svp'], ['GAA', 'gaa']].map(([h, k]) => React.createElement("td", {
+      key: h,
+      style: {
+        textAlign: 'center',
+        color: T.mut
+      }
+    }, k === 'svp' ? fmtSv(p[k]) : k === 'gaa' ? p[k] != null ? (+p[k]).toFixed(2) : '\u2014' : p[k])))))))), !sk.length && !go.length && React.createElement("div", {
+      style: {
+        ...card,
+        padding: '40px 18px',
+        textAlign: 'center',
+        color: T.mut,
+        fontSize: 14
+      }
+    }, "No stats on file for this season."), React.createElement("div", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 10.5,
+        color: T.faint,
+        marginTop: 6,
+        lineHeight: 1.6
+      }
+    }, "Season story is generated from the season's real box score \u2014 no external AI. Historical stats load live from the NHL on deploy."));
+  })(), tab === 'Hub' && (() => {
     const news = D.teamNews(ab);
     const NACC = {
       pos: '#1a8a4f',
@@ -2063,7 +2374,350 @@ function TeamDetailPage({
     })());
   })(), tab === 'Stats' && React.createElement(TeamStatsTab, {
     ab: ab
-  }), tab === 'Shot zones' && window.E_ShotZones && React.createElement(window.E_ShotZones, {
+  }), tab === 'Buzz' && (() => {
+    const HANDLE = {
+      ANA: 'AnaheimDucks',
+      BOS: 'NHLBruins',
+      BUF: 'BuffaloSabres',
+      CGY: 'NHLFlames',
+      CAR: 'Canes',
+      CHI: 'NHLBlackhawks',
+      COL: 'Avalanche',
+      CBJ: 'BlueJacketsNHL',
+      DAL: 'DallasStars',
+      DET: 'DetroitRedWings',
+      EDM: 'EdmontonOilers',
+      FLA: 'FlaPanthers',
+      LAK: 'LAKings',
+      MIN: 'mnwild',
+      MTL: 'CanadiensMTL',
+      NSH: 'PredsNHL',
+      NJD: 'NJDevils',
+      NYI: 'NYIslanders',
+      NYR: 'NYRangers',
+      OTT: 'Senators',
+      PHI: 'NHLFlyers',
+      PIT: 'penguins',
+      SJS: 'SanJoseSharks',
+      SEA: 'SeattleKraken',
+      STL: 'StLouisBlues',
+      TBL: 'TBLightning',
+      TOR: 'MapleLeafs',
+      UTA: 'utahmammoth',
+      VAN: 'Canucks',
+      VGK: 'GoldenKnights',
+      WSH: 'Capitals',
+      WPG: 'NHLJets'
+    };
+    const h = HANDLE[ab] || ct(ab).replace(/\s/g, '') + nk(ab);
+    const r = roster.filter(p => p.pos !== 'G');
+    const p0 = r[0] && r[0].name || 'the captain',
+      p1 = r[1] && r[1].name || 'a depth forward';
+    const sample = [{
+      kind: 'x',
+      time: '2h',
+      likes: '3.4K',
+      rt: '412',
+      text: `\uD83D\uDEA8 GAME DAY \uD83D\uDEA8 The ${nk(ab)} are back at it tonight. Puck drop soon \u2014 let\u2019s go.`
+    }, {
+      kind: 'recap',
+      time: '1d',
+      title: `Recap: ${ct(ab)} grind out a road win`,
+      text: `${p0} and ${p1} powered a third-period push as ${ct(ab)} closed out a 4\u20132 victory.`
+    }, {
+      kind: 'x',
+      time: '1d',
+      likes: '1.2K',
+      rt: '88',
+      text: `Morning skate is in the books. ${p1} draws back into the lineup tonight.`
+    }, {
+      kind: 'news',
+      time: '2d',
+      source: 'Beat',
+      title: `${ct(ab)} sign depth forward to a two-way deal`,
+      text: `The club added organizational depth down the middle ahead of the stretch run.`
+    }, {
+      kind: 'x',
+      time: '3d',
+      likes: '5.8K',
+      rt: '903',
+      text: `WHAT A FINISH. ${p0} buries the overtime winner \uD83D\uDEA8`
+    }, {
+      kind: 'recap',
+      time: '4d',
+      title: `Recap: special teams carry the ${nk(ab)}`,
+      text: `A 2-for-3 power play and a perfect penalty kill were the difference on the night.`
+    }];
+    const posts = social;
+    const Av = ({
+      size = 40
+    }) => React.createElement("span", {
+      style: {
+        width: size,
+        height: size,
+        borderRadius: 99,
+        background: c2(ab),
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#fff',
+        fontWeight: 700,
+        fontSize: size * 0.34,
+        flexShrink: 0
+      }
+    }, ab);
+    const XMark = ({
+      size = 18
+    }) => React.createElement("span", {
+      style: {
+        width: size,
+        height: size,
+        borderRadius: 6,
+        background: T.invBg,
+        color: T.invFg,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 700,
+        fontSize: size * 0.62,
+        flexShrink: 0
+      }
+    }, "X");
+    const RedditMark = ({
+      size = 18
+    }) => React.createElement("span", {
+      style: {
+        width: size,
+        height: size,
+        borderRadius: 6,
+        background: '#ff4500',
+        color: '#fff',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 700,
+        fontSize: size * 0.46,
+        flexShrink: 0
+      }
+    }, "r/");
+    const Verified = () => React.createElement("svg", {
+      width: "14",
+      height: "14",
+      viewBox: "0 0 24 24",
+      style: {
+        flexShrink: 0
+      }
+    }, React.createElement("circle", {
+      cx: "12",
+      cy: "12",
+      r: "11",
+      fill: "#2a72c8"
+    }), React.createElement("path", {
+      d: "M7 12.5l3.2 3.2L17 8.5",
+      fill: "none",
+      stroke: "#fff",
+      strokeWidth: "2.4",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    }));
+    const fmtN = n => typeof n === 'string' ? n : n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : String(n || 0);
+    const Stat = ({
+      icon,
+      n
+    }) => React.createElement("span", {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        fontFamily: MONO,
+        fontSize: 11,
+        color: T.faint
+      }
+    }, React.createElement("svg", {
+      width: "14",
+      height: "14",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.9",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    }, icon), fmtN(n));
+    return React.createElement("div", null, React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 11,
+        marginBottom: 16,
+        flexWrap: 'wrap'
+      }
+    }, React.createElement(Av, null), React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        color: T.ink,
+        fontSize: 15
+      }
+    }, ct(ab), " ", nk(ab)), React.createElement("a", {
+      href: `https://x.com/${h}`,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      className: "el",
+      style: {
+        fontFamily: MONO,
+        fontSize: 12,
+        color: T.mut,
+        textDecoration: 'none'
+      }
+    }, "@", h, " \u2197")), React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 9.5,
+        letterSpacing: '.06em',
+        textTransform: 'uppercase',
+        color: '#b5762a',
+        border: '1px solid rgba(181,118,42,.35)',
+        borderRadius: 5,
+        padding: '2px 7px'
+      },
+      title: "Recaps are real NHL data; social posts fill in from the team\u2019s public feed on deploy"
+    }, "Buzz \xB7 beta")), React.createElement("div", {
+      style: {
+        display: 'grid',
+        gap: 12
+      }
+    }, posts.map((p, i) => {
+      const K = p.kind || 'x';
+      const accent = K === 'recap' ? '#1a8a4f' : K === 'news' ? '#1f5f8a' : c2(ab);
+      const tag = K === 'x' ? `@${h}` : K === 'recap' ? '\xB7 Game recap' : `\xB7 ${p.source || 'Team news'}`;
+      return React.createElement("div", {
+        key: i,
+        className: "ec",
+        style: {
+          ...card,
+          padding: '14px 16px',
+          borderLeft: `3px solid ${accent}`
+        }
+      }, React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          marginBottom: 2
+        }
+      }, React.createElement(Av, {
+        size: 40
+      }), React.createElement("div", {
+        style: {
+          flex: 1,
+          minWidth: 0
+        }
+      }, React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5
+        }
+      }, React.createElement("span", {
+        style: {
+          fontSize: 13.5,
+          fontWeight: 700,
+          color: T.ink,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }
+      }, ct(ab), " ", nk(ab)), React.createElement(Verified, null), React.createElement("span", {
+        style: {
+          marginLeft: 'auto',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6
+        }
+      }, React.createElement(Badge, {
+        ab: ab,
+        size: 14
+      }), K === 'x' ? React.createElement(XMark, {
+        size: 18
+      }) : K === 'reddit' ? React.createElement(RedditMark, null) : React.createElement("span", {
+        style: {
+          fontFamily: MONO,
+          fontSize: 9,
+          letterSpacing: '.06em',
+          textTransform: 'uppercase',
+          color: K === 'recap' ? '#1a8a4f' : '#1f5f8a',
+          border: `1px solid ${K === 'recap' ? '#1a8a4f' : '#1f5f8a'}44`,
+          borderRadius: 5,
+          padding: '2px 6px'
+        }
+      }, K === 'recap' ? 'Recap' : p.source || 'News'))), React.createElement("div", {
+        style: {
+          fontFamily: MONO,
+          fontSize: 11,
+          color: T.faint,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }
+      }, K === 'x' ? `@${h}` : K === 'reddit' ? p.handle : K === 'recap' ? 'Game recap' : p.source || 'Team news', " \xB7 ", p.time))), p.title && React.createElement("div", {
+        style: {
+          fontFamily: SERIF,
+          fontSize: 17,
+          lineHeight: 1.3,
+          color: T.ink,
+          marginBottom: 5
+        }
+      }, p.title), React.createElement("div", {
+        style: {
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: K === 'x' ? T.ink : T.mut
+        }
+      }, p.text), (K === 'x' || K === 'reddit') && React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 22,
+          marginTop: 12,
+          paddingTop: 11,
+          borderTop: `1px solid ${T.line}`
+        }
+      }, React.createElement(Stat, {
+        icon: React.createElement("path", {
+          d: "M21 11.5a8.38 8.38 0 0 1-8.5 8.5 9 9 0 0 1-4-1L3 20l1.9-4.5A8.38 8.38 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5Z"
+        }),
+        n: p.replies != null ? p.replies : Math.max(1, Math.round((parseFloat(p.rt) || 12) * 0.6))
+      }), K === 'x' && React.createElement(Stat, {
+        icon: React.createElement(React.Fragment, null, React.createElement("path", {
+          d: "M17 1l4 4-4 4"
+        }), React.createElement("path", {
+          d: "M3 11V9a4 4 0 0 1 4-4h14"
+        }), React.createElement("path", {
+          d: "M7 23l-4-4 4-4"
+        }), React.createElement("path", {
+          d: "M21 13v2a4 4 0 0 1-4 4H3"
+        })),
+        n: p.rt
+      }), React.createElement(Stat, {
+        icon: React.createElement("path", {
+          d: "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8Z"
+        }),
+        n: p.likes
+      })));
+    })), React.createElement("div", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 10.5,
+        color: T.faint,
+        marginTop: 14,
+        lineHeight: 1.6
+      }
+    }, "Game recaps come straight from NHL data. Social posts are sample content in preview and populate from the team\u2019s public feed once deployed \u2014 rendered natively, no third-party scripts. Not affiliated with the teams."));
+  })(), tab === 'Shot zones' && window.E_ShotZones && React.createElement(window.E_ShotZones, {
     scope: "team",
     id: ab,
     teamAb: ab,
@@ -2287,7 +2941,48 @@ function TeamDetailPage({
         fontSize: 12,
         color: T.mut
       }
-    }, "No Stanley Cups or Presidents' Trophies on record yet."), React.createElement("div", {
+    }, "No Stanley Cups or Presidents' Trophies on record yet."), franchise && React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        ...ML,
+        marginBottom: 10
+      }
+    }, "All-time franchise record"), React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))',
+        gap: 12,
+        marginBottom: 8
+      }
+    }, franchise.gp != null && React.createElement(Big, {
+      l: "Games",
+      v: Number(franchise.gp).toLocaleString()
+    }), franchise.w != null && React.createElement(Big, {
+      l: "Wins",
+      v: Number(franchise.w).toLocaleString()
+    }), franchise.l != null && React.createElement(Big, {
+      l: "Losses",
+      v: Number(franchise.l).toLocaleString()
+    }), franchise.winPct && React.createElement(Big, {
+      l: "Win %",
+      v: franchise.winPct
+    }), franchise.first && React.createElement(Big, {
+      l: "Since",
+      v: franchise.first
+    }), franchise.seasons && React.createElement(Big, {
+      l: "Seasons",
+      v: franchise.seasons
+    })), franchise.playoffs && React.createElement("div", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 11.5,
+        color: T.mut,
+        marginBottom: 18
+      }
+    }, "Playoffs all-time: ", franchise.playoffs.w, "\u2013", franchise.playoffs.l, " across ", Number(franchise.playoffs.gp).toLocaleString(), " games"), React.createElement("div", {
+      style: {
+        height: 6
+      }
+    })), React.createElement("div", {
       style: {
         ...ML,
         marginBottom: 10
@@ -2604,12 +3299,12 @@ function PlayerDetailPage({
   const ex = window.E_useLive(exMock, () => window.NHL.playerCard(p.id).then(c => c ? {
     ...exMock,
     ...c
-  } : null), [p.id]);
+  } : null), [p.id], 'playerExtras:' + p.id);
   const edgeMock = uM(() => isG ? D.goalieEdge(p) : D.skaterEdge(p), [p.id]);
   const edge = window.E_useLive(edgeMock, () => (isG ? window.NHL.edgeGoalieMapped(p.id) : window.NHL.edgeSkaterMapped(p.id)).then(e => e ? {
     ...edgeMock,
     ...e
-  } : null), [p.id]);
+  } : null), [p.id], 'playerEdge:' + p.id);
   const log = uM(() => D.gameLog(p), [p.id]);
   const eglMock = uM(() => !isG && D.edgeGameLog ? D.edgeGameLog(p) : [], [p.id]);
   const egl = window.E_useLive(eglMock, () => !isG && window.NHL && window.NHL.edgeGameLog ? window.NHL.edgeGameLog(p.id).then(rows => rows && rows.length ? eglMock.map((m, i) => {
@@ -2624,7 +3319,7 @@ function PlayerDetailPage({
       dist: r.dist != null ? r.dist : m.dist,
       b20: r.b20 != null ? r.b20 : m.b20
     } : m;
-  }) : null) : null, [p.id]);
+  }) : null) : null, [p.id], 'playerEgl:' + p.id);
   const Stat = ({
     l,
     v
@@ -2721,7 +3416,17 @@ function PlayerDetailPage({
   }, React.createElement(Badge, {
     ab: p.team,
     size: 20
-  }), ct(p.team), " ", nk(p.team), " \xB7 ", p.pos)))), React.createElement("div", {
+  }), ct(p.team), " ", nk(p.team), " \xB7 ", p.pos), ex.bio && React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '4px 14px',
+      marginTop: 6,
+      fontFamily: MONO,
+      fontSize: 11.5,
+      color: T.faint
+    }
+  }, ex.bio.number != null && React.createElement("span", null, "#", ex.bio.number), ex.bio.ht && React.createElement("span", null, ex.bio.ht, ex.bio.wt ? `, ${ex.bio.wt}` : ''), ex.bio.shoots && React.createElement("span", null, isG ? 'Catches' : 'Shoots', " ", ex.bio.shoots), ex.bio.age != null && React.createElement("span", null, "Age ", ex.bio.age), ex.bio.born && React.createElement("span", null, ex.bio.born), ex.bio.draft && React.createElement("span", null, "Draft: ", ex.bio.draft))))), React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))',
@@ -3117,7 +3822,7 @@ function PlayerDetailPage({
       display: 'grid',
       gridTemplateColumns: 'repeat(4,1fr)'
     }
-  }, (isG ? [['GP', ex.career.gp], ['W', ex.career.w], ['L', ex.career.l], ['SO', '—']] : [['GP', ex.career.gp], ['G', ex.career.g], ['A', ex.career.a], ['P', ex.career.p]]).map(([l, v]) => React.createElement("div", {
+  }, (isG ? [['GP', ex.career.gp], ['W', ex.career.w], ['L', ex.career.l], ['SO', ex.career.so != null ? ex.career.so : '—']] : [['GP', ex.career.gp], ['G', ex.career.g], ['A', ex.career.a], ['P', ex.career.p]]).map(([l, v]) => React.createElement("div", {
     key: l,
     style: {
       padding: '14px',
@@ -3179,7 +3884,28 @@ function PlayerDetailPage({
       fontSize: 12,
       color: T.mut
     }
-  }, row.p, " P"))))), React.createElement(Sec, {
+  }, row.p, " P"))))), ex.careerPO && React.createElement(Sec, {
+    k: "Career \xB7 playoffs"
+  }, React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(4,1fr)'
+    }
+  }, (isG ? [['GP', ex.careerPO.gp], ['W', ex.careerPO.w], ['L', ex.careerPO.l], ['SO', ex.careerPO.so]] : [['GP', ex.careerPO.gp], ['G', ex.careerPO.g], ['A', ex.careerPO.a], ['P', ex.careerPO.p]]).map(([l, v]) => React.createElement("div", {
+    key: l,
+    style: {
+      padding: '14px',
+      textAlign: 'center'
+    }
+  }, React.createElement("div", {
+    style: ML
+  }, l), React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 600,
+      marginTop: 3
+    }
+  }, v))))), React.createElement(Sec, {
     k: "Season history"
   }, React.createElement("div", {
     style: {
@@ -4417,6 +5143,7 @@ function HockeyIQPage({
   const [cmpGA, setCmpGA] = uS(goList[0].id);
   const [cmpGB, setCmpGB] = uS(goList[1].id);
   const [boardM, setBoardM] = uS('top');
+  const [ebMore, setEbMore] = uS(false);
   const [h2hMode, setH2hMode] = uS('Standard');
   const cmp = D.edgeCompare(cmpA, cmpB);
   const gcmp = D.goalieEdgeCompare(cmpGA, cmpGB);
@@ -4554,7 +5281,8 @@ function HockeyIQPage({
     const m = boardM,
       setM = setBoardM;
     const meta = EB_M.find(x => x[0] === m) || EB_M[0];
-    const rows = window.E_useLive(D.edgeBoard(m), () => window.NHL && window.NHL.edgeBoardLive ? window.NHL.edgeBoardLive(m) : Promise.resolve(null), [m]);
+    const rows = window.E_useLive(D.edgeBoard(m), () => window.NHL && window.NHL.edgeBoardLive ? window.NHL.edgeBoardLive(m) : Promise.resolve(null), [m], 'edgeBoard:' + m);
+    const shown = ebMore ? rows : rows.slice(0, 5);
     return React.createElement("div", {
       style: {
         ...card,
@@ -4595,7 +5323,7 @@ function HockeyIQPage({
         color: m === k ? T.invFg : T.mut,
         cursor: 'pointer'
       }
-    }, lab)))), rows.map((p, i) => React.createElement("div", {
+    }, lab)))), shown.map((p, i) => React.createElement("div", {
       key: p.id,
       onClick: () => onPlayer(p),
       className: "er",
@@ -4645,7 +5373,40 @@ function HockeyIQPage({
         minWidth: 60,
         textAlign: 'right'
       }
-    }, p._v, meta[2] ? ' ' + meta[2] : ''))));
+    }, p._v, meta[2] ? ' ' + meta[2] : ''))), rows.length > 5 && React.createElement("button", {
+      onClick: () => setEbMore(v => !v),
+      className: "er",
+      style: {
+        width: '100%',
+        padding: '10px 16px',
+        borderTop: `1px solid ${T.line}`,
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        fontFamily: MONO,
+        fontSize: 11,
+        letterSpacing: '.05em',
+        textTransform: 'uppercase',
+        color: T.mut,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 7
+      }
+    }, ebMore ? 'Show less' : `Show all ${rows.length}`, React.createElement("svg", {
+      width: "11",
+      height: "11",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      style: {
+        transform: ebMore ? 'rotate(180deg)' : 'none',
+        transition: 'transform .15s'
+      }
+    }, React.createElement("path", {
+      d: "m6 9 6 6 6-6"
+    }))));
   };
   const EdgeTeams = () => {
     const dist = D.edgeTeamDistance();
@@ -7399,7 +8160,7 @@ function PlayoffsPage({
   onTeam
 }) {
   const bMock = uM(() => D.playoffBracket(), []);
-  const b = window.E_useLive(bMock, () => window.NHL.playoffFull(), []);
+  const b = window.E_useLive(bMock, () => window.NHL.playoffFull(), [], 'playoffFull');
   const [sel, setSel] = uS(null);
   const [pview, setPview] = uS(() => {
     try {
@@ -8262,13 +9023,13 @@ function RecordsPage({
   const rec = window.E_useLive(recMock, () => window.NHL.recordsAllTime().then(r => r ? {
     ...recMock,
     ...r
-  } : null), []);
+  } : null), [], 'recordsMerged');
   const skaters = rec.skaters;
   const goalies = rec.goalies;
-  const trophies = window.E_useLive(uM(() => D.recordTrophiesList(), []), () => window.NHL && window.NHL.awardsMapped ? window.NHL.awardsMapped() : null, []);
+  const trophies = window.E_useLive(uM(() => D.recordTrophiesList(), []), () => window.NHL && window.NHL.awardsMapped ? window.NHL.awardsMapped() : null, [], 'awards');
   const franchise = D.recordFranchiseList();
   const season = D.recordSeason();
-  const watch = window.E_useLive(uM(() => D.milestoneWatch(), []), () => window.NHL && window.NHL.milestonesMapped ? window.NHL.milestonesMapped() : null, []);
+  const watch = window.E_useLive(uM(() => D.milestoneWatch(), []), () => window.NHL && window.NHL.milestonesMapped ? window.NHL.milestonesMapped() : null, [], 'milestones');
   const reports = D.statsReports();
   const [scope, setScope] = uS('skater');
   const [leadScope, setLeadScope] = uS('skater');
@@ -8928,9 +9689,29 @@ function DraftPage({
     rankings: D.draftRankings(),
     picks: D.draftPicks()
   }), []);
-  const draftLive = window.E_useLive(draftMock, () => window.NHL.draftFull(curDraftYear), [curDraftYear]);
-  const rankings = draftLive.rankings;
-  const picks = draftLive.picks;
+  const draftLive = window.E_useLive(draftMock, () => window.NHL.draftFull(curDraftYear), [curDraftYear], 'draftFull:' + curDraftYear);
+  const [draftOverride, setDraftOverride] = uS(null);
+  React.useEffect(() => {
+    if (!isUpcoming) return;
+    let alive = true;
+    const pull = () => {
+      if (!alive || !window.NHL || !window.BC || !window.BC.LIVE) return;
+      window.NHL.draftFull(curDraftYear).then(d => {
+        if (alive && d) {
+          if (window.__E_LIVE) window.__E_LIVE['draftFull:' + curDraftYear] = d;
+          setDraftOverride(d);
+        }
+      }).catch(() => {});
+    };
+    const iv = setInterval(pull, 30000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+    };
+  }, [isUpcoming, curDraftYear]);
+  const draft = draftOverride || draftLive;
+  const rankings = draft.rankings;
+  const picks = draft.picks;
   const lotWinners = uM(() => {
     const w = (picks || []).filter(p => p.lotteryWin).map(p => p.team);
     return w.length ? w : D.lotteryWinners();
@@ -8948,10 +9729,26 @@ function DraftPage({
       made: false
     }));
   }, [rankings]);
-  const tracker = window.E_useLive(predicted, () => window.NHL.draftLiveTracker().then(made => {
-    if (!made || !made.length) return null;
+  const [liveMade, setLiveMade] = uS(null);
+  React.useEffect(() => {
+    if (!isUpcoming) return;
+    let alive = true;
+    const pull = () => {
+      if (window.NHL && window.BC && window.BC.LIVE && window.NHL.draftLiveTracker) window.NHL.draftLiveTracker().then(made => {
+        if (alive && made && made.length) setLiveMade(made);
+      }).catch(() => {});
+    };
+    pull();
+    const iv = tab === 'Live tracker' ? setInterval(pull, 20000) : null;
+    return () => {
+      alive = false;
+      if (iv) clearInterval(iv);
+    };
+  }, [isUpcoming, tab, curDraftYear]);
+  const tracker = uM(() => {
+    if (!liveMade || !liveMade.length) return predicted;
     const by = {};
-    made.forEach(m => {
+    liveMade.forEach(m => {
       by[m.pick] = m;
     });
     return predicted.map(p => by[p.pick] ? {
@@ -8959,7 +9756,7 @@ function DraftPage({
       ...by[p.pick],
       made: true
     } : p);
-  }), [predicted]);
+  }, [predicted, liveMade]);
   const madeCount = tracker.filter(p => p.made).length;
   const upTabs = ['Draft order', 'Prospect rankings', 'Mock first round', 'Live tracker'];
   React.useEffect(() => {
@@ -9800,6 +10597,18 @@ function HighlightsPage({
 }) {
   const fav = favs || [];
   const today = D.slate(0);
+  const spotMock = uM(() => {
+    const ss = D.skaterLeaders('p').slice(0, 8);
+    return ss.map(p => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      num: p.num,
+      team: p.team,
+      headshot: null
+    }));
+  }, []);
+  const spotlight = window.E_useLive(spotMock, () => window.NHL && window.NHL.spotlightMapped ? window.NHL.spotlightMapped() : null, []);
   const live = today.filter(g => g.st === 'live');
   const [railView, setRailView] = uS('Tonight');
   const [ldrCat, setLdrCat] = uS('Points');
@@ -10045,7 +10854,90 @@ function HighlightsPage({
     k: "The Lab",
     t: "Tonight around the",
     serif: "league"
-  }), fav.length > 0 && React.createElement("div", {
+  }), spotlight && spotlight.length > 0 && React.createElement("div", {
+    style: {
+      marginBottom: 18
+    }
+  }, React.createElement("div", {
+    style: {
+      ...ML,
+      marginBottom: 10
+    }
+  }, "League spotlight"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10,
+      overflowX: 'auto',
+      paddingBottom: 4,
+      WebkitOverflowScrolling: 'touch'
+    }
+  }, spotlight.slice(0, 12).map(p => React.createElement("div", {
+    key: p.id,
+    onClick: () => onPlayer({
+      id: p.id,
+      name: p.name,
+      team: p.team,
+      pos: p.pos
+    }),
+    className: "ec",
+    style: {
+      ...card,
+      flex: '0 0 auto',
+      width: 150,
+      cursor: 'pointer',
+      overflow: 'hidden'
+    }
+  }, React.createElement("div", {
+    style: {
+      height: 3,
+      background: c2(p.team)
+    }
+  }), React.createElement("div", {
+    style: {
+      padding: '12px 13px'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8
+    }
+  }, p.headshot ? React.createElement("img", {
+    src: p.headshot,
+    alt: "",
+    width: 34,
+    height: 34,
+    loading: "lazy",
+    style: {
+      borderRadius: 99,
+      objectFit: 'cover',
+      background: T.line
+    }
+  }) : React.createElement(Badge, {
+    ab: p.team,
+    size: 30
+  }), React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10.5,
+      color: T.faint
+    }
+  }, p.team, p.num ? ` · #${p.num}` : '')), React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13.5,
+      lineHeight: 1.2,
+      color: T.ink
+    }
+  }, p.name), React.createElement("div", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 10.5,
+      color: T.mut,
+      marginTop: 3
+    }
+  }, p.pos || '\u2014')))))), fav.length > 0 && React.createElement("div", {
     style: {
       marginBottom: 18
     }

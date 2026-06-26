@@ -4,8 +4,18 @@ const D = window.BC;
 // Shared live-overlay hook: render `mock` immediately, then (only when deployed,
 // i.e. BC.LIVE) call fetchLive() and swap in the mapped result if it resolves
 // truthy. Any failure → stay on mock. Matches the shot-map live/sample pattern.
-window.E_useLive = function(mock, fetchLive, deps){
-  const [val,setVal] = React.useState(mock);
+// Optional 4th arg `key`: a stable cache id. When given, the resolved live value
+// is stored in a shared synchronous memo (window.__E_LIVE) AND read back on the
+// FIRST render — so a page whose data was preloaded (NHL.prefetchAll seeds the
+// same keys) or visited before renders LIVE immediately, with no mock flash and
+// no swap. Without a key the behaviour is exactly the original mock-first overlay
+// (used for volatile per-game data that must stay fresh, never memoized).
+window.__E_LIVE = window.__E_LIVE || {};
+window.E_useLive = function(mock, fetchLive, deps, key){
+  const M = window.__E_LIVE;
+  const peek = ()=> (key && M[key]!==undefined ? M[key] : undefined);
+  const seeded = peek();
+  const [val,setVal] = React.useState(seeded!==undefined?seeded:mock);
   const depRef = React.useRef(deps);
   // If deps changed since the last commit, `val` still holds the PREVIOUS inputs'
   // result (useState's initializer only runs on mount). Return the fresh `mock`
@@ -13,21 +23,26 @@ window.E_useLive = function(mock, fetchLive, deps){
   // (e.g. a skater's edge while now rendering a goalie). The effect then syncs val.
   const dprev = depRef.current, dnow = deps||[];
   const depsChanged = !dprev || dprev.length!==dnow.length || dnow.some((d,i)=>d!==dprev[i]);
-  React.useEffect(()=>{ depRef.current = deps; let alive=true; let got=false; setVal(mock);
+  React.useEffect(()=>{ depRef.current = deps; let alive=true; let got=false;
+    const s=peek(); setVal(s!==undefined?s:mock);
     const runLive=()=>{
       if(!alive || got) return;
+      const sv=peek(); if(sv!==undefined){ got=true; setVal(sv); return; } // already preloaded → no fetch, no flash
       if(window.NHL && window.BC && window.BC.LIVE && typeof fetchLive==='function'){
-        Promise.resolve().then(fetchLive).then(live=>{ if(alive && live){ got=true; setVal(live); } }).catch(()=>{});
+        Promise.resolve().then(fetchLive).then(live=>{ if(alive && live){ got=true; if(key) M[key]=live; setVal(live); } }).catch(()=>{});
       }
     };
     runLive();
-    // If this component mounted BEFORE live hydration finished, the first attempt
-    // saw BC.LIVE=false and kept mock. Re-attempt when hydration lands (and on any
-    // later season re-hydrate) so the view never stays stuck on demo data.
+    // If this component mounted BEFORE live hydration / prefetch finished, the first
+    // attempt saw BC.LIVE=false (or an empty memo) and kept mock. Re-attempt when
+    // hydration/prefetch lands (and on any later season re-hydrate) so the view
+    // never stays stuck on demo data.
     window.addEventListener('e-live-ready', runLive);
     return ()=>{ alive=false; window.removeEventListener('e-live-ready', runLive); };
   // eslint-disable-next-line
   }, deps);
+  const live = peek();
+  if(live!==undefined) return live; // preloaded/visited → render live synchronously
   return depsChanged ? mock : val;
 };
 const c2=D.col, nk=D.nick, ct=D.city;
@@ -175,7 +190,7 @@ function TeamSchedule({ab,onGame}){
   const dOf=o=>{const d=new Date(today);d.setDate(d.getDate()+o);return d;};
   const offOf=d=>Math.round((d-today)/86400000);
   // overlay the real full-season schedule when deployed (mock slate fallback otherwise)
-  const liveSched=window.E_useLive(null,()=>window.NHL.clubScheduleMapped(ab),[ab]);
+  const liveSched=window.E_useLive(null,()=>window.NHL.clubScheduleMapped(ab),[ab],'clubSched:'+ab);
   const liveByDate=uM(()=>{const m={};(liveSched||[]).forEach(g=>{m[g._date]=g;});return m;},[liveSched]);
   const ymdK=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const gameOn=o=>{const k=ymdK(dOf(o));return liveByDate[k]||D.slate(o).find(g=>g.a===ab||g.h===ab);};
@@ -258,13 +273,13 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const reigning=!!(_yr&&_titles&&_titles.stanleyCups&&_titles.stanleyCups.length&&String(_titles.stanleyCups[0])===_yr);
   const _gold=T.mode==='dark'?'#cda85a':'#9a7c2a';
   // overlay the real full club roster (official roster endpoint) when deployed
-  const roster=window.E_useLive(D.teamRoster(ab),()=>new Promise(res=>{window.BC.ensureRoster(ab,()=>res(window.BC.teamRoster(ab)));}),[ab]);
+  const roster=window.E_useLive(D.teamRoster(ab),()=>new Promise(res=>{window.BC.ensureRoster(ab,()=>res(window.BC.teamRoster(ab)));}),[ab],'roster:'+ab);
   const schedMock=uM(()=>D.teamSchedule(ab),[ab]);
   // overlay real Last/Next game from the full-season schedule when deployed
-  const sched=window.E_useLive(schedMock,()=>window.NHL.teamRecUp(ab),[ab]);
+  const sched=window.E_useLive(schedMock,()=>window.NHL.teamRecUp(ab),[ab],'teamRecUp:'+ab);
   const prosMock=uM(()=>D.prospects(ab),[ab]);
   // overlay real club prospects when deployed
-  const pros=window.E_useLive(prosMock,()=>window.NHL.prospectsMapped(ab),[ab]);
+  const pros=window.E_useLive(prosMock,()=>window.NHL.prospectsMapped(ab),[ab],'prospects:'+ab);
   const fwd=roster.filter(p=>p.pos!=='D'&&p.pos!=='G'),def=roster.filter(p=>p.pos==='D');
   // goalies from the actual roster overlay (includes backups not in the leaders pool),
   // with season stats merged from the goalie pool; fall back to the pool in preview/mock.
@@ -281,10 +296,10 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
     {kind:'x',time:'3d',likes:'5.8K',rt:'903',text:`WHAT A FINISH. ${p0} buries the overtime winner \uD83D\uDEA8`},
     {kind:'recap',time:'4d',title:`Recap: special teams carry the ${nk(ab)}`,text:`A 2-for-3 power play and a perfect penalty kill were the difference on the night.`},
   ];},[ab,roster]);
-  const social=window.E_useLive(socialMock,()=>(window.NHL&&window.NHL.teamSocial)?window.NHL.teamSocial(ab):null,[ab]);
+  const social=window.E_useLive(socialMock,()=>(window.NHL&&window.NHL.teamSocial)?window.NHL.teamSocial(ab):null,[ab],'teamSocial:'+ab);
   // ---- History: a past season's roster + stats + an auto-generated "Season story" ----
   const histSeasonsMock=uM(()=>{const cy=2024;return Array.from({length:8},(_,i)=>({id:`${cy-i}${cy-i+1}`,label:`${cy-i}\u2013${String(cy-i+1).slice(2)}`,playoffs:true}));},[]);
-  const histSeasons=window.E_useLive(histSeasonsMock,()=>(window.NHL&&window.NHL.clubStatsSeasons)?window.NHL.clubStatsSeasons(ab):null,[ab]);
+  const histSeasons=window.E_useLive(histSeasonsMock,()=>(window.NHL&&window.NHL.clubStatsSeasons)?window.NHL.clubStatsSeasons(ab):null,[ab],'clubSeasons:'+ab);
   const [histSel,setHistSel]=React.useState(null);
   React.useEffect(()=>{ if(histSeasons&&histSeasons.length&&!histSel) setHistSel(histSeasons[0].id); },[histSeasons]);
   const histMock=uM(()=>{ if(!histSel) return null;
@@ -295,7 +310,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
   const histData=window.E_useLive(histMock,()=>(histSel&&window.NHL&&window.NHL.clubStatsForSeason)?window.NHL.clubStatsForSeason(ab,histSel,2):null,[histSel,ab]);
   // Real all-time franchise W/L (records.nhl.com) for the Records tab; mock in preview.
   const franchiseMock=uM(()=>{const f=D.teamFranchiseRecords(ab);const a=f&&f.allTime;return a?{gp:null,w:a.wins,l:null,winPct:a.winPct,first:null,seasons:a.seasons,playoffs:null}:null;},[ab]);
-  const franchise=window.E_useLive(franchiseMock,()=>(window.NHL&&window.NHL.teamFranchiseMapped)?window.NHL.teamFranchiseMapped(ab).then(d=>d?d.allTime:null):null,[ab]);
+  const franchise=window.E_useLive(franchiseMock,()=>(window.NHL&&window.NHL.teamFranchiseMapped)?window.NHL.teamFranchiseMapped(ab).then(d=>d?d.allTime:null):null,[ab],'franchise:'+ab);
   // Free, data-driven season narrative (no API). Reads the real box score into prose.
   const seasonStory=(d,label)=>{ if(!d) return ''; const sk=d.skaters||[],go=d.goalies||[]; if(!sk.length&&!go.length) return '';
     const team=`${ct(ab)} ${nk(ab)}`; const top=sk[0],g2=sk[1]; const topG=[...go].sort((a,b)=>(b.w||0)-(a.w||0))[0];
@@ -551,14 +566,14 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
   const isG=p.type==='goalie';
   const exMock=uM(()=>D.playerExtras(p),[p.id]);
   // overlay real career history / season totals / awards from player landing when live
-  const ex=window.E_useLive(exMock,()=>window.NHL.playerCard(p.id).then(c=>c?{...exMock,...c}:null),[p.id]);
+  const ex=window.E_useLive(exMock,()=>window.NHL.playerCard(p.id).then(c=>c?{...exMock,...c}:null),[p.id],'playerExtras:'+p.id);
   const edgeMock=uM(()=>isG?D.goalieEdge(p):D.skaterEdge(p),[p.id]);
   // overlay real NHL EDGE tracking when deployed (partial → merged over mock)
-  const edge=window.E_useLive(edgeMock,()=>(isG?window.NHL.edgeGoalieMapped(p.id):window.NHL.edgeSkaterMapped(p.id)).then(e=>e?{...edgeMock,...e}:null),[p.id]);
+  const edge=window.E_useLive(edgeMock,()=>(isG?window.NHL.edgeGoalieMapped(p.id):window.NHL.edgeSkaterMapped(p.id)).then(e=>e?{...edgeMock,...e}:null),[p.id],'playerEdge:'+p.id);
   const log=uM(()=>D.gameLog(p),[p.id]);
   const eglMock=uM(()=>(!isG&&D.edgeGameLog)?D.edgeGameLog(p):[],[p.id]);
   // overlay real game identity (date/opponent) + any live per-game EDGE from the game-log
-  const egl=window.E_useLive(eglMock,()=>(!isG&&window.NHL&&window.NHL.edgeGameLog)?window.NHL.edgeGameLog(p.id).then(rows=>(rows&&rows.length)?eglMock.map((m,i)=>{const r=rows[i];return r?{...m,date:r.date||m.date,opp:r.opp||m.opp,home:r.home,topSpd:r.topSpd!=null?r.topSpd:m.topSpd,topShot:r.topShot!=null?r.topShot:m.topShot,dist:r.dist!=null?r.dist:m.dist,b20:r.b20!=null?r.b20:m.b20}:m;}):null):null,[p.id]);
+  const egl=window.E_useLive(eglMock,()=>(!isG&&window.NHL&&window.NHL.edgeGameLog)?window.NHL.edgeGameLog(p.id).then(rows=>(rows&&rows.length)?eglMock.map((m,i)=>{const r=rows[i];return r?{...m,date:r.date||m.date,opp:r.opp||m.opp,home:r.home,topSpd:r.topSpd!=null?r.topSpd:m.topSpd,topShot:r.topShot!=null?r.topShot:m.topShot,dist:r.dist!=null?r.dist:m.dist,b20:r.b20!=null?r.b20:m.b20}:m;}):null):null,[p.id],'playerEgl:'+p.id);
   const Stat=({l,v})=><div style={{...card,padding:16,textAlign:'center'}}><div style={ML}>{l}</div><div style={{fontSize:30,fontWeight:600,color:T.ink,marginTop:4,letterSpacing:'-.02em'}}>{v}</div></div>;
   const Sec=({k,children})=><div style={{...card,overflow:'hidden',marginBottom:16}}><div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>{k}</div>{children}</div>;
   return(<div>
@@ -896,7 +911,7 @@ function HockeyIQPage({onPlayer,onTeam}){
     {list.map((p,i)=><div key={p.id} onClick={()=>onPlayer(p)} className="er" style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',borderTop:i?`1px solid ${T.line}`:'none',cursor:'pointer'}}>
       <span style={{width:16,color:T.faint,fontFamily:MONO,fontSize:11}}>{i+1}</span><Badge ab={p.team} size={22}/><span style={{flex:1,color:T.ink,fontSize:13.5}}>{p.name}</span><span style={{fontWeight:700}}>{p[k]}</span></div>)}</div>);
   const EB_M=[['top','Top skating speed','mph'],['shot','Max shot speed','mph'],['savg','Avg shot speed','mph'],['dist','Distance','mi'],['b20','20+ bursts',''],['b22','22+ bursts',''],['oz','O-zone time','%']];
-  const EdgeBoard=()=>{const m=boardM,setM=setBoardM;const meta=EB_M.find(x=>x[0]===m)||EB_M[0];const rows=window.E_useLive(D.edgeBoard(m),()=>(window.NHL&&window.NHL.edgeBoardLive)?window.NHL.edgeBoardLive(m):Promise.resolve(null),[m]);const shown=ebMore?rows:rows.slice(0,5);return(
+  const EdgeBoard=()=>{const m=boardM,setM=setBoardM;const meta=EB_M.find(x=>x[0]===m)||EB_M[0];const rows=window.E_useLive(D.edgeBoard(m),()=>(window.NHL&&window.NHL.edgeBoardLive)?window.NHL.edgeBoardLive(m):Promise.resolve(null),[m],'edgeBoard:'+m);const shown=ebMore?rows:rows.slice(0,5);return(
     <div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'13px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
         <span style={{fontSize:14,fontWeight:600}}>League EDGE leaderboard</span>
@@ -1300,7 +1315,7 @@ function SeriesDetail({hiAb,loAb,hiW,loW,onBack,onTeam}){
 function PlayoffsPage({onTeam}){
   const bMock=uM(()=>D.playoffBracket(),[]);
   // overlay the real bracket (series carousel) seeded to live standings when deployed
-  const b=window.E_useLive(bMock,()=>window.NHL.playoffFull(),[]);
+  const b=window.E_useLive(bMock,()=>window.NHL.playoffFull(),[],'playoffFull');
   const [sel,setSel]=uS(null);
   const [pview,setPview]=uS(()=>{try{return localStorage.getItem('e_pview')||'rink';}catch(e){return 'rink';}});
   const dragRef=React.useRef({down:false,x:0,sl:0});
@@ -1470,13 +1485,13 @@ function RecordsPage({onTeam}){
   const [tab,setTab]=uS('All-time leaders');
   // overlay real all-time leaders (records.nhl.com) when deployed; season/trophies stay projected
   const recMock=uM(()=>({skaters:D.recordSkaters(),goalies:D.recordGoalies()}),[]);
-  const rec=window.E_useLive(recMock,()=>window.NHL.recordsAllTime().then(r=>r?{...recMock,...r}:null),[]);
+  const rec=window.E_useLive(recMock,()=>window.NHL.recordsAllTime().then(r=>r?{...recMock,...r}:null),[],'recordsMerged');
   const skaters=rec.skaters;
   const goalies=rec.goalies;
-  const trophies=window.E_useLive(uM(()=>D.recordTrophiesList(),[]),()=>(window.NHL&&window.NHL.awardsMapped)?window.NHL.awardsMapped():null,[]);
+  const trophies=window.E_useLive(uM(()=>D.recordTrophiesList(),[]),()=>(window.NHL&&window.NHL.awardsMapped)?window.NHL.awardsMapped():null,[],'awards');
   const franchise=D.recordFranchiseList();
   const season=D.recordSeason();
-  const watch=window.E_useLive(uM(()=>D.milestoneWatch(),[]),()=>(window.NHL&&window.NHL.milestonesMapped)?window.NHL.milestonesMapped():null,[]);
+  const watch=window.E_useLive(uM(()=>D.milestoneWatch(),[]),()=>(window.NHL&&window.NHL.milestonesMapped)?window.NHL.milestonesMapped():null,[],'milestones');
   const reports=D.statsReports();
   const [scope,setScope]=uS('skater');
   const [leadScope,setLeadScope]=uS('skater');
@@ -1578,9 +1593,25 @@ function DraftPage({onTeam}){
   const [round,setRound]=uS(1);
   // upcoming draft: projected order (reverse standings) + prospect board + live tracker
   const draftMock=uM(()=>({rankings:D.draftRankings(),picks:D.draftPicks()}),[]);
-  const draftLive=window.E_useLive(draftMock,()=>window.NHL.draftFull(curDraftYear),[curDraftYear]);
-  const rankings=draftLive.rankings;
-  const picks=draftLive.picks;
+  const draftLive=window.E_useLive(draftMock,()=>window.NHL.draftFull(curDraftYear),[curDraftYear],'draftFull:'+curDraftYear);
+  // On draft night, re-poll draftFull every 30s so Draft order + Prospect rankings
+  // stay current as picks land (the Live tracker tab already polls draftLiveTracker
+  // every 20s; this keeps the OTHER tabs in sync without manual refresh).
+  const [draftOverride,setDraftOverride]=uS(null);
+  React.useEffect(()=>{
+    if(!isUpcoming)return; let alive=true;
+    const pull=()=>{
+      if(!alive||!window.NHL||!window.BC||!window.BC.LIVE)return;
+      window.NHL.draftFull(curDraftYear).then(d=>{
+        if(alive&&d){if(window.__E_LIVE)window.__E_LIVE['draftFull:'+curDraftYear]=d;setDraftOverride(d);}
+      }).catch(()=>{});
+    };
+    const iv=setInterval(pull,30000);
+    return()=>{alive=false;clearInterval(iv);};
+  },[isUpcoming,curDraftYear]);
+  const draft=draftOverride||draftLive;
+  const rankings=draft.rankings;
+  const picks=draft.picks;
   // lottery winners come from the REAL post-lottery order when available
   // (buildLotteryPicks flags them); fall back to the editorial sim otherwise.
   const lotWinners=uM(()=>{const w=(picks||[]).filter(p=>p.lotteryWin).map(p=>p.team);return w.length?w:D.lotteryWinners();},[picks]);

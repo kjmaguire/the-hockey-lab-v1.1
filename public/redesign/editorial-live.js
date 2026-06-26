@@ -173,6 +173,12 @@
 
     if (changed && typeof onReady === 'function') onReady();
     if (changed) fireReady();
+    // Preload the whole app in the background so secondary pages render live on
+    // first paint (no fallback flash). Runs once, on idle, after core hydrate.
+    if (BC.LIVE && NHL.prefetchAll && !NHL._prefetched) {
+      const idle = window.requestIdleCallback ? (cb) => requestIdleCallback(cb, { timeout: 3000 }) : (cb) => setTimeout(cb, 400);
+      idle(() => { try { NHL.prefetchAll(); } catch (_) {} });
+    }
     return BC.LIVE;
   }
 
@@ -204,6 +210,8 @@
     const cur = (window.NHL && window.NHL._season) ? String(window.NHL._season) : null;
     const s = String(season || cur || '');
     BC._seasonId = s; // set FIRST so activeSeason()/liveEdgeOK() resolve to the chosen season
+    window.__E_LIVE = {}; // drop the preload memo — it holds the PREVIOUS season's pages
+    NHL._prefetched = false; NHL._prefetching = false;
     try {
       // ---- standings (current → now; past → as of that season's reg-season end) ----
       const path = (!s || s === cur) ? 'standings/now' : `standings/${s.slice(4, 8)}-04-10`;
@@ -228,6 +236,8 @@
       try { overlayEdgeBoard(onReady); } catch (_) {}
       onReady && onReady();
       fireReady();
+      // re-warm every page for the newly selected season (on idle)
+      if (NHL.prefetchAll) { const idle = window.requestIdleCallback ? (cb) => requestIdleCallback(cb, { timeout: 3000 }) : (cb) => setTimeout(cb, 400); idle(() => { try { NHL.prefetchAll(); } catch (_) {} }); }
     } catch (_) { onReady && onReady(); }
   };
 })();

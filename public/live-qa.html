@@ -108,7 +108,7 @@
   var runBtn=document.getElementById('run'), clockEl=document.getElementById('clock');
 
   // shared sample context, filled during the run
-  var ctx={ skaterId:null, goalieId:null, teamAb:'TOR', teamId:10, gameId:null, gameState:null };
+  var ctx={ skaterId:null, goalieId:null, teamAb:'TOR', teamId:10, gameId:null, gameState:null, gameA:null, gameH:null, histSeason:null };
 
   // ---- field assessment helpers ----
   function present(v){
@@ -219,6 +219,115 @@
         var note = d!=null ? ((d.length||0)+' rows mapped') : (hit ? ('raw OK — mapper needs this shape') : 'no live league-edge endpoint on the proxy — board uses projection by design (per-player Edge IS live)');
         return {status:st, note:note, keys:(d==null&&hit)?('<b>working path:</b> '+hit+'<br/><b>shape:</b> '+JSON.stringify(shape).replace(/</g,'&lt;').slice(0,1500)):''}; } },
    ]},
+   { title:'Page overlays — league pages', desc:'Secondary-page data: Playoffs, Draft, Records, Stats rail. Each maps a real payload into the page view-model, or returns null so the page keeps its editorial projection (a null overlay is a graceful fallback, not a page break).', specs:[
+     { name:'Playoffs → playoffFull', call:'NHL.playoffFull()', run: async function(){
+        if(!NHL.playoffFull) return {status:'skip',note:'method absent'};
+        var d=await NHL.playoffFull();
+        if(d==null) return {status:'fail',note:'null → Playoffs page uses projected bracket'};
+        var a=assess(d,[['east',d.east],['west',d.west],['final',d.final],['cup',d.cup]]);
+        a.note='bracket '+(d.source||'live')+' · cup leader: '+((d.cup&&d.cup.ab)||'—'); return a; } },
+     { name:'Draft (upcoming) → draftFull', call:'NHL.draftFull(curYear)', run: async function(){
+        if(!NHL.draftFull) return {status:'skip',note:'method absent'};
+        var n=new Date(); var yr=n.getMonth()>=9?n.getFullYear()+1:n.getFullYear();
+        var d=await NHL.draftFull(yr);
+        if(d==null) return {status:'fail',note:'null → Draft page uses projected order'};
+        var a=assess(d,[['rankings',d.rankings],['picks',d.picks]]);
+        a.note=(d.picks?d.picks.length:0)+' picks · '+(d.rankings?d.rankings.length:0)+' ranked ('+yr+')'; return a; } },
+     { name:'Draft (past) → draftYear', call:'NHL.draftYear(2023)', run: async function(){
+        if(!NHL.draftYear) return {status:'skip',note:'method absent'};
+        var d=await NHL.draftYear(2023);
+        if(d==null) return {status:'fail',note:'null → past-draft tab uses mock'};
+        var a=assess(d,[['picks',d.picks],['rounds',d.rounds],['pick.name',d.picks&&d.picks[0]&&d.picks[0].name],['pick.team',d.picks&&d.picks[0]&&d.picks[0].team]]);
+        a.note=(d.picks?d.picks.length:0)+' real picks, '+(d.rounds?d.rounds.length:0)+' rounds (2023)'; return a; } },
+     { name:'Records → recordsAllTime', call:'NHL.recordsAllTime()', run: async function(){
+        if(!NHL.recordsAllTime) return {status:'skip',note:'method absent'};
+        var d=await NHL.recordsAllTime();
+        if(d==null) return {status:'partial',note:'null → all-time leaders stay editorial projection (lowest-confidence feed)'};
+        var a=assess(d,[['skaters',d.skaters],['goalies',d.goalies]]);
+        a.note='leader cats: '+[d.skaters&&'skaters',d.goalies&&'goalies'].filter(Boolean).join(', '); return a; } },
+     { name:'Milestone watch → milestonesMapped', call:'NHL.milestonesMapped()', run: async function(){
+        if(!NHL.milestonesMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.milestonesMapped();
+        if(d==null||!d.length) return {status:'partial',note:'no milestones returned → Records uses projection'};
+        var t=d[0]; var a=assess(t,[['rows',d],['name',t&&t.name],['stat',t&&t.stat],['target',t&&t.target],['remaining',t&&t.remaining!=null?t.remaining:null]]);
+        a.note=d.length+' watches · next: '+(t?t.name+' ('+t.remaining+' to '+t.target+' '+t.stat+')':'—'); return a; } },
+     { name:'Awards → awardsMapped', call:'NHL.awardsMapped()', run: async function(){
+        if(!NHL.awardsMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.awardsMapped();
+        if(d==null||!d.length) return {status:'partial',note:'null → trophy cards stay projected'};
+        var t=d[0]; var a=assess(t,[['trophies',d],['name',t&&t.name],['winner',t&&t.winner],['history',t&&t.history]]);
+        a.note=d.length+' trophies · e.g. '+(t?t.name+' → '+t.winner:'—'); return a; } },
+     { name:'Spotlight → spotlightMapped', call:'NHL.spotlightMapped()', run: async function(){
+        if(!NHL.spotlightMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.spotlightMapped();
+        if(d==null||!d.length) return {status:'partial',note:'null → Highlights rail uses top scorers'};
+        var t=d[0]; var a=assess(t,[['players',d],['name',t&&t.name],['team',t&&t.team]]); a.note=d.length+' featured'; return a; } },
+     { name:'National TV → tvScheduleMapped', call:'NHL.tvScheduleMapped()', run: async function(){
+        if(!NHL.tvScheduleMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.tvScheduleMapped();
+        if(d==null||!d.length) return {status:'skip',note:'no national games listed (normal off-day/off-season)'};
+        var t=d[0]; var a=assess(t,[['games',d],['away',t&&t.away],['home',t&&t.home],['networks',t&&t.networks]]); a.note=d.length+' nationally-televised'; return a; } },
+     { name:'Team season stats → teamSeasonStats', call:'NHL.teamSeasonStats()', run: async function(){
+        if(!NHL.teamSeasonStats) return {status:'skip',note:'method absent'};
+        var d=await NHL.teamSeasonStats(); var ab=ctx.teamAb; var t=d&&d[ab];
+        if(d==null) return {status:'fail',note:'null → PP%/PK%/FO% stay projected'};
+        var a=assess(t,[['teams',Object.keys(d)],['pp',t&&t.pp],['pk',t&&t.pk],['fo',t&&t.fo]]); a.note=Object.keys(d).length+' teams · '+ab+' PP '+(t?t.pp:'—')+'%'; return a; } },
+   ]},
+   { title:'Page overlays — team detail tabs', desc:'Everything the Team page renders beyond the roster: schedule (Last/Next), prospects, history (past-season stats), franchise records, and the Buzz feed. Resolved for '+'TOR'+'.', specs:[
+     { name:'Club schedule → clubScheduleMapped', call:"NHL.clubScheduleMapped('TOR')", run: async function(){
+        if(!NHL.clubScheduleMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.clubScheduleMapped(ctx.teamAb);
+        if(d==null||!d.length) return {status:'fail',note:'null → Team schedule uses mock'};
+        var t=d[0]; var a=assess(t,[['games',d],['date',t&&t._date],['home',t&&t.h],['away',t&&t.a]]); a.note=d.length+' games in season'; return a; } },
+     { name:'Last/Next game → teamRecUp', call:"NHL.teamRecUp('TOR')", run: async function(){
+        if(!NHL.teamRecUp) return {status:'skip',note:'method absent'};
+        var d=await NHL.teamRecUp(ctx.teamAb);
+        if(d==null) return {status:'fail',note:'null → uses mock schedule'};
+        var a=assess(d,[['recent',d.rec],['upcoming',d.up]]); a.note=(d.rec?d.rec.length:0)+' played · '+(d.up?d.up.length:0)+' upcoming'; return a; } },
+     { name:'Prospects → prospectsMapped', call:"NHL.prospectsMapped('TOR')", run: async function(){
+        if(!NHL.prospectsMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.prospectsMapped(ctx.teamAb);
+        if(d==null) return {status:'fail',note:'null → Prospects tab uses mock'};
+        var n=(d.forwards||[]).length+(d.defensemen||[]).length+(d.goalies||[]).length;
+        var a=assess(d,[['forwards',d.forwards],['defensemen',d.defensemen],['goalies',d.goalies]]); a.note=n+' prospects'; return a; } },
+     { name:'Franchise record → teamFranchiseMapped', call:"NHL.teamFranchiseMapped('TOR')", run: async function(){
+        if(!NHL.teamFranchiseMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.teamFranchiseMapped(ctx.teamAb); var a0=d&&d.allTime;
+        if(a0==null) return {status:'fail',note:'null → franchise W/L stays projected'};
+        var a=assess(a0,[['gp',a0.gp],['w',a0.w],['l',a0.l],['winPct',a0.winPct]]); a.note='all-time '+a0.w+'-'+a0.l+' ('+a0.winPct+')'; return a; } },
+     { name:'History seasons → clubStatsSeasons', call:"NHL.clubStatsSeasons('TOR')", run: async function(){
+        if(!NHL.clubStatsSeasons) return {status:'skip',note:'method absent'};
+        var d=await NHL.clubStatsSeasons(ctx.teamAb);
+        if(d==null||!d.length) return {status:'fail',note:'null → History picker uses mock years'};
+        ctx.histSeason=d[0]&&d[0].id;
+        var t=d[0]; var a=assess(t,[['seasons',d],['id',t&&t.id],['label',t&&t.label]]); a.note=d.length+' seasons · latest '+(t&&t.label); return a; } },
+     { name:'History stats → clubStatsForSeason', call:'NHL.clubStatsForSeason(TOR, latest, 2)', run: async function(){
+        if(!NHL.clubStatsForSeason) return {status:'skip',note:'method absent'};
+        if(!ctx.histSeason) return {status:'skip',note:'no season id (prior check failed)'};
+        var d=await NHL.clubStatsForSeason(ctx.teamAb, ctx.histSeason, 2);
+        if(d==null) return {status:'fail',note:'null → History tab uses mock'};
+        var a=assess(d,[['skaters',d.skaters],['goalies',d.goalies]]); a.note=(d.skaters?d.skaters.length:0)+' skaters, '+(d.goalies?d.goalies.length:0)+' goalies ('+ctx.histSeason+')'; return a; } },
+     { name:'Buzz feed → teamSocial', call:"NHL.teamSocial('TOR')", run: async function(){
+        if(!NHL.teamSocial) return {status:'skip',note:'method absent'};
+        var d=await NHL.teamSocial(ctx.teamAb);
+        if(d==null||!d.length) return {status:'partial',note:'null → Buzz tab uses editorial posts (needs /api/social/*)'};
+        return {status:'pass',note:d.length+' live posts',chips:[{label:'posts',ok:true}]}; } },
+   ]},
+   { title:'Game overlays — extras', desc:'Per-game overlays beyond the core box score (officials/broadcasts are checked above). Resolved against the captured game.', specs:[
+     { name:'Shift chart → shiftChartMapped', call:'NHL.shiftChartMapped(gameId, a, h)', run: async function(){
+        if(!ctx.gameId) return {status:'skip',note:'no game id'};
+        if(!NHL.shiftChartMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.shiftChartMapped(ctx.gameId, ctx.gameA, ctx.gameH);
+        if(d==null) return {status:'fail',note:'null → TOI chart uses mock'};
+        var a=assess(d,[['away',d.away],['home',d.home]]); a.note=(d.away?d.away.length:0)+' + '+(d.home?d.home.length:0)+' players'; return a; } },
+     { name:'Game recap → gameRecapMapped', call:'NHL.gameRecapMapped(gameId)', run: async function(){
+        if(!ctx.gameId) return {status:'skip',note:'no game id'};
+        if(ctx.gameState!=='final') return {status:'skip',note:'game not final → no recap'};
+        if(!NHL.gameRecapMapped) return {status:'skip',note:'method absent'};
+        var d=await NHL.gameRecapMapped(ctx.gameId);
+        if(d==null) return {status:'partial',note:'null → recap uses generated prose (WSC story may be absent)'};
+        return {status:'pass',note:d.length+' chars of narrative',chips:[{label:'recap text',ok:true}]}; } },
+   ]},
    { title:'Season switch (non-mutating)', desc:'Historical season pull used by the season dropdown. Does not change app state.', specs:[
      { name:'Past-season standings', call:"NHL.standingsForSeason('20222023')", run: async function(){
         if(!NHL.standingsForSeason) return {status:'skip',note:'method absent'};
@@ -261,7 +370,7 @@
   }
   async function captureGame(){
     for(var i=0;i<6;i++){ var o=[-1,-2,0,-3,-4,1][i];
-      try{ var games=await NHL.scores(o); if(games&&games.length){ var fin=games.filter(function(g){return g.st==='final';}); var live=games.filter(function(g){return g.st==='live';}); var pick=(live[0]||fin[0]||games[0]); if(pick){ ctx.gameId=String(pick.id); ctx.gameState=pick.st; if(pick.st!=='pre')return; } } }catch(e){}
+      try{ var games=await NHL.scores(o); if(games&&games.length){ var fin=games.filter(function(g){return g.st==='final';}); var live=games.filter(function(g){return g.st==='live';}); var pick=(live[0]||fin[0]||games[0]); if(pick){ ctx.gameId=String(pick.id); ctx.gameState=pick.st; ctx.gameA=pick.a; ctx.gameH=pick.h; if(pick.st!=='pre')return; } } }catch(e){}
     }
   }
 
