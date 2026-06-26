@@ -301,9 +301,12 @@
   const PLN=['Ackerley','Vanchuk','Sutcliffe','Norquist','Delacroix','Hammond','Kovalenko','Brisbois','Tantalo','Wexler','Aittola','Strandberg','Maleski','Fontaine','Drummond','Pesonen','Vrabel','Lindahl','Carrick','Oswald'];
   const PLEAGUES=['WHL','OHL','QMJHL','USHL','NCAA','Liiga','SHL','J20 Nationell','Czech Extraliga','MHL','HK Extraliga','Swiss NL','DEL','BCHL','AJHL'];
   const DRAFT_POS=['C','LW','RW','D','D','G'];
+  const NA_LGSET=new Set(['WHL','OHL','QMJHL','USHL','NCAA','BCHL','AJHL']);
   B.draftRankings=()=>{ if(B._dr)return B._dr;
     const r=rng('draft2026');
-    const list=Array.from({length:32},(_,i)=>({rank:i+1,name:`${pick(r,PFN)} ${pick(r,PLN)}`,pos:pick(r,DRAFT_POS),league:pick(r,PLEAGUES),gp:ri(r,40,68),pts:ri(r,30,120),ht:`${ri(r,5,6)}'${ri(r,8,11)}"`,wt:ri(r,165,215),trend:pick(r,['▲','▬','▼','▲','▬'])}));
+    const list=Array.from({length:32},(_,i)=>{const league=pick(r,PLEAGUES);const intl=!NA_LGSET.has(league);const pos=pick(r,DRAFT_POS);
+      return{rank:i+1,name:`${pick(r,PFN)} ${pick(r,PLN)}`,pos,league,intl,cat:intl?(pos==='G'?4:2):(pos==='G'?3:1),gp:ri(r,40,68),pts:ri(r,30,120),ht:`${ri(r,5,6)}'${ri(r,8,11)}"`,wt:ri(r,165,215),trend:pick(r,['▲','▬','▼','▲','▬'])};
+    });
     B._dr=list; return list; };
   B.draftPicks=()=>{ if(B._dp)return B._dp;
     const r=rng('picks2026'); const ranked=B.draftRankings();

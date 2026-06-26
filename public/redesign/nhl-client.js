@@ -671,14 +671,17 @@
 
   // ---- draft rankings -> prospect board [{rank,name,pos,league,...}] ----
   function mapDraftRankings(payload) {
-    const arr = payload?.rankings || payload?.players || [];
+    const arr = (Array.isArray(payload) ? payload : null) || payload?.rankings || payload?.players || [];
     if (!arr.length) return null;
     const out = arr.map((p, i) => {
       const mid = num(p.midtermRank), fin = num(p.finalRank);
       const rank = fin ?? mid ?? (i + 1);
       const hin = num(p.heightInInches);
+      // category: 1=NA Skaters, 2=Intl Skaters, 3=NA Goalies, 4=Intl Goalies (NHL Central Scouting)
+      const cat = num(p.category) ?? num(p.categoryId) ?? (p.positionCode === 'G' ? 3 : 1);
+      const intl = cat === 2 || cat === 4;
       return {
-        rank,
+        rank, cat, intl,
         name: `${dflt(p.firstName)} ${dflt(p.lastName)}`.trim() || dflt(p.playerName) || '',
         pos: p.positionCode || dflt(p.position) || '',
         league: dflt(p.lastAmateurLeague) || dflt(p.leagueAbbrev) || dflt(p.lastAmateurClubName) || '',
@@ -687,7 +690,7 @@
         wt: num(p.weightInPounds) ?? num(p.weight) ?? 0,
         trend: (mid != null && fin != null) ? (fin < mid ? '\u25B2' : fin > mid ? '\u25BC' : '\u25AC') : '\u25AC',
       };
-    }).filter((p) => p.name).sort((a, b) => a.rank - b.rank).slice(0, 32);
+    }).filter((p) => p.name).sort((a, b) => a.rank - b.rank);
     return out.length ? out : null;
   }
 
@@ -1121,7 +1124,28 @@
     // when the real order isn't published yet.
     draftFull: async (year) => {
       try {
-        const live = mapDraftRankings(await get('draft/rankings'));
+        // Central Scouting publishes four separate category lists:
+        //   1 = North American Skaters  2 = International Skaters
+        //   3 = North American Goalies  4 = International Goalies
+        // The bare `draft/rankings` endpoint defaults to category 1 (NA Skaters),
+        // so fetch all four in parallel and merge to avoid dropping intl prospects.
+        const cats = await Promise.allSettled([
+          get('draft/rankings'),           // cat 1 (NA skaters) — or all, depending on API version
+          get('draft/rankings?category=2'), // international skaters
+          get('draft/rankings?category=3'), // NA goalies
+          get('draft/rankings?category=4'), // international goalies
+        ]);
+        const merged = cats
+          .filter((r) => r.status === 'fulfilled' && r.value)
+          .flatMap((r) => (r.value && (r.value.rankings || r.value.players)) || []);
+        // deduplicate in case the bare call already included intl prospects
+        const seen = new Set();
+        const unique = merged.filter((p) => {
+          const k = `${dflt(p.firstName)}|${dflt(p.lastName)}`;
+          if (!k || k === '|' || seen.has(k)) return false;
+          seen.add(k); return true;
+        });
+        const live = mapDraftRankings(unique.length ? { rankings: unique } : null);
         const standings = (window.BC && window.BC.STANDINGS) || [];
         let picks = null;
         // Pull the REAL order for THIS draft year explicitly. `now` can still point at

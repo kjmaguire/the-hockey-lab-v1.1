@@ -1630,9 +1630,25 @@ function DraftPage({onTeam}){
     pull(); const iv = tab==='Live tracker' ? setInterval(pull,20000) : null;
     return ()=>{ alive=false; if(iv) clearInterval(iv); };
   },[isUpcoming,tab,curDraftYear]);
-  const tracker=uM(()=>{ if(!liveMade||!liveMade.length) return predicted; const by={}; liveMade.forEach(m=>{by[m.pick]=m;}); return predicted.map(p=>by[p.pick]?{...p,...by[p.pick],made:true}:p); },[predicted,liveMade]);
+  // CS rank lookup by name — for computing picked-vs-ranked differential
+  const rankLookup=uM(()=>{const m={};(rankings||[]).forEach((r,i)=>{if(r.name)m[r.name]=i+1;});return m;},[rankings]);
+  const tracker=uM(()=>{
+    if(!liveMade||!liveMade.length) return predicted;
+    const by={}; liveMade.forEach(m=>{by[m.pick]=m;});
+    return predicted.map(p=>{
+      if(!by[p.pick]) return p;
+      const made={...p,...by[p.pick],made:true};
+      // diff: Central Scouting rank minus actual pick (positive = rose, negative = slid)
+      const csRank=rankLookup[made.name];
+      made.csRank=csRank??null;
+      made.diff=csRank!=null?csRank-made.pick:null;
+      return made;
+    });
+  },[predicted,liveMade,rankLookup]);
   const madeCount=tracker.filter(p=>p.made).length;
   const upTabs=['Draft order','Prospect rankings','Mock first round','Live tracker'];
+  const [rankCat,setRankCat]=uS('All');
+  const rankFiltered=uM(()=>{const r=rankings||[];if(rankCat==='North American')return r.filter(p=>!p.intl);if(rankCat==='International')return r.filter(p=>p.intl);return r;},[rankings,rankCat]);
   React.useEffect(()=>{ setTab(isUpcoming?'Draft order':'Results'); setRound(1); },[year,isUpcoming]);
   return(<div>
     <PageHead k="Draft" t={`${year} NHL`} serif="Draft"/>
@@ -1645,18 +1661,22 @@ function DraftPage({onTeam}){
     <div key={'y'+year}>
     {isUpcoming&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}>{upTabs.map(s=><Pill key={s} on={tab===s} onClick={()=>setTab(s)}>{s}</Pill>)}</div>}
     {tab==='Prospect rankings'&&<div style={{...card,overflow:'hidden'}}>
-      <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Central Scouting · top 32 prospects</div>
+      <div style={{padding:'13px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+        <span style={ML}>Central Scouting · prospect board</span>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['All','North American','International'].map(c=><Pill key={c} on={rankCat===c} onClick={()=>setRankCat(c)}>{c}</Pill>)}</div>
+      </div>
       <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:640,borderCollapse:'collapse',fontSize:13.5}}>
         <thead><tr style={ML}>{['#','Prospect','Pos','League','GP','Pts','Ht','Wt','Trend'].map((h,i)=><th key={h} style={{padding:'10px 12px',textAlign:i<2?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
-        <tbody>{rankings.map(p=>(<tr key={p.rank} className="er" style={{borderTop:`1px solid ${T.line}`}}>
-          <td style={{padding:'9px 12px',fontFamily:MONO,color:p.rank<=5?T.red:T.faint,fontWeight:p.rank<=5?700:400}}>{String(p.rank).padStart(2,'0')}</td>
-          <td style={{padding:'9px 12px',fontWeight:600,color:T.ink}}>{p.name}</td>
+        <tbody>{rankFiltered.map((p,i)=>(<tr key={p.rank+'-'+i} className="er" style={{borderTop:`1px solid ${T.line}`}}>
+          <td style={{padding:'9px 12px',fontFamily:MONO,color:i<5?T.red:T.faint,fontWeight:i<5?700:400}}>{String(p.rank).padStart(2,'0')}</td>
+          <td style={{padding:'9px 12px',fontWeight:600,color:T.ink}}><span style={{display:'inline-flex',alignItems:'center',gap:7}}>{p.intl&&<span style={{fontFamily:MONO,fontSize:8.5,letterSpacing:'.06em',color:T.posFg,background:T.posBg,padding:'1px 5px',borderRadius:4,flexShrink:0}}>INTL</span>}{p.name}</span></td>
           <td style={{textAlign:'center',color:T.mut}}>{p.pos}</td><td style={{textAlign:'center',color:T.mut}}>{p.league}</td>
           <td style={{textAlign:'center',color:T.mut}}>{p.gp}</td><td style={{textAlign:'center',fontWeight:700}}>{p.pts}</td>
           <td style={{textAlign:'center',fontFamily:MONO,fontSize:12,color:T.mut}}>{p.ht}</td><td style={{textAlign:'center',fontFamily:MONO,fontSize:12,color:T.mut}}>{p.wt}</td>
           <td style={{textAlign:'center',color:p.trend==='▲'?'#1a8a4f':p.trend==='▼'?T.red:T.faint}}>{p.trend}</td>
         </tr>))}</tbody>
       </table></div>
+      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>NA = North American · INTL = International (Central Scouting categories 2 & 4)</div>
     </div>}
     {tab==='Mock first round'&&<div>
       <div style={{...card,padding:'14px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',background:`linear-gradient(110deg, ${T.bg}, transparent)`}}>
@@ -1738,9 +1758,12 @@ function DraftPage({onTeam}){
         <span style={{width:40,fontFamily:MONO,fontSize:11,color:T.mut}}>{p.team}</span>
         <span style={{flex:1,fontWeight:600,color:T.ink,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</span>
         <span style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',borderRadius:5,flexShrink:0,...(p.made?{color:T.posFg,background:T.posBg}:{color:T.faint,background:T.bg})}}>{p.made?'PICKED':'PROJECTED'}</span>
-        <span style={{fontFamily:MONO,fontSize:11.5,color:T.mut,whiteSpace:'nowrap',width:92,textAlign:'right'}}>{p.pos} · {p.league}</span>
+        <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+          {p.made&&p.diff!=null&&p.diff!==0&&<span style={{fontFamily:MONO,fontSize:10.5,fontWeight:700,color:p.diff>0?'#1a8a4f':T.red}}>{p.diff>0?`▲${p.diff}`:`▼${Math.abs(p.diff)}`}</span>}
+          <span style={{fontFamily:MONO,fontSize:11.5,color:T.mut,whiteSpace:'nowrap'}}>{p.pos} · {p.league}</span>
+        </div>
       </div>))}</div>
-      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>PROJECTED = consensus prospect ranking slotted into the projected order · PICKED = the real selection, swapped in live as it's announced</div>
+      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>PROJECTED = consensus prospect ranking · PICKED = real selection, live · ▲▼ = picked vs Central Scouting rank (e.g. ▲3 = 3 spots earlier than ranked)</div>
     </div>
     </div>);})()}
     {!isUpcoming&&(()=>{const rl=past.rounds||[1];const list=(past.picks||[]).filter(p=>p.round===round);return(<div>

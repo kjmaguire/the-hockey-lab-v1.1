@@ -9745,20 +9745,41 @@ function DraftPage({
       if (iv) clearInterval(iv);
     };
   }, [isUpcoming, tab, curDraftYear]);
+  const rankLookup = uM(() => {
+    const m = {};
+    (rankings || []).forEach((r, i) => {
+      if (r.name) m[r.name] = i + 1;
+    });
+    return m;
+  }, [rankings]);
   const tracker = uM(() => {
     if (!liveMade || !liveMade.length) return predicted;
     const by = {};
     liveMade.forEach(m => {
       by[m.pick] = m;
     });
-    return predicted.map(p => by[p.pick] ? {
-      ...p,
-      ...by[p.pick],
-      made: true
-    } : p);
-  }, [predicted, liveMade]);
+    return predicted.map(p => {
+      if (!by[p.pick]) return p;
+      const made = {
+        ...p,
+        ...by[p.pick],
+        made: true
+      };
+      const csRank = rankLookup[made.name];
+      made.csRank = csRank ?? null;
+      made.diff = csRank != null ? csRank - made.pick : null;
+      return made;
+    });
+  }, [predicted, liveMade, rankLookup]);
   const madeCount = tracker.filter(p => p.made).length;
   const upTabs = ['Draft order', 'Prospect rankings', 'Mock first round', 'Live tracker'];
+  const [rankCat, setRankCat] = uS('All');
+  const rankFiltered = uM(() => {
+    const r = rankings || [];
+    if (rankCat === 'North American') return r.filter(p => !p.intl);
+    if (rankCat === 'International') return r.filter(p => p.intl);
+    return r;
+  }, [rankings, rankCat]);
   React.useEffect(() => {
     setTab(isUpcoming ? 'Draft order' : 'Results');
     setRound(1);
@@ -9819,10 +9840,26 @@ function DraftPage({
   }, React.createElement("div", {
     style: {
       padding: '13px 16px',
-      ...ML,
-      borderBottom: `1px solid ${T.line}`
+      borderBottom: `1px solid ${T.line}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      flexWrap: 'wrap'
     }
-  }, "Central Scouting \xB7 top 32 prospects"), React.createElement("div", {
+  }, React.createElement("span", {
+    style: ML
+  }, "Central Scouting \xB7 prospect board"), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap'
+    }
+  }, ['All', 'North American', 'International'].map(c => React.createElement(Pill, {
+    key: c,
+    on: rankCat === c,
+    onClick: () => setRankCat(c)
+  }, c)))), React.createElement("div", {
     style: {
       overflowX: 'auto'
     }
@@ -9843,8 +9880,8 @@ function DraftPage({
       fontWeight: 600,
       ...ML
     }
-  }, h)))), React.createElement("tbody", null, rankings.map(p => React.createElement("tr", {
-    key: p.rank,
+  }, h)))), React.createElement("tbody", null, rankFiltered.map((p, i) => React.createElement("tr", {
+    key: p.rank + '-' + i,
     className: "er",
     style: {
       borderTop: `1px solid ${T.line}`
@@ -9853,8 +9890,8 @@ function DraftPage({
     style: {
       padding: '9px 12px',
       fontFamily: MONO,
-      color: p.rank <= 5 ? T.red : T.faint,
-      fontWeight: p.rank <= 5 ? 700 : 400
+      color: i < 5 ? T.red : T.faint,
+      fontWeight: i < 5 ? 700 : 400
     }
   }, String(p.rank).padStart(2, '0')), React.createElement("td", {
     style: {
@@ -9862,7 +9899,24 @@ function DraftPage({
       fontWeight: 600,
       color: T.ink
     }
-  }, p.name), React.createElement("td", {
+  }, React.createElement("span", {
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 7
+    }
+  }, p.intl && React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 8.5,
+      letterSpacing: '.06em',
+      color: T.posFg,
+      background: T.posBg,
+      padding: '1px 5px',
+      borderRadius: 4,
+      flexShrink: 0
+    }
+  }, "INTL"), p.name)), React.createElement("td", {
     style: {
       textAlign: 'center',
       color: T.mut
@@ -9901,7 +9955,15 @@ function DraftPage({
       textAlign: 'center',
       color: p.trend === '▲' ? '#1a8a4f' : p.trend === '▼' ? T.red : T.faint
     }
-  }, p.trend))))))), tab === 'Mock first round' && React.createElement("div", null, React.createElement("div", {
+  }, p.trend)))))), React.createElement("div", {
+    style: {
+      padding: '10px 16px',
+      fontFamily: MONO,
+      fontSize: 11,
+      color: T.faint,
+      borderTop: `1px solid ${T.line}`
+    }
+  }, "NA = North American \xB7 INTL = International (Central Scouting categories 2 & 4)")), tab === 'Mock first round' && React.createElement("div", null, React.createElement("div", {
     style: {
       ...card,
       padding: '14px 16px',
@@ -10431,16 +10493,28 @@ function DraftPage({
           background: T.bg
         })
       }
-    }, p.made ? 'PICKED' : 'PROJECTED'), React.createElement("span", {
+    }, p.made ? 'PICKED' : 'PROJECTED'), React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        flexShrink: 0
+      }
+    }, p.made && p.diff != null && p.diff !== 0 && React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 10.5,
+        fontWeight: 700,
+        color: p.diff > 0 ? '#1a8a4f' : T.red
+      }
+    }, p.diff > 0 ? `▲${p.diff}` : `▼${Math.abs(p.diff)}`), React.createElement("span", {
       style: {
         fontFamily: MONO,
         fontSize: 11.5,
         color: T.mut,
-        whiteSpace: 'nowrap',
-        width: 92,
-        textAlign: 'right'
+        whiteSpace: 'nowrap'
       }
-    }, p.pos, " \xB7 ", p.league)))), React.createElement("div", {
+    }, p.pos, " \xB7 ", p.league))))), React.createElement("div", {
       style: {
         padding: '10px 16px',
         fontFamily: MONO,
@@ -10448,7 +10522,7 @@ function DraftPage({
         color: T.faint,
         borderTop: `1px solid ${T.line}`
       }
-    }, "PROJECTED = consensus prospect ranking slotted into the projected order \xB7 PICKED = the real selection, swapped in live as it's announced")));
+    }, "PROJECTED = consensus prospect ranking \xB7 PICKED = real selection, live \xB7 \u25B2\u25BC = picked vs Central Scouting rank (e.g. \u25B23 = 3 spots earlier than ranked)")));
   })(), !isUpcoming && (() => {
     const rl = past.rounds || [1];
     const list = (past.picks || []).filter(p => p.round === round);
