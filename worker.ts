@@ -256,13 +256,16 @@ async function handleNhl(url: URL): Promise<Response> {
         const sub = b;
         if (sub === 'rankings') {
           const cat = q('category');
-          if (c) return proxyWeb(`draft/rankings/${c}/${cat || '1'}`);
-          // For category 2/3/4 (international skaters/goalies), /now only returns cat 1.
-          // Use explicit current-draft year so all four Central Scouting lists are fetched.
+          // NHL API format: /draft/rankings/{year}?category={n}  (category is a QUERY param, not path segment)
+          // Explicit year in path (e.g. /api/nhl/draft/rankings/2026?category=2):
+          if (c) return proxyWeb(`draft/rankings/${c}`, cat ? { category: cat } : {});
+          // No year: /now alias only returns cat 1 (NA skaters).
+          // For categories 2/3/4 use the explicit current-draft year + ?category so the
+          // NHL API returns international skaters/goalies.
           if (cat && cat !== '1') {
             const _d = new Date();
             const _yr = _d.getMonth() >= 9 ? String(_d.getFullYear() + 1) : String(_d.getFullYear());
-            return proxyWeb(`draft/rankings/${_yr}/${cat}`);
+            return proxyWeb(`draft/rankings/${_yr}`, { category: cat });
           }
           return proxyWeb('draft/rankings/now');
         }
