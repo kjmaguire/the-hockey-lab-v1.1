@@ -316,7 +316,9 @@ async function handleNhl(url: URL): Promise<Response> {
         if (!rest) break;
         if (!sanitizeRest(rest)) return errorJson('Invalid path.', 400);
         try {
-          const data = await recordsRequest(rest, Object.fromEntries(url.searchParams.entries()));
+          // Pass the raw query string embedded in the path so URLSearchParams never
+          // re-encodes it — records.nhl.com cayenneExp needs literal = signs, not %3D.
+          const data = await recordsRequest(rest + (url.search || ''));
           return json(data);
         } catch {
           return errorJson('Unable to reach the NHL records API.', 502);
