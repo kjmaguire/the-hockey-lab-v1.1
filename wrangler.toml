@@ -1,17 +1,6 @@
 # The Hockey Lab — Cloudflare Workers (Static Assets + /api/nhl/* proxy)
-#
-# This is the config that makes `wrangler deploy` actually work:
-#   - `main` points wrangler at worker.ts, so the /api/nhl/* proxy runs.
-#   - the [assets] block serves everything in ./public as static files AND
-#     binds it as `env.ASSETS` so worker.ts can do its SPA .html fallback.
-#
-# Request flow on the deployed Worker:
-#   /api/nhl/*  -> no static asset matches -> worker.ts runs -> NHL proxy
-#   everything else (/, /app.html, /redesign/*) -> served from ./public
-#
-# Without this file, `wrangler deploy` has no entrypoint or assets binding,
-# the proxy never mounts, every live fetch 404s, and the app stays on mock
-# ("demo data"). That was the bug.
+# This is the config Workers Builds reads (build root = the cloudflare/ folder).
+# Paths here are relative to THIS folder: main = worker.ts, assets = ./public.
 
 name = "the-hockey-lab"
 main = "worker.ts"
@@ -20,50 +9,44 @@ compatibility_date = "2025-05-15"
 [assets]
 directory = "./public"
 binding = "ASSETS"
-# Unmatched routes return 404 so worker.ts can retry them as `<path>.html`
-# (its SPA/extensionless fallback). Don't let the assets layer swallow them.
+# Unmatched routes 404 so worker.ts can retry them as <path>.html (SPA fallback).
 not_found_handling = "none"
 
+# Capture Worker logs (console.* incl. the client error beacon, cron + upstream errors).
 [observability]
 enabled = true
+head_sampling_rate = 1
 
-# ---------------------------------------------------------------------------
-# Per-IP rate limiting for /api/nhl/* (worker.ts: 120 req/min/IP, soft window).
-# Soft per-IP rate limiting is OPTIONAL and DISABLED by default so `wrangler deploy`
-# works out of the box. The worker treats RATE_LIMIT as optional — when no namespace
-# is bound, rateLimit() is a no-op (lean on a Cloudflare WAF rate-limit rule instead).
-#
-# To turn it ON: create the namespace, paste the printed ids below, and UNCOMMENT
-# the whole [[kv_namespaces]] block:
-#   npx wrangler kv:namespace create RATE_LIMIT
-#   npx wrangler kv:namespace create RATE_LIMIT --preview
-#
-# [[kv_namespaces]]
-# binding = "RATE_LIMIT"
-# id = "PASTE_REAL_KV_NAMESPACE_ID"
-# preview_id = "PASTE_REAL_KV_PREVIEW_ID"
+# Run the Worker at the optimal location (edge for cache hits; nearer NHL for cold fetches).
+[placement]
+mode = "smart"
 
-# Optional: extra browser hosts allowed to call /api/nhl/* (comma-separated).
-# Same-origin is always allowed; this only matters if another origin must call it.
-# [vars]
-# ALLOWED_HOSTS = "the-hockey-lab.pages.dev"
-
-# ---------------------------------------------------------------------------
-# Durable L2 cache for immutable NHL endpoints (Cloudflare D1).
-#
-# The edge Cache API (caches.default) is per-colo and can be evicted, so a draft
-# year you pulled in one region can be a cold miss in another — and a slow/blocked
-# upstream then drops it back to "demo data" until you refresh. This D1 database
-# gives a global, durable cache so historical draft years / records / league meta
-# answer instantly and identically everywhere.
-#
-# Dashboard setup (UI only):
-#   1. Storage & Databases → D1 → Create database → name: the-hockey-lab-cache
-#   2. open it → Console tab → paste + run the SQL in ./schema.sql (one time)
-#   3. paste the database's "Database ID" into database_id below, then push.
-# Until a real database_id is filled in, leave this block commented (the code is
-# inert without the `DB` binding, so the app still works).
+# --- Durable L2 cache (D1) -------------------------------------------------------
+# Table: nhl_cache (k TEXT PRIMARY KEY, body TEXT, exp INTEGER, updated INTEGER)
 [[d1_databases]]
 binding = "DB"
 database_name = "the-hockey-lab-cache"
 database_id = "f2455b63-80f9-49bb-8fa3-cb835f00c23d"
+
+# --- Global warm cache + last-known-good (KV) ------------------------------------
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "95ae18c75fea43afb8282d9a676268c6"
+
+# --- Rate limiting (soft per-IP limiter + /api/log throttle) ---------------------
+# Reuses the same KV namespace; rate-limit keys are prefixed "rl:" so they never
+# collide with the cache's "c:" / "f:" keys. No second namespace required.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "95ae18c75fea43afb8282d9a676268c6"
+
+# --- Analytics Engine (cache-tier / latency metrics) -----------------------------
+# Query with the DATASET name as the table: SELECT ... FROM nhl_analytics_engine
+[[analytics_engine_datasets]]
+binding = "nhl_proxy_metrics"
+dataset = "nhl_analytics_engine"
+
+# --- Cron warming ----------------------------------------------------------------
+# Pre-fetch the hot endpoints every 5 min so cache/D1/KV are warm before users arrive.
+[triggers]
+crons = ["*/5 * * * *"]
