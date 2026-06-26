@@ -9931,12 +9931,12 @@ function DraftPage({
       textAlign: 'center',
       color: T.mut
     }
-  }, p.gp), React.createElement("td", {
+  }, p.gp != null ? p.gp : '—'), React.createElement("td", {
     style: {
       textAlign: 'center',
       fontWeight: 700
     }
-  }, p.pts), React.createElement("td", {
+  }, p.pts != null ? p.pts : '—'), React.createElement("td", {
     style: {
       textAlign: 'center',
       fontFamily: MONO,
@@ -9963,7 +9963,7 @@ function DraftPage({
       color: T.faint,
       borderTop: `1px solid ${T.line}`
     }
-  }, "NA = North American \xB7 INTL = International (Central Scouting categories 2 & 4)")), tab === 'Mock first round' && React.createElement("div", null, React.createElement("div", {
+  }, "CS rankings are per-category: NA Skaters (1\u2013N) \u2192 Intl Skaters \u2192 Goalies. Use the filter to view each list. INTL badge = international prospect.")), tab === 'Mock first round' && React.createElement("div", null, React.createElement("div", {
     style: {
       ...card,
       padding: '14px 16px',

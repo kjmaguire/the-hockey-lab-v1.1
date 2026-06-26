@@ -673,6 +673,16 @@
   function mapDraftRankings(payload) {
     const arr = (Array.isArray(payload) ? payload : null) || payload?.rankings || payload?.players || [];
     if (!arr.length) return null;
+    // NHL Central Scouting API returns raw league codes — map to readable names.
+    const LG = {
+      'BIG10':'Big Ten','HOCKEY EAST':'Hockey East','NCHC':'NCHC','CCHA':'CCHA',
+      'ECAC':'ECAC','ATLANTIC HOCKEY':'AHA','AMERICA WEST':'NCAA','WCHA':'WCHA',
+      'SWEDEN':'SHL','FINLAND':'Liiga','GERMANY':'DEL','SWITZERLAND':'NL',
+      'RUSSIA-JR.':'MHL','CZECHIA-JR.':'Czech Jr.','SLOVAKIA-JR.':'Slovakia Jr.',
+      'DENMARK':'Metal Ligaen','NORWAY':'GET-ligaen','AUSTRIA':'ICEHL',
+      'LATVIA':'HL','BELARUS':'Extraleague','FRANCE':'Ligue Magnus',
+      'NTDP - USHL':'NTDP','USHS-MN':'Minnesota HS','USHS-PREP':'Prep School',
+    };
     const out = arr.map((p, i) => {
       const mid = num(p.midtermRank), fin = num(p.finalRank);
       const rank = fin ?? mid ?? (i + 1);
@@ -680,17 +690,25 @@
       // category: 1=NA Skaters, 2=Intl Skaters, 3=NA Goalies, 4=Intl Goalies (NHL Central Scouting)
       const cat = num(p.category) ?? num(p.categoryId) ?? (p.positionCode === 'G' ? 3 : 1);
       const intl = cat === 2 || cat === 4;
+      const rawLeague = dflt(p.lastAmateurLeague) || dflt(p.leagueAbbrev) || dflt(p.lastAmateurClubName) || '';
+      const gp = num(p.gamesPlayed), pts = num(p.points);
       return {
         rank, cat, intl,
         name: `${dflt(p.firstName)} ${dflt(p.lastName)}`.trim() || dflt(p.playerName) || '',
         pos: p.positionCode || dflt(p.position) || '',
-        league: dflt(p.lastAmateurLeague) || dflt(p.leagueAbbrev) || dflt(p.lastAmateurClubName) || '',
-        gp: num(p.gamesPlayed) ?? 0, pts: num(p.points) ?? 0,
+        league: LG[rawLeague] || rawLeague || '—',
+        // CS rankings endpoint doesn't carry game stats; show null so UI can display '—'
+        gp: gp != null ? gp : null, pts: pts != null ? pts : null,
         ht: hin != null ? `${Math.floor(hin / 12)}'${hin % 12}"` : (dflt(p.height) || ''),
         wt: num(p.weightInPounds) ?? num(p.weight) ?? 0,
         trend: (mid != null && fin != null) ? (fin < mid ? '\u25B2' : fin > mid ? '\u25BC' : '\u25AC') : '\u25AC',
       };
-    }).filter((p) => p.name).sort((a, b) => a.rank - b.rank);
+    }).filter((p) => p.name)
+      // Sort: NA skaters (cat 1) → Intl skaters (cat 2) → NA goalies (cat 3) → Intl goalies (cat 4),
+      // then by within-category rank. Re-index with a sequential overall rank so the display
+      // shows 1, 2, 3... instead of duplicate per-category ranks.
+      .sort((a, b) => a.cat - b.cat || a.rank - b.rank)
+      .map((p, i) => ({ ...p, rank: i + 1 }));
     return out.length ? out : null;
   }
 

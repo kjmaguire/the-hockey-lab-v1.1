@@ -782,6 +782,92 @@ function Star({
     points: "12 2 15 9 22 9 16 14 18 22 12 17 6 22 8 14 2 9 9 9"
   })));
 }
+const _oddsStore = {
+  map: null,
+  partner: null,
+  loading: false,
+  subs: new Set()
+};
+function loadOdds() {
+  if (_oddsStore.map || _oddsStore.loading) return;
+  if (!(window.NHL && window.BC && window.BC.LIVE && window.NHL.oddsMapped)) return;
+  _oddsStore.loading = true;
+  window.NHL.oddsMapped('US').then(d => {
+    const m = {};
+    if (d && d.games) {
+      d.games.forEach(g => {
+        m[g.gameId] = g;
+      });
+      _oddsStore.partner = d.partner;
+    }
+    _oddsStore.map = m;
+    _oddsStore.loading = false;
+    _oddsStore.subs.forEach(fn => fn());
+  }).catch(() => {
+    _oddsStore.loading = false;
+  });
+}
+function useOdds(gameId) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(x => x + 1);
+    _oddsStore.subs.add(fn);
+    loadOdds();
+    return () => {
+      _oddsStore.subs.delete(fn);
+    };
+  }, []);
+  return _oddsStore.map ? _oddsStore.map[gameId] : null;
+}
+function OddsChip({
+  g
+}) {
+  const o = useOdds(g.id);
+  if (!o) return null;
+  const ml = s => s && s.odds && s.odds.ml != null ? s.odds.ml : null;
+  const a = ml(o.away),
+    h = ml(o.home);
+  if (a == null && h == null) return null;
+  const p = _oddsStore.partner || {};
+  return React.createElement("div", {
+    title: `Odds via ${p.name || 'DraftKings'}`,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '6px 16px 10px'
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: MONO,
+      fontSize: 9,
+      letterSpacing: '.07em',
+      textTransform: 'uppercase',
+      color: T.faint
+    }
+  }, p.name || 'Odds'), React.createElement("span", {
+    style: {
+      display: 'inline-flex',
+      gap: 6,
+      fontFamily: MONO,
+      fontSize: 11
+    }
+  }, React.createElement("span", {
+    style: {
+      padding: '2px 7px',
+      borderRadius: 6,
+      border: `1px solid ${T.line2}`,
+      color: T.ink
+    }
+  }, g.a, " ", a != null ? a : '\u2014'), React.createElement("span", {
+    style: {
+      padding: '2px 7px',
+      borderRadius: 6,
+      border: `1px solid ${T.line2}`,
+      color: T.ink
+    }
+  }, g.h, " ", h != null ? h : '\u2014')));
+}
 function GameCard({
   g,
   favs,
@@ -979,7 +1065,9 @@ function GameCard({
       color: T.faint,
       cursor: 'pointer'
     }
-  }, exp ? 'hide ▲' : 'details ▼'))), exp && x && React.createElement("div", {
+  }, exp ? 'hide ▲' : 'details ▼'))), g.st === 'pre' && React.createElement(OddsChip, {
+    g: g
+  }), exp && x && React.createElement("div", {
     style: {
       borderTop: `1px solid ${T.line}`,
       background: T.bg,
@@ -3351,7 +3439,8 @@ function GameDetail({
   }), t))), pre ? preView : tab === tabs[0] ? liveView : tab === 'Lineups' ? lineupsView : boxScore, React.createElement("style", null, `@media(max-width:680px){.g2,.g3{grid-template-columns:1fr!important}}@media(max-width:680px){.g4{grid-template-columns:1fr 1fr!important}}`));
 }
 function NationalTV() {
-  const mock = useMemo(() => BC.tvSchedule ? BC.tvSchedule() : [], []);
+  const isLive = !!(window.BC && window.BC.LIVE);
+  const mock = useMemo(() => !isLive && BC.tvSchedule ? BC.tvSchedule() : [], [isLive]);
   const tv = window.E_useLive(mock, () => window.NHL && window.NHL.tvScheduleMapped ? window.NHL.tvScheduleMapped() : null, []);
   if (!tv || !tv.length) return null;
   return React.createElement("div", {
@@ -4186,12 +4275,28 @@ function App() {
   const _liveS = window.NHL && window.NHL._season ? String(window.NHL._season) : null;
   if (season === 'cur' && _liveS && /^\d{8}$/.test(_liveS)) curIdRef.current = _liveS;
   const curId = curIdRef.current || _liveS || '20252026';
+  const [liveSeasons, setLiveSeasons] = useState(null);
+  useEffect(() => {
+    let on = true;
+    if (window.NHL && window.BC && window.BC.LIVE && window.NHL.seasonsList) {
+      window.NHL.seasonsList().then(ids => {
+        if (on && ids && ids.length) setLiveSeasons(ids);
+      }).catch(() => {});
+    }
+    return () => {
+      on = false;
+    };
+  }, []);
   const SEASONS = useMemo(() => {
+    if (liveSeasons && liveSeasons.length) {
+      const top = String(curId);
+      return [top, ...liveSeasons.filter(s => s !== top)];
+    }
     const top = parseInt(curId.slice(0, 4), 10) || 2025;
     const a = [];
     for (let y = top; y >= 2010; y--) a.push(`${y}${y + 1}`);
     return a;
-  }, [curId]);
+  }, [curId, liveSeasons]);
   const seasonLabel = v => v === 'cur' ? `${curId.slice(0, 4)}\u2013${curId.slice(6, 8)}` : `${v.slice(0, 4)}\u2013${v.slice(6, 8)}`;
   const changeSeason = v => {
     setSeason(v);
@@ -4495,7 +4600,7 @@ function App() {
     setOffset: setOffset,
     favs: favs,
     view: "week"
-  }), offset === 0 && React.createElement(NationalTV, null), React.createElement("div", {
+  }), offset === 0 && games.length > 0 && React.createElement(NationalTV, null), React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -5140,7 +5245,7 @@ function App() {
       color: T.faint,
       lineHeight: 1.7
     }
-  }, "\xA9 2026 The Hockey Lab \xB7 Independent project \u2014 not affiliated with the NHL \xB7 Data via public NHL APIs"))), React.createElement(Palette, {
+  }, "\xA9 2026 The Hockey Lab \xB7 Independent project \u2014 not affiliated with the NHL \xB7 Data via public NHL APIs \xB7 news via Google News & Reddit \xB7 all sources linked, not affiliated"))), React.createElement(Palette, {
     open: pal,
     onClose: () => setPal(false),
     onTeam: openTeam,

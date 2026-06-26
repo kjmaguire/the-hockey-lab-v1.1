@@ -1671,12 +1671,12 @@ function DraftPage({onTeam}){
           <td style={{padding:'9px 12px',fontFamily:MONO,color:i<5?T.red:T.faint,fontWeight:i<5?700:400}}>{String(p.rank).padStart(2,'0')}</td>
           <td style={{padding:'9px 12px',fontWeight:600,color:T.ink}}><span style={{display:'inline-flex',alignItems:'center',gap:7}}>{p.intl&&<span style={{fontFamily:MONO,fontSize:8.5,letterSpacing:'.06em',color:T.posFg,background:T.posBg,padding:'1px 5px',borderRadius:4,flexShrink:0}}>INTL</span>}{p.name}</span></td>
           <td style={{textAlign:'center',color:T.mut}}>{p.pos}</td><td style={{textAlign:'center',color:T.mut}}>{p.league}</td>
-          <td style={{textAlign:'center',color:T.mut}}>{p.gp}</td><td style={{textAlign:'center',fontWeight:700}}>{p.pts}</td>
+          <td style={{textAlign:'center',color:T.mut}}>{p.gp!=null?p.gp:'—'}</td><td style={{textAlign:'center',fontWeight:700}}>{p.pts!=null?p.pts:'—'}</td>
           <td style={{textAlign:'center',fontFamily:MONO,fontSize:12,color:T.mut}}>{p.ht}</td><td style={{textAlign:'center',fontFamily:MONO,fontSize:12,color:T.mut}}>{p.wt}</td>
           <td style={{textAlign:'center',color:p.trend==='▲'?'#1a8a4f':p.trend==='▼'?T.red:T.faint}}>{p.trend}</td>
         </tr>))}</tbody>
       </table></div>
-      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>NA = North American · INTL = International (Central Scouting categories 2 & 4)</div>
+      <div style={{padding:'10px 16px',fontFamily:MONO,fontSize:11,color:T.faint,borderTop:`1px solid ${T.line}`}}>CS rankings are per-category: NA Skaters (1–N) → Intl Skaters → Goalies. Use the filter to view each list. INTL badge = international prospect.</div>
     </div>}
     {tab==='Mock first round'&&<div>
       <div style={{...card,padding:'14px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',background:`linear-gradient(110deg, ${T.bg}, transparent)`}}>
