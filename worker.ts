@@ -254,7 +254,7 @@ async function handleNhl(url: URL): Promise<Response> {
         return proxyWeb('meta');
       case 'draft': {
         const sub = b;
-        if (sub === 'rankings') return proxyWeb(c ? `draft/rankings/${c}/${q('category', '1')}` : 'draft/rankings/now');
+        if (sub === 'rankings') return proxyWeb(c ? `draft/rankings/${c}/${q('category', '1')}` : `draft/rankings/now/${q('category', '1')}`);
         if (sub === 'picks') return proxyWeb(c ? `draft/picks/${c}/${q('round', 'all')}` : 'draft/picks/now');
         if (sub === 'tracker') return proxyWeb('draft-tracker/picks/now');
         break;
