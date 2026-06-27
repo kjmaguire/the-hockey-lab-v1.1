@@ -20,6 +20,7 @@
 <meta name="twitter:title" content="The Hockey Lab — editorial NHL analytics"/>
 <meta name="twitter:description" content="Live NHL scores, standings, advanced stats, Edge tracking, playoffs, draft and records — in one editorial analytics app."/>
 <meta name="twitter:image" content="favicon-256x256.png"/>
+<link rel="preconnect" href="https://unpkg.com" crossorigin/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet"/>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
@@ -94,16 +95,17 @@
 <body>
 <a href="#main" class="skip-link">Skip to content</a>
 <div id="root"></div>
-<script>window.__V='20260626a';</script>
-<script src="redesign/broadcast-data.js?v=20260626a"></script>
-<script src="redesign/editorial-ext.js?v=20260626a"></script>
-<script src="redesign/nhl-client.js?v=20260626a"></script>
-<script src="redesign/editorial-live.js?v=20260626a"></script>
-<script src="redesign/editorial-analytics.js?v=20260626a"></script>
-<script src="redesign/editorial-pages.compiled.js?v=20260626a"></script>
-<script src="redesign/shot-map.compiled.js?v=20260626a"></script>
-<script src="redesign/editorial-news.compiled.js?v=20260626a"></script>
-<script src="redesign/editorial-app.compiled.js?v=20260626a"></script>
+<script>window.__V='20260627b';</script>
+<script src="redesign/broadcast-data.js?v=20260627b"></script>
+<script src="redesign/editorial-ext.js?v=20260627b"></script>
+<script src="redesign/nhl-client.js?v=20260627b"></script>
+<script src="redesign/editorial-live.js?v=20260627b"></script>
+<script src="redesign/live-socket.js?v=20260627b"></script>
+<script src="redesign/editorial-analytics.js?v=20260627b"></script>
+<script src="redesign/editorial-pages.compiled.js?v=20260627b"></script>
+<script src="redesign/shot-map.compiled.js?v=20260627b"></script>
+<script src="redesign/editorial-news.compiled.js?v=20260627b"></script>
+<script src="redesign/editorial-app.compiled.js?v=20260627b"></script>
 <noscript>
 <div style="max-width:680px;margin:0 auto;padding:48px 24px;font-family:Geist,system-ui,sans-serif;color:#15161b">
 <h1 style="font-size:32px;letter-spacing:-.02em;margin:0 0 12px">The Hockey Lab</h1>
@@ -152,7 +154,7 @@
     if(k==='team'&&arg){var t=team(arg);apply(t+T,t+' — NHL team page: record, roster, schedule, stats and shot zones.');return;}
     if(k==='player'&&arg){var n=player(arg);apply(n+T,n+' — NHL player profile, season stats and NHL Edge tracking.');return;}
     if(k==='game'){apply('Game center'+T,'NHL game center — live score, box score, play-by-play and Edge tracking.');return;}
-    var s=S[k];apply((s?s[0]:BASE)+T,s?s[1]:DESC);
+    var s=S[k];apply(s?s[0]+T:BASE+' \u2014 editorial NHL analytics',s?s[1]:DESC);
   }
   window.addEventListener('hashchange',upd);
   window.addEventListener('load',function(){setTimeout(upd,250);});

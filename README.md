@@ -120,13 +120,74 @@ This repo deploys as a **Cloudflare Worker with Static Assets** (`worker.ts` +
 mounts the `/api/nhl/*` proxy, and the `[assets]` block serves `./public` and
 binds it as `env.ASSETS`.
 
+### Deploying via the Cloudflare dashboard (no CLI)
+
+The precompiled bundles (`app.prod.html` + `redesign/*.compiled.js`) are committed,
+so a dashboard / Git-connected deploy serves everything as-is — no build step on
+your side. One thing needs a one-time setup the CLI would otherwise do for you:
+the **Durable Object** that powers real-time updates.
+
+If your Worker is **connected to the Git repo** (Workers Builds), the dashboard
+reads `wrangler.toml` and applies the `[[durable_objects.bindings]]` + `[[migrations]]`
+automatically — nothing extra to do.
+
+If you deploy/edit the Worker **manually** in the dashboard, register the DO once:
+
+1. Deploy as usual (the `LiveHub` class ships inside `worker.ts`).
+2. **Workers & Pages → your Worker → Settings → Bindings → Durable Objects**:
+   - **Variable name:** `LIVE_HUB`
+   - **Durable Object class:** `LiveHub`
+   - Save — the dashboard prompts to apply the **new-class migration** (tag `v1`). Accept it.
+
+Verify: hit `https://<your-domain>/api/live?topic=scores` with a WebSocket client,
+or just watch the live scoreboard/draft tracker update in ~1s. If the binding is
+missing, `/api/live` returns **503** and the Worker logs a `LIVE_HUB`-undefined
+error — but the site keeps working because the client automatically falls back to
+its existing 20s polling. A missed migration degrades gracefully; it never breaks
+the app.
+
+### Deploying via the CLI (alternative)
+
 ```bash
 cd cloudflare
 npm install        # installs wrangler
-npm run deploy     # = wrangler deploy
+npm run deploy     # = wrangler deploy  (applies the DO migration automatically)
 ```
 
 First time, `wrangler` will prompt you to log in (`npx wrangler login`).
+
+## Keeping data fresh — two mechanisms
+
+The app uses **two complementary freshness systems**, matched to how fast each
+kind of data actually changes:
+
+| Mechanism | Best for | How it works |
+|---|---|---|
+| **WebSocket push** (`LiveHub` Durable Object) | Data users watch tick live — **scores, draft picks** | One instance per topic polls the NHL upstream once for *everyone* and pushes a tiny "changed" signal the instant it moves; clients refetch from the warm edge cache. ~1s latency. Hibernates when idle. |
+| **Cron warming** (every minute) | Everything else, on a schedule | Pre-fetches endpoints into the edge cache so the next load/navigation is instant and current — no open connection needed. Tiered by volatility. |
+
+**Cron tiers** (see `scheduled()` in `worker.ts`):
+
+| Tier | Cadence | Endpoints |
+|---|---|---|
+| LIVE | every 1 min | scoreboard, live draft tracker, draft rankings |
+| HOT | every 5 min | standings, skater/goalie leaders, spotlight, odds, intl draft categories, post-lottery picks |
+| ROSTERS | every 15 min | all 32 club rosters — catches **trades, call-ups, scratches** league-wide |
+| SLOW | ~hourly | league team stats (standings-derived, drifts slowly) |
+
+Per-player **EDGE** boards are deliberately *not* cron-warmed — that's a heavy
+hundreds-of-fetch fan-out that only changes after games, so the 24h post-game
+cache covers it far more cheaply.
+
+> **Why not push everything over the socket?** A WebSocket holds an open
+> connection per viewer. That's worth it for data that ticks (scores/draft), but
+> wasteful for rosters/standings/edge that change a few times a day — cron keeps
+> those fresh without holding any connections open.
+>
+> **Note:** cron warming refreshes the *cache*; a user already sitting on a page
+> sees it on their next navigation/refetch. To make *open* tabs self-update for
+> the slow tiers too, the next step is either a periodic light client re-hydrate
+> or a low-frequency "site" push topic — see the roadmap note in `worker.ts`.
 
 ### Production build (optional, faster load)
 

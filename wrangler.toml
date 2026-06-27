@@ -21,6 +21,12 @@ head_sampling_rate = 1
 [placement]
 mode = "smart"
 
+# Paid plan: claim the full CPU ceiling so the heavy fan-out compositions (teamStats
+# assembles ~24 upstream stat reports) never trip a low CPU cap. Free plan caps at 10ms;
+# Workers Paid allows up to 30s of CPU per invocation.
+[limits]
+cpu_ms = 30000
+
 # --- Durable L2 cache (D1) -------------------------------------------------------
 # Table: nhl_cache (k TEXT PRIMARY KEY, body TEXT, exp INTEGER, updated INTEGER)
 [[d1_databases]]
@@ -46,7 +52,22 @@ id = "95ae18c75fea43afb8282d9a676268c6"
 binding = "nhl_proxy_metrics"
 dataset = "nhl_analytics_engine"
 
+# --- Real-time live updates (Durable Object) -------------------------------------
+# LiveHub fans out one server-side poll to every connected client over a hibernating
+# WebSocket, so the scoreboard + live draft tracker update in ~1s instead of each
+# browser polling every 20s. One instance per topic ("scores" / "draft").
+[[durable_objects.bindings]]
+name = "LIVE_HUB"
+class_name = "LiveHub"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["LiveHub"]
+
 # --- Cron warming ----------------------------------------------------------------
-# Pre-fetch the hot endpoints every 5 min so cache/D1/KV are warm before users arrive.
+# Pre-fetch the hot endpoints every minute (Workers Paid 1-minute cron). The Worker
+# tiers internally: live-critical endpoints (scoreboard, live draft tracker + CS board)
+# re-warm every minute; the broader reference set every ~5 min. Write-if-changed keeps
+# KV writes minimal.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["* * * * *"]

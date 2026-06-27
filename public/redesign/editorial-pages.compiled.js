@@ -3296,10 +3296,14 @@ function PlayerDetailPage({
 }) {
   const isG = p.type === 'goalie';
   const exMock = uM(() => D.playerExtras(p), [p.id]);
-  const ex = window.E_useLive(exMock, () => window.NHL.playerCard(p.id).then(c => c ? {
+  const exLive = window.E_useLive(exMock, () => window.NHL.playerCard(p.id).then(c => c ? {
     ...exMock,
     ...c
   } : null), [p.id], 'playerExtras:' + p.id);
+  const ex = {
+    ...exMock,
+    ...exLive
+  };
   const edgeMock = uM(() => isG ? D.goalieEdge(p) : D.skaterEdge(p), [p.id]);
   const edge = window.E_useLive(edgeMock, () => (isG ? window.NHL.edgeGoalieMapped(p.id) : window.NHL.edgeSkaterMapped(p.id)).then(e => e ? {
     ...edgeMock,
@@ -9739,10 +9743,12 @@ function DraftPage({
       }).catch(() => {});
     };
     pull();
+    const unsub = window.BC && window.BC.LIVE && window.LiveSocket && window.LiveSocket.subscribe ? window.LiveSocket.subscribe('draft', pull) : null;
     const iv = tab === 'Live tracker' ? setInterval(pull, 20000) : null;
     return () => {
       alive = false;
       if (iv) clearInterval(iv);
+      if (unsub) unsub();
     };
   }, [isUpcoming, tab, curDraftYear]);
   const rankLookup = uM(() => {
@@ -10977,18 +10983,7 @@ function HighlightsPage({
       gap: 8,
       marginBottom: 8
     }
-  }, p.headshot ? React.createElement("img", {
-    src: p.headshot,
-    alt: "",
-    width: 34,
-    height: 34,
-    loading: "lazy",
-    style: {
-      borderRadius: 99,
-      objectFit: 'cover',
-      background: T.line
-    }
-  }) : React.createElement(Badge, {
+  }, React.createElement(Badge, {
     ab: p.team,
     size: 30
   }), React.createElement("span", {

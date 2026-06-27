@@ -53,7 +53,7 @@
       </g>);
   }
 
-  function ShotMap({ g, gameTabs, activeGame, onGame }) {
+  function ShotMap({ g, gameTabs, activeGame, onGame, refreshKey }) {
     const [shots, setShots] = useState(() => BC.shotMap(g));
     const [source, setSource] = useState('sample');
     const [filter, setFilter] = useState('all');
@@ -71,6 +71,17 @@
       }
       return () => { alive = false; };
     }, [g.id]);
+
+    // Live refresh: re-pull play-by-play shots when the parent bumps refreshKey (a goal /
+    // periodic tick during a live game). Doesn't reset the user's filter/source selection.
+    useEffect(() => {
+      if (!refreshKey || g.st === 'pre' || !(window.NHL && NHL.shotMap)) return;
+      let alive = true;
+      NHL.shotMap(g.id).then((res) => {
+        if (alive && res && res.shots && res.shots.length) { setShots(res.shots); setSource('live'); }
+      }).catch(() => {});
+      return () => { alive = false; };
+    }, [refreshKey]);
 
     const counts = useMemo(() => {
       const c = { goal: 0, on: 0, miss: 0, block: 0 };

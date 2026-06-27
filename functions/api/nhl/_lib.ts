@@ -21,7 +21,8 @@ export const CACHE_SECONDS = 300;
 // so finals are cached for a day and live games for ~20s.
 // ---------------------------------------------------------------------------
 const TTL = {
-  live: 20,      // a game in progress — refresh fast
+  live: 10,      // a game in progress — refresh fast (drives how quickly a goal/score surfaces)
+  edge: 90,      // NHL EDGE tracking — recomputed after games; short so post-game updates land fast
   slate: 30,     // today's scoreboard / date slates
   pre: 120,      // pre-game (lineups, odds still firming)
   medium: 300,   // leaders, rosters, club-stats, standings, player landing (default)
@@ -64,6 +65,7 @@ export function ttlFor(url: string, payload?: any): number {
   if (gs === 'pre' && !isNow) return TTL.pre;
 
   if (/\/standings(\b|\/)/.test(url)) return TTL.medium;
+  if (/\/edge(-team)?\//.test(url)) return TTL.edge; // EDGE tracking — refresh faster than the 5-min default so post-game aggregates propagate
   if (isNow || /\/(score|scoreboard)(\b|\/)/.test(url)) return TTL.slate; // live-ish slates
 
   // leaders, rosters, club-stats, prospects, player landing, schedule, edge, …
@@ -251,7 +253,7 @@ async function d1Put(url: string, body: string, ttl: number): Promise<void> {
  * keyed by the fully-qualified upstream URL so it is shared across requests. For
  * immutable endpoints a durable D1 copy (when bound) backs the per-colo edge cache.
  */
-export async function fetchUpstream(url: string): Promise<unknown> {
+export async function fetchUpstream(url: string, fresh = false): Promise<unknown> {
   const _t0 = Date.now();
   const cache = (caches as unknown as { default: Cache }).default;
   const cacheKey = new Request(url, { method: 'GET' });
@@ -265,17 +267,22 @@ export async function fetchUpstream(url: string): Promise<unknown> {
     return kvGet(url, 'f');
   };
 
-  const hit = await cache.match(cacheKey);
-  if (hit) {
-    recordMetric('edge', url, Date.now() - _t0);
-    return hit.json();
+  // `fresh` (used by the real-time LiveHub poll) skips every cache READ and goes straight
+  // to the NHL origin, so a live score/pick isn't masked by the edge cache window. The fresh
+  // body is still WRITTEN back below, so ordinary client reads stay an instant cache hit.
+  if (!fresh) {
+    const hit = await cache.match(cacheKey);
+    if (hit) {
+      recordMetric('edge', url, Date.now() - _t0);
+      return hit.json();
+    }
   }
 
   // Edge miss. For immutable endpoints, try the durable L2 (D1) before the network:
   // a cold colo or a slow/blocked upstream then still answers instantly + identically,
   // which is what keeps flipping between draft years reliable across regions.
   const durable = isDurable(url);
-  if (durable) {
+  if (!fresh && durable) {
     const d1 = await d1Get(url);
     if (d1 !== undefined) {
       // warm this colo's edge cache so subsequent same-colo hits skip D1 too
@@ -293,7 +300,7 @@ export async function fetchUpstream(url: string): Promise<unknown> {
   // serves the globally-shared warm body instead of cold-fetching upstream, which also
   // spreads load off the NHL API. Live/slate/pre data is never written to KV (the write
   // gate is ttl ≥ medium), so kvGet misses for those → they always fetch fresh below.
-  {
+  if (!fresh) {
     const kv = await kvGet(url, 'c');
     if (kv !== undefined) {
       try {
@@ -312,7 +319,7 @@ export async function fetchUpstream(url: string): Promise<unknown> {
     upstream = await fetch(url, {
       headers: { accept: 'application/json' },
       // Belt-and-suspenders: also let the Cloudflare cache hold the origin body.
-      cf: { cacheTtl: baseTtl, cacheEverything: true },
+      cf: fresh ? { cacheTtl: 0, cacheEverything: false } : { cacheTtl: baseTtl, cacheEverything: true },
     } as RequestInit);
   } catch {
     // NHL unreachable → serve the last-known-good copy if we have one.
@@ -365,6 +372,15 @@ export async function fetchUpstream(url: string): Promise<unknown> {
   if (ttl >= TTL.medium) { await kvPut(url, body, ttl, 'c'); await kvPut(url, body, ttl, 'f'); }
   recordMetric('origin', url, Date.now() - _t0);
   return parsed;
+}
+
+/** Real-time helper for the LiveHub Durable Object: force a FRESH api-web fetch (bypassing
+ *  every cache read) and return the JSON body as a string for change-detection. The fetch
+ *  still repopulates the edge cache, so the client's subsequent read is an instant cache hit
+ *  on the just-written body. `path` may include an inline query string. */
+export async function refreshWeb(path: string): Promise<string> {
+  const data = await fetchUpstream(`${API_BASE}/${path}`, true);
+  return JSON.stringify(data);
 }
 
 /** Build an upstream URL with an optional query object. */

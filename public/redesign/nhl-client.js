@@ -58,7 +58,7 @@
   // so they survive reloads and repeat visits with ZERO refetch. (Caching immutable
   // responses is standard good-citizen practice; it reduces NHL API load.)
   const IMMUTABLE = /draft\/(picks|rankings)\/\d{4}|^records\/|standings\/\d{4}-\d{2}-\d{2}/;
-  const ALWAYS_FRESH = /scoreboard|^score\b|\/now|gamecenter\/.*\/(boxscore|play-by-play)/;
+  const ALWAYS_FRESH = /scoreboard|^score\b|\/now|draft\/tracker|gamecenter\/.*\/(boxscore|play-by-play)/;
   // ---- durable browser cache for immutable historical data (localStorage) ----
   const LS_PREFIX = 'thl:imm:';
   function lsGet(path) {
@@ -1298,7 +1298,9 @@
       const rows = arr.map((p) => ({
         id: p.playerId, name: dflt(p.name) || [dflt(p.firstName), dflt(p.lastName)].filter(Boolean).join(' '),
         pos: p.position || '', num: p.sweaterNumber || null, team: normTeam(p.teamTriCode || p.teamAbbrev),
-        headshot: p.headshot || null, slug: p.playerSlug || null,
+        // Headshots are intentionally NOT surfaced — the NHL headshot CDN requires a paid
+        // license we don't carry. Force null so the UI uses the team crest fallback.
+        headshot: null, slug: p.playerSlug || null,
       })).filter((p) => p.id && p.name);
       return rows.length ? rows : null;
     } catch (_) { return null; } },

@@ -185,13 +185,20 @@
   // re-poll today's slate while live (real-time scoreboard)
   function startPolling(onReady, ms = 20000) {
     if (!BC.LIVE) return () => {};
-    const t = setInterval(async () => {
+    const refetch = async () => {
       try {
         const games = await NHL.scores(0);
         liveSlates[0] = games || []; fetchedSlates[0] = true; onReady && onReady();
       } catch (_) {}
-    }, ms);
-    return () => clearInterval(t);
+    };
+    // Real-time push from the LiveHub Durable Object: one server-side poll fans out to
+    // every viewer, so the board refreshes the instant a score / game-state changes
+    // instead of waiting on the timer. The interval stays as a safety net (and the sole
+    // path if the socket can't connect — e.g. design preview / unsupported browser).
+    const unsub = (window.LiveSocket && window.LiveSocket.subscribe)
+      ? window.LiveSocket.subscribe('scores', refetch) : null;
+    const t = setInterval(refetch, ms);
+    return () => { clearInterval(t); if (unsub) unsub(); };
   }
 
   BC.hydrate = hydrate;

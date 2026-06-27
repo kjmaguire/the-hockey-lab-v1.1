@@ -211,7 +211,24 @@ function GameCard({g,favs,toggleFav,onOpen}){
 function GameDetail({g,onBack,onTeam}){
   const dMock=useMemo(()=>detail(g),[g.id]);
   // live overlay: real scoring summary, three stars, team stats + box score / lineups
-  const gl=window.E_useLive(null,()=>g.st!=='pre'&&window.NHL&&window.NHL.gameLive?window.NHL.gameLive(g.id):null,[g.id]);
+  const glBase=window.E_useLive(null,()=>g.st!=='pre'&&window.NHL&&window.NHL.gameLive?window.NHL.gameLive(g.id):null,[g.id]);
+  // Live refresh: while a deployed game is in progress, re-pull the REAL boxscore/landing on
+  // the scores push + a periodic tick so box score, team stats, scoring & plays update in ~5s
+  // (the real overlays were otherwise fetched once and frozen). Keeps the last value during a
+  // refetch (no flicker) and ignores a stale result from a previously-open game.
+  const [liveTick,setLiveTick]=useState(0);
+  useEffect(()=>{ if(g.st!=='live'||!(window.BC&&window.BC.LIVE)) return; let alive=true;
+    const bump=()=>{ if(alive) setLiveTick(t=>t+1); };
+    const unsub=(window.LiveSocket&&window.LiveSocket.subscribe)?window.LiveSocket.subscribe('scores',bump):null;
+    const iv=setInterval(bump,10000);
+    return ()=>{ alive=false; clearInterval(iv); if(unsub) unsub(); };
+  },[g.id,g.st]);
+  const [glLive,setGlLive]=useState(null);
+  useEffect(()=>{ if(g.st==='pre'||!(window.BC&&window.BC.LIVE)||!(window.NHL&&window.NHL.gameLive)) return; let alive=true;
+    Promise.resolve().then(()=>window.NHL.gameLive(g.id)).then(r=>{ if(alive&&r) setGlLive({id:g.id,d:r}); }).catch(()=>{});
+    return ()=>{ alive=false; };
+  },[g.id,liveTick]);
+  const gl=(glLive&&glLive.id===g.id)?glLive.d:glBase;
   const d=gl?{...dMock,
     goals:(gl.goals&&gl.goals.length)?gl.goals:dMock.goals,
     stars:(gl.stars&&gl.stars.length)?gl.stars:dMock.stars,
@@ -219,7 +236,13 @@ function GameDetail({g,onBack,onTeam}){
     home:{...dMock.home,team:{...dMock.home.team,...(gl.teamH||{})}}}:dMock;
   const series=useMemo(()=>BC.seasonSeries(g),[g.id]);
   const pbpMock=useMemo(()=>BC.playByPlay(g),[g.id]);
-  const pbp=window.E_useLive(pbpMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gamePbp?window.NHL.gamePbp(g.id):null,[g.id]);
+  const pbpBase=window.E_useLive(pbpMock,()=>g.st!=='pre'&&window.NHL&&window.NHL.gamePbp?window.NHL.gamePbp(g.id):null,[g.id]);
+  const [pbpLive,setPbpLive]=useState(null);
+  useEffect(()=>{ if(g.st==='pre'||!(window.BC&&window.BC.LIVE)||!(window.NHL&&window.NHL.gamePbp)) return; let alive=true;
+    Promise.resolve().then(()=>window.NHL.gamePbp(g.id)).then(r=>{ if(alive&&r&&r.length) setPbpLive({id:g.id,d:r}); }).catch(()=>{});
+    return ()=>{ alive=false; };
+  },[g.id,liveTick]);
+  const pbp=(pbpLive&&pbpLive.id===g.id&&pbpLive.d.length)?pbpLive.d:pbpBase;
   const recapMock=useMemo(()=>g.st.startsWith('final')?BC.gameRecap(g):'',[g.id]);
   const recap=window.E_useLive(recapMock,()=>g.st.startsWith('final')&&window.NHL&&window.NHL.gameRecapMapped?window.NHL.gameRecapMapped(g.id):null,[g.id]);
   const bxMock=useMemo(()=>BC.broadcasts(g),[g.id]);
@@ -299,7 +322,7 @@ function GameDetail({g,onBack,onTeam}){
       {[['g',p.g],['a',p.a],['p',p.p],['sog',p.sog],['pm',p.pm==null?'–':(p.pm>0?'+':'')+p.pm],['hits',p.hits==null?'–':p.hits],['blk',p.blk==null?'–':p.blk],['toi',p.toi]].map(([k,v])=><td key={k} style={{padding:'7px 11px',textAlign:'center',fontFamily:k==='toi'?MONO:'inherit',fontWeight:k==='p'?700:400,color:k==='p'?T.ink:T.mut}}>{v}</td>)}</tr>))}</tbody></table></div>
     {gb&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderTop:`1px solid ${T.line}`,background:T.bg,flexWrap:'wrap'}}><span style={{...ML,fontSize:9}}>Goalie</span><span style={{fontWeight:600,color:T.ink,fontSize:13}}>{gb.name}</span><span style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{gb.saves}/{gb.sa} SV · {gb.svp} · {gb.ga} GA · {gb.toi}{gb.dec!=='—'?` · ${gb.dec}`:''}</span></div>}
   </div>);};
-  const liveView=(<div style={{display:'grid',gap:16}}>
+  const simLiveView=(<div style={{display:'grid',gap:16}}>
     <div style={{display:'flex',alignItems:'center',gap:10,fontFamily:MONO,fontSize:11,color:live?T.red:T.faint,flexWrap:'wrap'}}>
       {live&&<span className="ed-pulse" style={{width:6,height:6,borderRadius:99,background:T.red,display:'inline-block'}}/>}
       <span style={{letterSpacing:'.1em',textTransform:'uppercase'}}>{live?`Live · ${g.per} ${s.clk}`:final?'Final · Edge summary':g.start}</span>
@@ -353,6 +376,55 @@ function GameDetail({g,onBack,onTeam}){
       {liveFeed.map((e,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderTop:i?`1px solid ${T.line}`:'none',fontSize:13}}><span style={{fontFamily:MONO,fontSize:11,color:T.faint,width:62}}>{e.per} {e.time}</span><span style={{width:7,height:7,borderRadius:99,background:col(e.team),flexShrink:0}}/><span style={{flex:1,color:e.type==='Goal'?T.ink:T.mut,fontWeight:e.type==='Goal'?600:400}}>{e.desc}</span></div>)}
     </div>}
   </div>);
+  // REAL in-game stats (deployed live/final games): team comparison from the boxscore + the
+  // real shot map + real play-by-play, all refreshing on the live tick. simLiveView (above) is
+  // the mock-only fallback shown in preview where there's no live feed.
+  const realLiveView=(()=>{
+    const tA=(gl&&gl.teamA)||{}, tH=(gl&&gl.teamH)||{};
+    const bteam=(box&&box.team)||{}; const bA=bteam[g.a]||{}, bH=bteam[g.h]||{};
+    const N=v=>typeof v==='number'?v:(v==null?null:parseFloat(v));
+    const bars=[['Shots on goal',tA.sog,tH.sog],['Hits',tA.hits,tH.hits],['Blocked shots',tA.blk,tH.blk],['Penalty minutes',tA.pim,tH.pim],['Giveaways',bA.give,bH.give],['Takeaways',bA.take,bH.take]].filter(r=>r[1]!=null||r[2]!=null);
+    const texts=[['Faceoff %',tA.fo,tH.fo],['Power play',tA.pp,tH.pp]].filter(r=>r[1]!=null||r[2]!=null);
+    const plays=(pbp||[]).slice(-9).reverse();
+    return (<div style={{display:'grid',gap:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,fontFamily:MONO,fontSize:11,color:live?T.red:T.faint,flexWrap:'wrap'}}>
+        {live&&<span className="ed-pulse" style={{width:6,height:6,borderRadius:99,background:T.red,display:'inline-block'}}/>}
+        <span style={{letterSpacing:'.1em',textTransform:'uppercase'}}>{live?`Live \u00b7 ${g.per}`:final?'Final':g.start}</span>
+        <span style={{marginLeft:'auto',color:T.faint,letterSpacing:'.06em',textTransform:'uppercase'}}>Live game stats \u00b7 boxscore &amp; play-by-play</span>
+        <ProvTag kind="live"/>
+      </div>
+      <div style={{...card,padding:'16px 18px'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:15,gap:10}}>
+          <span style={{display:'inline-flex',alignItems:'center',gap:8,fontWeight:700,color:col(g.a)}}><Badge ab={g.a} size={20}/>{g.a}</span>
+          <span style={ML}>Team stats</span>
+          <span style={{display:'inline-flex',alignItems:'center',gap:8,fontWeight:700,color:col(g.h)}}>{g.h}<Badge ab={g.h} size={20}/></span>
+        </div>
+        <div style={{display:'grid',gap:12}}>
+          {bars.map(([label,av,hv])=>{const an=N(av)||0,hn=N(hv)||0,tot=an+hn||1,aShare=Math.round(an/tot*100);return (
+            <div key={label}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:5,fontFamily:MONO,fontSize:12.5}}>
+                <span style={{fontWeight:700,color:col(g.a)}}>{av==null?'\u2013':av}</span>
+                <span style={{...ML,fontSize:9.5}}>{label}</span>
+                <span style={{fontWeight:700,color:col(g.h)}}>{hv==null?'\u2013':hv}</span>
+              </div>
+              <div style={{display:'flex',height:8,borderRadius:4,overflow:'hidden',background:T.bg}}><div style={{width:`${aShare}%`,background:col(g.a),transition:'width .6s ease'}}/><div style={{flex:1,background:col(g.h)}}/></div>
+            </div>);})}
+          {texts.map(([label,av,hv])=>(
+            <div key={label} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontFamily:MONO,fontSize:12.5,paddingTop:8,borderTop:`1px solid ${T.line}`}}>
+              <span style={{fontWeight:700,color:col(g.a)}}>{av==null?'\u2013':av}</span>
+              <span style={{...ML,fontSize:9.5}}>{label}</span>
+              <span style={{fontWeight:700,color:col(g.h)}}>{hv==null?'\u2013':hv}</span>
+            </div>))}
+        </div>
+      </div>
+      {window.E_ShotMap&&<window.E_ShotMap key={'sm-'+g.id} g={g} refreshKey={liveTick}/>}
+      {plays.length>0&&<div style={{...card,overflow:'hidden'}}>
+        <div style={{padding:'13px 16px',display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.line}`}}>{live&&<span className="ed-pulse" style={{width:6,height:6,borderRadius:99,background:T.red,display:'inline-block'}}/>}<span style={ML}>{live?'Latest plays':'Key plays'}</span><span style={{marginLeft:'auto'}}><ProvTag kind="live"/></span></div>
+        {plays.map((e,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderTop:i?`1px solid ${T.line}`:'none',fontSize:13}}><span style={{fontFamily:MONO,fontSize:11,color:T.faint,width:62}}>{e.per} {e.time}</span><span style={{width:7,height:7,borderRadius:99,background:col(e.team),flexShrink:0}}/><span style={{flex:1,color:e.type==='Goal'?T.ink:T.mut,fontWeight:e.type==='Goal'?600:400}}>{e.desc}</span></div>)}
+      </div>}
+    </div>);
+  })();
+  const liveView=(gl&&gl.teamA&&(gl.teamA.sog!=null||gl.teamA.hits!=null))?realLiveView:simLiveView;
   const lineupsView=(lp&&fSel)?(<div style={{display:'grid',gap:16}}>
     <div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'13px 16px',display:'flex',alignItems:'center',gap:10,borderBottom:`1px solid ${T.line}`,flexWrap:'wrap'}}>
@@ -816,7 +888,7 @@ function App(){
     <header style={{position:'sticky',top:0,zIndex:40,background:T.glass,backdropFilter:'blur(10px)',borderBottom:`1px solid ${T.line}`}}>
       <div style={{maxWidth:1600,margin:'0 auto',padding:'0 24px',height:58,display:'flex',alignItems:'center',gap:14}}>
         <div onClick={()=>go('highlights')} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',flexShrink:0}}><span style={{width:28,height:28,borderRadius:7,background:T.invBg,color:T.invFg,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13,flexShrink:0}}>H</span><span style={{fontWeight:700,whiteSpace:'nowrap'}}>The Hockey Lab</span></div>
-        <a href="The Hockey Lab - Landing.html" title="Lab home" aria-label="Lab home" style={{color:T.faint,fontSize:17,textDecoration:'none'}}>⌂</a>
+        <button onClick={()=>go('highlights')} title="Lab home" aria-label="Lab home" style={{color:T.faint,fontSize:17,background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit',lineHeight:1,flexShrink:0}}>⌂</button>
         <span className="ed-demo" title={isLive?"Live NHL feeds connected — updating in real time":"Projected/sample data for demo — live NHL feeds fill in on deploy"} style={{fontFamily:MONO,fontSize:9.5,letterSpacing:'.08em',textTransform:'uppercase',color:isLive?'#1a8a4f':T.mut,background:T.bg,border:`1px solid ${isLive?'#1a8a4f55':T.line2}`,borderRadius:999,padding:'3px 8px',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5}}>{isLive&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:'#1a8a4f',display:'inline-block'}}/>}{isLive?'live · NHL':'demo data'}</span>
         <PriorityNav active={(!team&&!player&&!game)?route:null} onGo={go}/>
         {route!=='standings'&&<select value={season} onChange={e=>changeSeason(e.target.value)} aria-label="Season" title={isLive?'Pick a season \u2014 historical standings, stats, rosters & leaders':'Historical seasons load when live NHL feeds are connected'} className="ed-season" style={{fontFamily:MONO,fontSize:12,fontWeight:600,background:T.paper,border:`1px solid ${T.line2}`,borderRadius:9,padding:'7px 8px',color:T.ink,cursor:'pointer',flexShrink:0,maxWidth:130}}>
@@ -853,7 +925,7 @@ function App(){
           </select>
         </div>
         <button onClick={()=>{setMenu(false);setPal(true);}} style={{fontFamily:'inherit',textAlign:'left',marginTop:8,display:'flex',alignItems:'center',gap:10,background:T.bg,color:T.mut,border:`1px solid ${T.line2}`,fontWeight:600,fontSize:15,padding:'12px 14px',borderRadius:10,cursor:'pointer'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search</button>
-        <a href="The Hockey Lab - Landing.html" style={{textAlign:'left',marginTop:4,color:T.faint,fontFamily:MONO,fontSize:12,textDecoration:'none',padding:'8px 14px'}}>⌂ Lab home</a>
+        <button onClick={()=>{setMenu(false);go('highlights');}} style={{textAlign:'left',marginTop:4,color:T.faint,fontFamily:MONO,fontSize:12,background:'none',border:'none',cursor:'pointer',padding:'8px 14px'}}>⌂ Lab home</button>
       </div>
     </div>}
     <main id="main" tabIndex={-1} style={{maxWidth:1080,margin:'0 auto',padding:'30px 24px 50px',outline:'none'}}><EB key={'season-'+season} routeKey={route+'|'+(team||'')+'|'+(player&&player.id||'')+'|'+(game&&game.id||'')} onReset={()=>go('highlights')}>{content}</EB></main>
@@ -863,7 +935,7 @@ function App(){
         <div style={{display:'flex',flexWrap:'wrap',gap:'8px 20px',marginBottom:16}}>
           {window.E_FOOTER_LINKS.map(([k,label])=><button key={k} onClick={()=>go('legal/'+k)} className="el" style={{background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:MONO,fontSize:12,color:T.mut}}>{label}</button>)}
         </div>
-        <div style={{fontFamily:MONO,fontSize:11,color:T.faint,lineHeight:1.7}}>© 2026 The Hockey Lab · Independent project — not affiliated with the NHL · Data via public NHL APIs · news via Google News &amp; Reddit · all sources linked, not affiliated</div>
+        <div style={{fontFamily:MONO,fontSize:11,color:T.faint,lineHeight:1.7}}>© 2026 The Hockey Lab · Independent project — not affiliated with, endorsed by, or sponsored by the NHL · NHL, the NHL Shield, NHL EDGE, team names, logos &amp; marks are trademarks of the National Hockey League and its teams · Data via public NHL APIs · news via Google News &amp; Reddit · all sources linked, not affiliated</div>
       </div>
     </footer>
     <Palette open={pal} onClose={()=>setPal(false)} onTeam={openTeam} onPlayer={openPlayer} onGame={openGame}/>

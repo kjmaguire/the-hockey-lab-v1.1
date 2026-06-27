@@ -200,7 +200,8 @@ function _extends() { return _extends = Object.assign ? Object.assign.bind() : f
     g,
     gameTabs,
     activeGame,
-    onGame
+    onGame,
+    refreshKey
   }) {
     const [shots, setShots] = useState(() => BC.shotMap(g));
     const [source, setSource] = useState('sample');
@@ -225,6 +226,19 @@ function _extends() { return _extends = Object.assign ? Object.assign.bind() : f
         alive = false;
       };
     }, [g.id]);
+    useEffect(() => {
+      if (!refreshKey || g.st === 'pre' || !(window.NHL && NHL.shotMap)) return;
+      let alive = true;
+      NHL.shotMap(g.id).then(res => {
+        if (alive && res && res.shots && res.shots.length) {
+          setShots(res.shots);
+          setSource('live');
+        }
+      }).catch(() => {});
+      return () => {
+        alive = false;
+      };
+    }, [refreshKey]);
     const counts = useMemo(() => {
       const c = {
         goal: 0,

@@ -565,8 +565,12 @@ function PlayersPage({onPlayer}){
 function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
   const isG=p.type==='goalie';
   const exMock=uM(()=>D.playerExtras(p),[p.id]);
-  // overlay real career history / season totals / awards from player landing when live
-  const ex=window.E_useLive(exMock,()=>window.NHL.playerCard(p.id).then(c=>c?{...exMock,...c}:null),[p.id],'playerExtras:'+p.id);
+  // overlay real career history / season totals / awards from player landing when live.
+  // The prefetch seeds __E_LIVE with the RAW playerCard (history/career/awards/bio only),
+  // so always merge it back over exMock here — guarantees mock-only fields (honors, last5,
+  // teammates) survive whether the value came from the seed or the in-component fetch.
+  const exLive=window.E_useLive(exMock,()=>window.NHL.playerCard(p.id).then(c=>c?{...exMock,...c}:null),[p.id],'playerExtras:'+p.id);
+  const ex={...exMock,...exLive};
   const edgeMock=uM(()=>isG?D.goalieEdge(p):D.skaterEdge(p),[p.id]);
   // overlay real NHL EDGE tracking when deployed (partial → merged over mock)
   const edge=window.E_useLive(edgeMock,()=>(isG?window.NHL.edgeGoalieMapped(p.id):window.NHL.edgeSkaterMapped(p.id)).then(e=>e?{...edgeMock,...e}:null),[p.id],'playerEdge:'+p.id);
@@ -1627,8 +1631,14 @@ function DraftPage({onTeam}){
   const [liveMade,setLiveMade]=uS(null);
   React.useEffect(()=>{ if(!isUpcoming) return; let alive=true;
     const pull=()=>{ if(window.NHL&&window.BC&&window.BC.LIVE&&window.NHL.draftLiveTracker) window.NHL.draftLiveTracker().then(made=>{ if(alive&&made&&made.length) setLiveMade(made); }).catch(()=>{}); };
-    pull(); const iv = tab==='Live tracker' ? setInterval(pull,20000) : null;
-    return ()=>{ alive=false; if(iv) clearInterval(iv); };
+    pull();
+    // Real-time push: the LiveHub Durable Object polls the draft tracker once for everyone
+    // and pings us the instant a pick lands → refetch immediately (served from the warm
+    // edge cache the hub just populated). With the socket connected, every draft tab updates
+    // live; the interval below is a safety net and the sole path if the socket can't connect.
+    const unsub=(window.BC&&window.BC.LIVE&&window.LiveSocket&&window.LiveSocket.subscribe)?window.LiveSocket.subscribe('draft',pull):null;
+    const iv = tab==='Live tracker' ? setInterval(pull,20000) : null;
+    return ()=>{ alive=false; if(iv) clearInterval(iv); if(unsub) unsub(); };
   },[isUpcoming,tab,curDraftYear]);
   // CS rank lookup by name — for computing picked-vs-ranked differential
   const rankLookup=uM(()=>{const m={};(rankings||[]).forEach((r,i)=>{if(r.name)m[r.name]=i+1;});return m;},[rankings]);
@@ -1875,7 +1885,7 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs,booting}){
         {spotlight.slice(0,12).map(p=><div key={p.id} onClick={()=>onPlayer({id:p.id,name:p.name,team:p.team,pos:p.pos})} className="ec" style={{...card,flex:'0 0 auto',width:150,cursor:'pointer',overflow:'hidden'}}>
           <div style={{height:3,background:c2(p.team)}}/>
           <div style={{padding:'12px 13px'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>{p.headshot?<img src={p.headshot} alt="" width={34} height={34} loading="lazy" style={{borderRadius:99,objectFit:'cover',background:T.line}}/>:<Badge ab={p.team} size={30}/>}<span style={{fontFamily:MONO,fontSize:10.5,color:T.faint}}>{p.team}{p.num?` · #${p.num}`:''}</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}><Badge ab={p.team} size={30}/><span style={{fontFamily:MONO,fontSize:10.5,color:T.faint}}>{p.team}{p.num?` · #${p.num}`:''}</span></div>
             <div style={{fontWeight:700,fontSize:13.5,lineHeight:1.2,color:T.ink}}>{p.name}</div>
             <div style={{fontFamily:MONO,fontSize:10.5,color:T.mut,marginTop:3}}>{p.pos||'\u2014'}</div>
           </div>

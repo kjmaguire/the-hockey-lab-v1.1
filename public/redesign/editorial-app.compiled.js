@@ -1133,7 +1133,37 @@ function GameDetail({
   onTeam
 }) {
   const dMock = useMemo(() => detail(g), [g.id]);
-  const gl = window.E_useLive(null, () => g.st !== 'pre' && window.NHL && window.NHL.gameLive ? window.NHL.gameLive(g.id) : null, [g.id]);
+  const glBase = window.E_useLive(null, () => g.st !== 'pre' && window.NHL && window.NHL.gameLive ? window.NHL.gameLive(g.id) : null, [g.id]);
+  const [liveTick, setLiveTick] = useState(0);
+  useEffect(() => {
+    if (g.st !== 'live' || !(window.BC && window.BC.LIVE)) return;
+    let alive = true;
+    const bump = () => {
+      if (alive) setLiveTick(t => t + 1);
+    };
+    const unsub = window.LiveSocket && window.LiveSocket.subscribe ? window.LiveSocket.subscribe('scores', bump) : null;
+    const iv = setInterval(bump, 10000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+      if (unsub) unsub();
+    };
+  }, [g.id, g.st]);
+  const [glLive, setGlLive] = useState(null);
+  useEffect(() => {
+    if (g.st === 'pre' || !(window.BC && window.BC.LIVE) || !(window.NHL && window.NHL.gameLive)) return;
+    let alive = true;
+    Promise.resolve().then(() => window.NHL.gameLive(g.id)).then(r => {
+      if (alive && r) setGlLive({
+        id: g.id,
+        d: r
+      });
+    }).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [g.id, liveTick]);
+  const gl = glLive && glLive.id === g.id ? glLive.d : glBase;
   const d = gl ? {
     ...dMock,
     goals: gl.goals && gl.goals.length ? gl.goals : dMock.goals,
@@ -1155,7 +1185,22 @@ function GameDetail({
   } : dMock;
   const series = useMemo(() => BC.seasonSeries(g), [g.id]);
   const pbpMock = useMemo(() => BC.playByPlay(g), [g.id]);
-  const pbp = window.E_useLive(pbpMock, () => g.st !== 'pre' && window.NHL && window.NHL.gamePbp ? window.NHL.gamePbp(g.id) : null, [g.id]);
+  const pbpBase = window.E_useLive(pbpMock, () => g.st !== 'pre' && window.NHL && window.NHL.gamePbp ? window.NHL.gamePbp(g.id) : null, [g.id]);
+  const [pbpLive, setPbpLive] = useState(null);
+  useEffect(() => {
+    if (g.st === 'pre' || !(window.BC && window.BC.LIVE) || !(window.NHL && window.NHL.gamePbp)) return;
+    let alive = true;
+    Promise.resolve().then(() => window.NHL.gamePbp(g.id)).then(r => {
+      if (alive && r && r.length) setPbpLive({
+        id: g.id,
+        d: r
+      });
+    }).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [g.id, liveTick]);
+  const pbp = pbpLive && pbpLive.id === g.id && pbpLive.d.length ? pbpLive.d : pbpBase;
   const recapMock = useMemo(() => g.st.startsWith('final') ? BC.gameRecap(g) : '', [g.id]);
   const recap = window.E_useLive(recapMock, () => g.st.startsWith('final') && window.NHL && window.NHL.gameRecapMapped ? window.NHL.gameRecapMapped(g.id) : null, [g.id]);
   const bxMock = useMemo(() => BC.broadcasts(g), [g.id]);
@@ -1425,7 +1470,7 @@ function GameDetail({
       }
     }, gb.saves, "/", gb.sa, " SV \xB7 ", gb.svp, " \xB7 ", gb.ga, " GA \xB7 ", gb.toi, gb.dec !== '—' ? ` · ${gb.dec}` : '')));
   };
-  const liveView = React.createElement("div", {
+  const simLiveView = React.createElement("div", {
     style: {
       display: 'grid',
       gap: 16
@@ -1870,6 +1915,241 @@ function GameDetail({
       fontWeight: e.type === 'Goal' ? 600 : 400
     }
   }, e.desc)))));
+  const realLiveView = (() => {
+    const tA = gl && gl.teamA || {},
+      tH = gl && gl.teamH || {};
+    const bteam = box && box.team || {};
+    const bA = bteam[g.a] || {},
+      bH = bteam[g.h] || {};
+    const N = v => typeof v === 'number' ? v : v == null ? null : parseFloat(v);
+    const bars = [['Shots on goal', tA.sog, tH.sog], ['Hits', tA.hits, tH.hits], ['Blocked shots', tA.blk, tH.blk], ['Penalty minutes', tA.pim, tH.pim], ['Giveaways', bA.give, bH.give], ['Takeaways', bA.take, bH.take]].filter(r => r[1] != null || r[2] != null);
+    const texts = [['Faceoff %', tA.fo, tH.fo], ['Power play', tA.pp, tH.pp]].filter(r => r[1] != null || r[2] != null);
+    const plays = (pbp || []).slice(-9).reverse();
+    return React.createElement("div", {
+      style: {
+        display: 'grid',
+        gap: 16
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        fontFamily: MONO,
+        fontSize: 11,
+        color: live ? T.red : T.faint,
+        flexWrap: 'wrap'
+      }
+    }, live && React.createElement("span", {
+      className: "ed-pulse",
+      style: {
+        width: 6,
+        height: 6,
+        borderRadius: 99,
+        background: T.red,
+        display: 'inline-block'
+      }
+    }), React.createElement("span", {
+      style: {
+        letterSpacing: '.1em',
+        textTransform: 'uppercase'
+      }
+    }, live ? `Live \u00b7 ${g.per}` : final ? 'Final' : g.start), React.createElement("span", {
+      style: {
+        marginLeft: 'auto',
+        color: T.faint,
+        letterSpacing: '.06em',
+        textTransform: 'uppercase'
+      }
+    }, "Live game stats \\u00b7 boxscore & play-by-play"), React.createElement(ProvTag, {
+      kind: "live"
+    })), React.createElement("div", {
+      style: {
+        ...card,
+        padding: '16px 18px'
+      }
+    }, React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 15,
+        gap: 10
+      }
+    }, React.createElement("span", {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        fontWeight: 700,
+        color: col(g.a)
+      }
+    }, React.createElement(Badge, {
+      ab: g.a,
+      size: 20
+    }), g.a), React.createElement("span", {
+      style: ML
+    }, "Team stats"), React.createElement("span", {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        fontWeight: 700,
+        color: col(g.h)
+      }
+    }, g.h, React.createElement(Badge, {
+      ab: g.h,
+      size: 20
+    }))), React.createElement("div", {
+      style: {
+        display: 'grid',
+        gap: 12
+      }
+    }, bars.map(([label, av, hv]) => {
+      const an = N(av) || 0,
+        hn = N(hv) || 0,
+        tot = an + hn || 1,
+        aShare = Math.round(an / tot * 100);
+      return React.createElement("div", {
+        key: label
+      }, React.createElement("div", {
+        style: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 5,
+          fontFamily: MONO,
+          fontSize: 12.5
+        }
+      }, React.createElement("span", {
+        style: {
+          fontWeight: 700,
+          color: col(g.a)
+        }
+      }, av == null ? '\u2013' : av), React.createElement("span", {
+        style: {
+          ...ML,
+          fontSize: 9.5
+        }
+      }, label), React.createElement("span", {
+        style: {
+          fontWeight: 700,
+          color: col(g.h)
+        }
+      }, hv == null ? '\u2013' : hv)), React.createElement("div", {
+        style: {
+          display: 'flex',
+          height: 8,
+          borderRadius: 4,
+          overflow: 'hidden',
+          background: T.bg
+        }
+      }, React.createElement("div", {
+        style: {
+          width: `${aShare}%`,
+          background: col(g.a),
+          transition: 'width .6s ease'
+        }
+      }), React.createElement("div", {
+        style: {
+          flex: 1,
+          background: col(g.h)
+        }
+      })));
+    }), texts.map(([label, av, hv]) => React.createElement("div", {
+      key: label,
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        fontFamily: MONO,
+        fontSize: 12.5,
+        paddingTop: 8,
+        borderTop: `1px solid ${T.line}`
+      }
+    }, React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        color: col(g.a)
+      }
+    }, av == null ? '\u2013' : av), React.createElement("span", {
+      style: {
+        ...ML,
+        fontSize: 9.5
+      }
+    }, label), React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        color: col(g.h)
+      }
+    }, hv == null ? '\u2013' : hv))))), window.E_ShotMap && React.createElement(window.E_ShotMap, {
+      key: 'sm-' + g.id,
+      g: g,
+      refreshKey: liveTick
+    }), plays.length > 0 && React.createElement("div", {
+      style: {
+        ...card,
+        overflow: 'hidden'
+      }
+    }, React.createElement("div", {
+      style: {
+        padding: '13px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        borderBottom: `1px solid ${T.line}`
+      }
+    }, live && React.createElement("span", {
+      className: "ed-pulse",
+      style: {
+        width: 6,
+        height: 6,
+        borderRadius: 99,
+        background: T.red,
+        display: 'inline-block'
+      }
+    }), React.createElement("span", {
+      style: ML
+    }, live ? 'Latest plays' : 'Key plays'), React.createElement("span", {
+      style: {
+        marginLeft: 'auto'
+      }
+    }, React.createElement(ProvTag, {
+      kind: "live"
+    }))), plays.map((e, i) => React.createElement("div", {
+      key: i,
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 16px',
+        borderTop: i ? `1px solid ${T.line}` : 'none',
+        fontSize: 13
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: MONO,
+        fontSize: 11,
+        color: T.faint,
+        width: 62
+      }
+    }, e.per, " ", e.time), React.createElement("span", {
+      style: {
+        width: 7,
+        height: 7,
+        borderRadius: 99,
+        background: col(e.team),
+        flexShrink: 0
+      }
+    }), React.createElement("span", {
+      style: {
+        flex: 1,
+        color: e.type === 'Goal' ? T.ink : T.mut,
+        fontWeight: e.type === 'Goal' ? 600 : 400
+      }
+    }, e.desc)))));
+  })();
+  const liveView = gl && gl.teamA && (gl.teamA.sog != null || gl.teamA.hits != null) ? realLiveView : simLiveView;
   const lineupsView = lp && fSel ? React.createElement("div", {
     style: {
       display: 'grid',
@@ -4788,14 +5068,20 @@ function App() {
       fontWeight: 700,
       whiteSpace: 'nowrap'
     }
-  }, "The Hockey Lab")), React.createElement("a", {
-    href: "The Hockey Lab - Landing.html",
+  }, "The Hockey Lab")), React.createElement("button", {
+    onClick: () => go('highlights'),
     title: "Lab home",
     "aria-label": "Lab home",
     style: {
       color: T.faint,
       fontSize: 17,
-      textDecoration: 'none'
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      padding: 0,
+      fontFamily: 'inherit',
+      lineHeight: 1,
+      flexShrink: 0
     }
   }, "\u2302"), React.createElement("span", {
     className: "ed-demo",
@@ -5158,15 +5444,20 @@ function App() {
     r: "7"
   }), React.createElement("path", {
     d: "m21 21-4.3-4.3"
-  })), "Search"), React.createElement("a", {
-    href: "The Hockey Lab - Landing.html",
+  })), "Search"), React.createElement("button", {
+    onClick: () => {
+      setMenu(false);
+      go('highlights');
+    },
     style: {
       textAlign: 'left',
       marginTop: 4,
       color: T.faint,
       fontFamily: MONO,
       fontSize: 12,
-      textDecoration: 'none',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
       padding: '8px 14px'
     }
   }, "\u2302 Lab home"))), React.createElement("main", {
@@ -5245,7 +5536,7 @@ function App() {
       color: T.faint,
       lineHeight: 1.7
     }
-  }, "\xA9 2026 The Hockey Lab \xB7 Independent project \u2014 not affiliated with the NHL \xB7 Data via public NHL APIs \xB7 news via Google News & Reddit \xB7 all sources linked, not affiliated"))), React.createElement(Palette, {
+  }, "\xA9 2026 The Hockey Lab \xB7 Independent project \u2014 not affiliated with, endorsed by, or sponsored by the NHL \xB7 NHL, the NHL Shield, NHL EDGE, team names, logos & marks are trademarks of the National Hockey League and its teams \xB7 Data via public NHL APIs \xB7 news via Google News & Reddit \xB7 all sources linked, not affiliated"))), React.createElement(Palette, {
     open: pal,
     onClose: () => setPal(false),
     onTeam: openTeam,

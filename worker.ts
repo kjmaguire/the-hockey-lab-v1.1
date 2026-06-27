@@ -9,6 +9,7 @@
 
 import {
   proxyWeb,
+  refreshWeb,
   statsRequest,
   recordsRequest,
   scheduleRange,
@@ -39,6 +40,8 @@ interface Env {
   CACHE_KV?: any;
   // Optional Analytics Engine dataset for cache-tier / latency metrics (see wrangler.toml).
   nhl_proxy_metrics?: any;
+  // Optional Durable Object namespace powering real-time live updates (see wrangler.toml).
+  LIVE_HUB?: any;
 }
 
 // Content-Security-Policy for the HTML app. `strict` (Babel-free) is used when we
@@ -70,11 +73,56 @@ function withAppHeaders(resp: Response, strict = false): Response {
     h.set('content-security-policy', cspFor(strict));
     // RFC 8288 agent-discovery hints: advertise the public read API catalog + the docs.
     h.set('link', '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", </learn>; rel="service-doc"');
+    // 103 Early Hints: tell the browser to open connections to the cross-origin script + font
+    // hosts before the HTML finishes streaming. Cloudflare emits these Link headers as a 103
+    // response when Early Hints is enabled (dash → Speed → Optimization); harmless if it isn't.
+    // Preconnect only (version-free, always safe — no asset URL to go stale).
+    h.append('link', '<https://unpkg.com>; rel=preconnect; crossorigin');
+    h.append('link', '<https://fonts.gstatic.com>; rel=preconnect; crossorigin');
+    h.append('link', '<https://fonts.googleapis.com>; rel=preconnect');
   }
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
 }
 
-// --- /api/nhl/* router (ported from functions/api/nhl/[[path]].ts) ----------
+// SHA-256 hex digest (Web Crypto) — content-integrity field for the agent-skills index.
+async function sha256hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Agent skill: how to query the public, read-only NHL data API. Served as text/markdown and
+// referenced (with its sha256) from /.well-known/agent-skills/index.json.
+function skillNhlData(origin: string): string {
+  return `# NHL data — The Hockey Lab API
+
+Query live and historical NHL data through The Hockey Lab's public proxy of the official
+NHL APIs. **Read-only, no authentication, JSON responses.** Soft rate limit ~120 requests/
+minute per IP. Base URL: \`${origin}/api/nhl/\`. Use GET only.
+
+## Common endpoints
+- \`GET /api/nhl/standings\` — current league standings. Past: \`/standings/{YYYY-MM-DD}\`.
+- \`GET /api/nhl/scoreboard?date=YYYY-MM-DD\` — that day's games with live score, state and shots.
+- \`GET /api/nhl/schedule?date=YYYY-MM-DD\` — schedule for a date.
+- \`GET /api/nhl/skater-leaders?season=YYYYYYYY\` and \`/goalie-leaders?season=YYYYYYYY\` — stat leaders (season id e.g. 20252026).
+- \`GET /api/nhl/roster/{TEAM}\`, \`/club-stats/{TEAM}\`, \`/team-stats/{TEAM}\`, \`/prospects/{TEAM}\` — per-club data (TEAM = tricode, e.g. TOR, BOS, COL).
+- \`GET /api/nhl/player/{playerId}/landing\` and \`/player/{playerId}/game-log\` — player profile and game log.
+- \`GET /api/nhl/gamecenter-landing/{gameId}\`, \`/gamecenter/{gameId}/boxscore\`, \`/gamecenter/{gameId}/play-by-play\` — per-game detail.
+- \`GET /api/nhl/draft/rankings\` (Central Scouting; \`?category=2|3|4\` for intl skaters / NA goalies / intl goalies), \`/draft/picks/now\`, \`/draft/tracker\` — draft board & live tracker.
+- \`GET /api/nhl/records/...\` — all-time records (records.nhl.com passthrough).
+- \`GET /api/nhl/edge/...\` — NHL EDGE player/team tracking (passthrough).
+- \`GET /api/nhl/stats/...\` — NHL stats API passthrough.
+
+## Discovery & docs
+- API catalog (RFC 9727): \`${origin}/.well-known/api-catalog\`
+- Human docs: \`${origin}/learn\`
+- API health: \`${origin}/api-health.html\`
+
+## Notes
+- The Hockey Lab is an independent project, not affiliated with or endorsed by the NHL.
+- NHL, team names, logos and marks are trademarks of the National Hockey League and its teams.
+- Data is cached at the edge; live game and scoreboard endpoints refresh within seconds.
+`;
+}
 async function handleNhl(url: URL): Promise<Response> {
   const segments = url.pathname.replace(/^\/api\/nhl\/?/, '').split('/').filter(Boolean);
   const q = (key: string, fallback?: string) => url.searchParams.get(key) ?? fallback;
@@ -418,6 +466,27 @@ export default {
       return new Response('Not found.', { status: 403, headers: { 'cache-control': 'no-store', ...SECURITY_HEADERS } });
     }
 
+    // Real-time live updates → LiveHub Durable Object (WebSocket).
+    // One DO instance per topic ("scores" / "draft") polls the NHL upstream ONCE on behalf
+    // of every connected client and pushes a tiny "changed" signal the instant data moves —
+    // so the board/draft tracker updates in ~1s instead of each browser polling every 20s.
+    // Pure enhancement: clients that can't open the socket keep their existing polling.
+    if (url.pathname === '/api/live') {
+      if (request.headers.get('Upgrade') !== 'websocket') {
+        return new Response('Expected a WebSocket upgrade.', { status: 426, headers: { 'cache-control': 'no-store', ...SECURITY_HEADERS } });
+      }
+      const allowedWs = (env.ALLOWED_HOSTS ? env.ALLOWED_HOSTS.split(',') : [])
+        .map((s) => s.trim()).filter(Boolean).concat(url.host);
+      if (!isRefererAllowed(request.headers.get('origin'), request.headers.get('referer'), allowedWs)) {
+        return new Response('Forbidden.', { status: 403, headers: { 'cache-control': 'no-store' } });
+      }
+      if (!env.LIVE_HUB) return new Response('Live updates unavailable.', { status: 503 });
+      const topic = url.searchParams.get('topic') || 'scores';
+      if (!LIVE_TOPICS[topic]) return new Response('Unknown topic.', { status: 400 });
+      const stub = env.LIVE_HUB.get(env.LIVE_HUB.idFromName(topic));
+      return stub.fetch(request);
+    }
+
     // API routes → live NHL proxy
     if (url.pathname === '/api/nhl' || url.pathname.startsWith('/api/nhl/')) {
       if (request.method !== 'GET') return errorJson('Method not allowed.', 405);
@@ -511,8 +580,27 @@ export default {
       return new Response(body, { headers: { 'content-type': 'application/linkset+json', 'cache-control': 'public, max-age=86400', ...SECURITY_HEADERS } });
     }
 
-    if (url.pathname === '/robots.txt') {
-      const body =
+    // Agent Skills Discovery (RFC v0.2.0): a machine-readable index of what an agent can do
+    // with this site. The only "skill" is querying the public read-only NHL data API; the
+    // index points at a SKILL.md describing it, with a content digest for integrity.
+    if (url.pathname === '/.well-known/agent-skills/index.json') {
+      const md = skillNhlData(url.origin);
+      const digest = await sha256hex(md);
+      const body = JSON.stringify({
+        $schema: 'https://agentskills.io/schema/v0.2.0/index.json',
+        skills: [{
+          name: 'nhl-data',
+          type: 'text/markdown',
+          description: 'Query live and historical NHL data — scores, standings, schedules, team & player stats, NHL EDGE tracking, playoffs, the draft board and the all-time record book — via The Hockey Lab public, read-only JSON API.',
+          url: `${url.origin}/.well-known/agent-skills/nhl-data/SKILL.md`,
+          sha256: digest,
+        }],
+      }, null, 2);
+      return new Response(body, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=3600', ...SECURITY_HEADERS } });
+    }
+    if (url.pathname === '/.well-known/agent-skills/nhl-data/SKILL.md') {
+      return new Response(skillNhlData(url.origin), { headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'public, max-age=3600', ...SECURITY_HEADERS } });
+    }
         `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /mappers-test.html\nDisallow: /api-health.html\nDisallow: /live-qa.html\nDisallow: /dark-feeds.html\n\nSitemap: ${url.origin}/sitemap.xml\n`;
       return new Response(body, {
         headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400', ...SECURITY_HEADERS },
@@ -544,12 +632,18 @@ export default {
     // no prod build is present, so this is always safe.
     let resp: Response | undefined;
     let servedProd = false;
-    // NOTE: this project is maintained WITHOUT a local build step, so a precompiled
-    // app.prod.html bundle goes stale the moment any .jsx changes. We therefore serve
-    // the runtime-Babel build (index.html / app.html) as the source of truth — always
-    // current, at the cost of an in-browser transpile on first paint. app.prod.html
-    // stays on disk for anyone who later runs `npm run build`; it's simply not preferred
-    // here. (servedProd stays false → the looser CSP that allows in-browser Babel.)
+    // App entry points (/, /index.html, /app, /app.html) → prefer the precompiled, Babel-free
+    // app.prod.html: production React + pre-transpiled bundles mean NO ~3MB @babel/standalone
+    // download and NO in-browser JSX transpile on first paint — a large LCP / Core Web Vitals
+    // win and a much faster first experience — and it earns the stricter CSP (no 'unsafe-eval').
+    // The committed prod bundle is rebuilt on every .jsx change (CLAUDE.md / build.mjs). Falls
+    // back to the runtime-Babel app.html if app.prod.html is ever missing, so the app always loads.
+    const isAppEntry = url.pathname === '/' || url.pathname === '/index.html'
+      || url.pathname === '/app' || url.pathname === '/app.html';
+    if (isAppEntry) {
+      const prodResp = await env.ASSETS.fetch(new Request(new URL('/app.prod.html' + url.search, url), request));
+      if (prodResp.status === 200) { resp = prodResp; servedProd = true; }
+    }
     if (!resp) {
       resp = await env.ASSETS.fetch(request);
       // Clean/extensionless route that didn't match (e.g. /app) → retry as .html
@@ -559,6 +653,25 @@ export default {
         const htmlReq = new Request(new URL(path + '.html' + url.search, url), request);
         const htmlResp = await env.ASSETS.fetch(htmlReq);
         if (htmlResp.status !== 404) resp = htmlResp;
+      }
+    }
+
+    // Browser-cache versioned static bundles aggressively. The app's JS bundles are loaded
+    // with a ?v=<build> cache-buster, so their URL changes whenever content changes — which
+    // makes them safe to mark `immutable` for a year. Result: repeat visits and in-app
+    // navigations serve ~600KB of JS straight from the browser cache (zero revalidation),
+    // and the edge holds them too. Non-versioned media (favicons, brand art) gets a modest
+    // TTL. HTML is deliberately NOT long-cached — it must stay fresh to reference the newest
+    // ?v=, and its own headers/canonical are set below.
+    {
+      const ct0 = resp.headers.get('content-type') || '';
+      if (resp.ok && !ct0.includes('text/html')) {
+        const versioned = /[?&]v=/.test(url.search);
+        const media = /\.(js|mjs|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|avif|ico)$/i.test(url.pathname);
+        if (versioned || media) {
+          resp = new Response(resp.body, resp);
+          resp.headers.set('cache-control', versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=604800');
+        }
       }
     }
 
@@ -579,6 +692,21 @@ export default {
             e.append(`<meta property="og:url" content="${canonical}"/>`, { html: true });
           },
         })
+        // Absolutize relative social-card images so Open Graph / Twitter previews resolve on
+        // every host (crawlers don't reliably resolve relative og:image/twitter:image).
+        // HTMLRewriter has no selector-lists, so register each selector separately.
+        .on('meta[property="og:image"]', {
+          element(e) {
+            const c = e.getAttribute('content');
+            if (c && !/^https?:\/\//i.test(c)) e.setAttribute('content', `${url.origin}/${c.replace(/^\//, '')}`);
+          },
+        })
+        .on('meta[name="twitter:image"]', {
+          element(e) {
+            const c = e.getAttribute('content');
+            if (c && !/^https?:\/\//i.test(c)) e.setAttribute('content', `${url.origin}/${c.replace(/^\//, '')}`);
+          },
+        })
         .transform(resp);
     }
 
@@ -589,13 +717,132 @@ export default {
   // schedule so the per-colo cache, D1, and global KV are already warm when a real user
   // arrives — they hit cached real data instead of triggering a cold upstream fetch (or
   // falling back to demo). Each fetchUpstream writes Cache + D1 + KV as configured.
-  async scheduled(_event: any, env: Env, ctx: any): Promise<void> {
+  //
+  // Tiered by volatility (the Workers Paid plan's 1-minute cron makes this affordable):
+  //   • LIVE set    → re-warmed EVERY minute (scoreboard 30s TTL + the live draft tracker
+  //                   and CS board, which on draft night every client polls every ~20s).
+  //   • HOT set     → re-warmed every ~5 min (5-min-TTL reference data + the intl draft
+  //                   categories and post-lottery order).
+  //   • ROSTERS     → re-warmed every ~15 min (all 32 clubs) so trades / call-ups / line
+  //                   changes propagate league-wide without anyone forcing a refresh.
+  //   • SLOW set    → re-warmed ~hourly (league team stats — standings-derived, drifts slowly).
+  // Per-player EDGE boards are deliberately NOT cron-warmed: that's a heavy hundreds-of-fetch
+  // fan-out that only changes after games, so the 24h post-game cache covers it far cheaper.
+  async scheduled(event: any, env: Env, ctx: any): Promise<void> {
     setCacheDb(env.DB);
     setCacheKv(env.CACHE_KV);
     setMetrics(env.nhl_proxy_metrics);
-    const HOT = ['standings', 'scoreboard/now', 'skater-leaders', 'goalie-leaders', 'spotlight', 'partner-odds/US'];
-    const warm = Promise.all(HOT.map((p) =>
+    const warmPaths = (paths: string[]) => Promise.all(paths.map((p) =>
       handleNhl(new URL('https://warm.thehockeylab.invalid/api/nhl/' + p)).catch(() => undefined)));
+
+    // Live-critical — re-warm every minute.
+    const LIVE = ['scoreboard/now', 'draft/tracker', 'draft/rankings'];
+    // Broader hot set — every ~5 min.
+    const HOT = ['standings', 'skater-leaders', 'goalie-leaders', 'spotlight', 'partner-odds/US',
+      'draft/rankings?category=2', 'draft/rankings?category=3', 'draft/rankings?category=4', 'draft/picks/now'];
+    // Every club roster — every ~15 min (catches trades / call-ups / scratches).
+    const ROSTERS = Object.keys(SOCIAL_TEAM_NAME).map((ab) => 'roster/' + ab);
+
+    const minute = new Date(event && event.scheduledTime ? event.scheduledTime : Date.now()).getUTCMinutes();
+    const jobs = [...LIVE];
+    if (minute % 5 === 0) jobs.push(...HOT);
+    if (minute % 15 === 0) jobs.push(...ROSTERS);
+    const warm = warmPaths(jobs);
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(warm); else await warm;
   },
 };
+
+// ---------------------------------------------------------------------------
+// LiveHub — real-time fan-out Durable Object.
+//
+// One instance per topic. While ≥1 client holds a WebSocket, the instance polls
+// the topic's NHL endpoint on a timer (via the same cached proxy), and the moment
+// the payload changes it pushes a tiny {type:'change', rev} to every socket. The
+// payload itself is NOT sent — clients refetch through their normal NHL.* path,
+// which is served instantly from the edge cache this poll just warmed. So N
+// clients = 1 upstream poller, and updates arrive in ~1s instead of on a 20s timer.
+//
+// Uses the WebSocket Hibernation API (state.acceptWebSocket / getWebSockets), so
+// idle connections cost no compute — they're parked by the runtime and woken by
+// the alarm. The poll loop self-cancels when the last client disconnects.
+// ---------------------------------------------------------------------------
+const LIVE_TOPICS: Record<string, { path: () => string; interval: number }> = {
+  // Raw api-web sub-paths — polled FRESH (cache-bypassed) by the DO so a pick/goal surfaces
+  // in ~NHL-latency + the poll interval, independent of the edge cache window.
+  draft: { path: () => 'draft-tracker/picks/now', interval: 5000 },
+  scores: { path: () => `scoreboard?date=${new Date().toISOString().slice(0, 10)}`, interval: 4000 },
+};
+
+// FNV-1a 32-bit — cheap, stable content hash to detect "did the payload change".
+function fnv1a(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
+  return h >>> 0;
+}
+
+export class LiveHub {
+  state: any;
+  env: Env;
+  constructor(state: any, env: Env) {
+    this.state = state;
+    this.env = env;
+    // Wire the cache layers so the DO's polls populate the same Cache/D1/KV the
+    // client reads from (kept inside blockConcurrencyWhile so it's set before any request).
+    state.blockConcurrencyWhile(async () => {
+      setCacheDb(env.DB); setCacheKv(env.CACHE_KV); setMetrics(env.nhl_proxy_metrics);
+    });
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const topic = url.searchParams.get('topic') || 'scores';
+    if (!LIVE_TOPICS[topic]) return new Response('Unknown topic.', { status: 400 });
+    if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected WebSocket.', { status: 426 });
+
+    await this.state.storage.put('topic', topic);
+    const pair = new WebSocketPair();
+    const client = (pair as any)[0];
+    const server = (pair as any)[1];
+    // Hibernatable accept — tag by topic so getWebSockets(topic) is exact.
+    this.state.acceptWebSocket(server, [topic]);
+    // Greet with the current revision so a fresh/reconnecting client refetches once now.
+    const rev = (await this.state.storage.get('rev')) || 0;
+    try { server.send(JSON.stringify({ type: 'hello', topic, rev })); } catch { /* ignore */ }
+    // Make sure the poll loop is running.
+    const pending = await this.state.storage.getAlarm();
+    if (pending == null) await this.state.storage.setAlarm(Date.now() + 50);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // Clients send "ping" heartbeats to keep intermediaries from idling the socket.
+  async webSocketMessage(ws: any, msg: any) {
+    if (msg === 'ping') { try { ws.send('pong'); } catch { /* ignore */ } }
+  }
+  async webSocketClose() { /* alarm() self-cancels when getWebSockets() is empty */ }
+  async webSocketError() { /* same */ }
+
+  async alarm() {
+    setCacheDb(this.env.DB); setCacheKv(this.env.CACHE_KV); setMetrics(this.env.nhl_proxy_metrics);
+    const topic = (await this.state.storage.get('topic')) as string || 'scores';
+    const cfg = LIVE_TOPICS[topic] || LIVE_TOPICS.scores;
+    if (!this.state.getWebSockets(topic).length) return; // no listeners → let the loop stop
+
+    try {
+      // FRESH upstream fetch (skips the cache read so we see the change immediately); it also
+      // repopulates the edge cache, so the client's refetch after our push is an instant hit.
+      const body = await refreshWeb(cfg.path());
+      const hash = fnv1a(body);
+      const prev = await this.state.storage.get('hash');
+      if (hash !== prev) {
+        const rev = (((await this.state.storage.get('rev')) as number) || 0) + 1;
+        await this.state.storage.put('hash', hash);
+        await this.state.storage.put('rev', rev);
+        const note = JSON.stringify({ type: 'change', topic, rev });
+        for (const s of this.state.getWebSockets(topic)) { try { s.send(note); } catch { /* dropped */ } }
+      }
+    } catch { /* upstream blip — retry next tick */ }
+
+    // Reschedule while listeners remain.
+    if (this.state.getWebSockets(topic).length) await this.state.storage.setAlarm(Date.now() + cfg.interval);
+  }
+}
