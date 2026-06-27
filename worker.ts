@@ -601,6 +601,9 @@ export default {
     if (url.pathname === '/.well-known/agent-skills/nhl-data/SKILL.md') {
       return new Response(skillNhlData(url.origin), { headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'public, max-age=3600', ...SECURITY_HEADERS } });
     }
+
+    if (url.pathname === '/robots.txt') {
+      const body =
         `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /mappers-test.html\nDisallow: /api-health.html\nDisallow: /live-qa.html\nDisallow: /dark-feeds.html\n\nSitemap: ${url.origin}/sitemap.xml\n`;
       return new Response(body, {
         headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400', ...SECURITY_HEADERS },
