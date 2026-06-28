@@ -260,6 +260,7 @@ function Pill({
   return React.createElement("button", _extends({}, p, {
     style: {
       fontFamily: 'inherit',
+      whiteSpace: 'nowrap',
       padding: '6px 13px',
       borderRadius: 999,
       border: `1px solid ${on ? T.invBg : T.line2}`,
@@ -473,7 +474,8 @@ function StandingsPage({
     style: {
       fontFamily: MONO,
       fontSize: 11.5,
-      color: T.mut
+      color: T.mut,
+      whiteSpace: 'nowrap'
     }
   }, t.w, "-", t.l, "-", t.otl), React.createElement("span", {
     style: {
@@ -605,6 +607,7 @@ function StandingsPage({
       overflow: 'hidden'
     }
   }, React.createElement("div", {
+    className: "ed-scrollx ed-stickcol2",
     style: {
       overflowX: 'auto'
     }
@@ -875,7 +878,8 @@ function TeamsPage({
   }, React.createElement("span", null, "#", D.rankOf[t.ab], " \xB7 ", t.div), React.createElement("span", {
     style: {
       color: T.ink,
-      fontWeight: 500
+      fontWeight: 500,
+      whiteSpace: 'nowrap'
     }
   }, t.w, "-", t.l, "-", t.otl)))))));
 }
@@ -2175,7 +2179,8 @@ function TeamDetailPage({
         style: {
           fontFamily: MONO,
           fontSize: 11,
-          color: T.faint
+          color: T.faint,
+          whiteSpace: 'nowrap'
         }
       }, D.standBy(tm).w, "-", D.standBy(tm).l, "-", D.standBy(tm).otl)))));
     };
@@ -3153,6 +3158,7 @@ function PlayersPage({
       color: T.faint
     }
   }, "tap a column to sort \xB7 tap a row for detail")), React.createElement("div", {
+    className: "ed-scrollx ed-stickcol2",
     style: {
       overflowX: 'auto'
     }
@@ -3715,6 +3721,7 @@ function PlayerDetailPage({
       borderBottom: `1px solid ${T.line}`
     }
   }, "NHL Edge \xB7 by game"), React.createElement("div", {
+    className: "ed-scrollx ed-stickcol",
     style: {
       overflowX: 'auto'
     }
@@ -3912,6 +3919,7 @@ function PlayerDetailPage({
   }, v))))), React.createElement(Sec, {
     k: "Season history"
   }, React.createElement("div", {
+    className: "ed-scrollx ed-stickcol",
     style: {
       overflowX: 'auto'
     }
@@ -4263,6 +4271,7 @@ function StatsTable({
       overflow: 'hidden'
     }
   }, React.createElement("div", {
+    className: "ed-scrollx",
     style: {
       overflowX: 'auto'
     }
@@ -6816,6 +6825,7 @@ function GameBox({
       color: T.ink
     }
   }, ct(ab), " ", nk(ab))), React.createElement("div", {
+    className: "ed-scrollx ed-stickcol",
     style: {
       overflowX: 'auto'
     }
@@ -6992,6 +7002,7 @@ function GameBox({
     score: gd.ls,
     win: !hw
   })), React.createElement("div", {
+    className: "ed-scrollx ed-stickcol",
     style: {
       overflowX: 'auto'
     }
@@ -7479,6 +7490,7 @@ function SeriesDetail({
       color: T.ink
     }
   }, ct(ab), " ", nk(ab))), React.createElement("div", {
+    className: "ed-scrollx ed-stickcol",
     style: {
       overflowX: 'auto'
     }
@@ -7823,6 +7835,7 @@ function SeriesDetail({
     b: pdo(to, th),
     fmt: v => v.toFixed(1)
   }), React.createElement(Sub, null, "Goals by period"), React.createElement("div", {
+    className: "ed-scrollx ed-stickcol",
     style: {
       overflowX: 'auto',
       marginTop: 6
@@ -8442,6 +8455,7 @@ function PlayoffsPage({
       onMouseLeave: onUp,
       style: {
         overflowX: 'auto',
+        overflowY: 'hidden',
         cursor: 'grab',
         WebkitOverflowScrolling: 'touch'
       }
@@ -9866,6 +9880,7 @@ function DraftPage({
     on: rankCat === c,
     onClick: () => setRankCat(c)
   }, c)))), React.createElement("div", {
+    className: "ed-scrollx",
     style: {
       overflowX: 'auto'
     }
@@ -10279,6 +10294,7 @@ function DraftPage({
     on: doView === k,
     onClick: () => setDoView(k)
   }, l)))), React.createElement("div", {
+    className: "ed-scrollx",
     style: {
       overflowX: 'auto'
     }
@@ -10563,6 +10579,7 @@ function DraftPage({
         color: T.faint
       }
     }, list.length ? `picks ${list[0].pick}–${list[list.length - 1].pick}` : '')), React.createElement("div", {
+      className: "ed-scrollx",
       style: {
         overflowX: 'auto'
       }
@@ -10948,6 +10965,7 @@ function HighlightsPage({
       display: 'flex',
       gap: 10,
       overflowX: 'auto',
+      overflowY: 'hidden',
       paddingBottom: 4,
       WebkitOverflowScrolling: 'touch'
     }
@@ -11142,11 +11160,15 @@ function HighlightsPage({
       flexWrap: 'wrap'
     }
   }, React.createElement("span", {
-    style: ML
+    style: {
+      ...ML,
+      whiteSpace: 'nowrap'
+    }
   }, railView === 'Tonight' ? today.length ? `${today.length} games tonight` : 'No games tonight' : railView), React.createElement("div", {
     style: {
       display: 'flex',
-      gap: 6
+      gap: 6,
+      flexShrink: 0
     }
   }, ['Recent', 'Tonight', 'Upcoming'].map(v => React.createElement(Pill, {
     key: v,

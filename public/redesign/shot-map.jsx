@@ -463,11 +463,11 @@
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', gap: 4, padding: 3, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 9 }}>
             {[['live', 'Live positions'], ['shots', 'Shot locations']].map(([k, lab]) => (
-              <button key={k} onClick={() => setMode(k)} style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '.03em', textTransform: 'uppercase', padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', background: mode === k ? T.invBg : 'transparent', color: mode === k ? T.invFg : T.mut }}>{lab}</button>
+              <button key={k} onClick={() => setMode(k)} style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '.03em', textTransform: 'uppercase', whiteSpace: 'nowrap', padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', background: mode === k ? T.invBg : 'transparent', color: mode === k ? T.invFg : T.mut }}>{lab}</button>
             ))}
           </span>
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            {mode === 'live' && <button onClick={() => setShowShots((v) => !v)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 7, border: `1px solid ${showShots ? T.invBg : T.line2}`, background: showShots ? T.invBg : 'transparent', color: showShots ? T.invFg : T.mut, cursor: 'pointer' }}>{showShots ? '✓ ' : ''}Show shots</button>}
+            {mode === 'live' && <button onClick={() => setShowShots((v) => !v)} style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase', whiteSpace: 'nowrap', padding: '4px 9px', borderRadius: 7, border: `1px solid ${showShots ? T.invBg : T.line2}`, background: showShots ? T.invBg : 'transparent', color: showShots ? T.invFg : T.mut, cursor: 'pointer' }}>{showShots ? '✓ ' : ''}Show shots</button>}
             <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5, color: '#1a8a4f', border: `1px solid ${T.line2}`, borderRadius: 5, padding: '2px 6px' }}><span style={{ width: 5, height: 5, borderRadius: 99, background: '#1a8a4f' }} />{mode === 'shots' ? 'live shots' : 'live'}</span>
             {mode === 'live' && <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: T.faint, border: `1px solid ${T.line2}`, borderRadius: 5, padding: '2px 6px' }}>simulated positions</span>}
           </span>

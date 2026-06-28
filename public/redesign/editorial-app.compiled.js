@@ -1396,6 +1396,7 @@ function GameDetail({
         fontWeight: 600
       }
     }, city(ab), " ", nick(ab))), React.createElement("div", {
+      className: "ed-scrollx ed-stickcol",
       style: {
         overflowX: 'auto'
       }
@@ -2842,6 +2843,7 @@ function GameDetail({
       borderBottom: `1px solid ${T.line}`
     }
   }, "Scoring by period"), React.createElement("div", {
+    className: "ed-scrollx ed-stickcol",
     style: {
       overflowX: 'auto'
     }
@@ -3138,6 +3140,7 @@ function GameDetail({
       display: 'flex',
       gap: 12,
       overflowX: 'auto',
+      overflowY: 'hidden',
       padding: '14px 16px'
     }
   }, replays.map(go => {
@@ -3635,6 +3638,7 @@ function GameDetail({
       whiteSpace: 'nowrap'
     }
   }, g._venue || d.venue)))))), (g.st !== 'pre' || true) && React.createElement("div", {
+    className: "ed-broadcast",
     style: {
       ...card,
       padding: '11px 18px',
@@ -3696,6 +3700,7 @@ function GameDetail({
       fontSize: 11.5,
       letterSpacing: '.04em',
       textTransform: 'uppercase',
+      whiteSpace: 'nowrap',
       padding: '7px 16px',
       borderRadius: 9,
       border: 'none',
@@ -3767,6 +3772,7 @@ function NationalTV() {
       display: 'flex',
       gap: 10,
       overflowX: 'auto',
+      overflowY: 'hidden',
       padding: '12px 16px'
     }
   }, tv.map((g, i) => React.createElement("div", {

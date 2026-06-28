@@ -316,7 +316,7 @@ function GameDetail({g,onBack,onTeam}){
   </div>);
   const Lines=({side,ab})=>{const rows=(box&&box.skaters&&box.skaters[ab])||d[side].lines;const gb=box&&box.goalies&&box.goalies[ab];return (<div style={{...card,overflow:'hidden'}}>
     <div style={{display:'flex',alignItems:'center',gap:9,padding:'12px 16px',borderBottom:`1px solid ${T.line}`}}><Badge ab={ab} size={24}/><span style={{fontWeight:600}}>{city(ab)} {nick(ab)}</span></div>
-    <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:360,borderCollapse:'collapse',fontSize:13}}><thead><tr style={ML}>{['Skater','G','A','P','SOG','+/-','HIT','BLK','TOI'].map((h,i)=><th key={h} style={{padding:'8px 11px',textAlign:i?'center':'left',fontWeight:600,...ML,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+    <div className="ed-scrollx ed-stickcol" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:360,borderCollapse:'collapse',fontSize:13}}><thead><tr style={ML}>{['Skater','G','A','P','SOG','+/-','HIT','BLK','TOI'].map((h,i)=><th key={h} style={{padding:'8px 11px',textAlign:i?'center':'left',fontWeight:600,...ML,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
     <tbody>{rows.slice(0,8).map((p,i)=>(<tr key={i} style={{borderTop:`1px solid ${T.line}`}}>
       <td style={{padding:'7px 11px',color:T.ink,whiteSpace:'nowrap'}}>{p.name} <span style={{color:T.faint}}>{p.pos}</span></td>
       {[['g',p.g],['a',p.a],['p',p.p],['sog',p.sog],['pm',p.pm==null?'–':(p.pm>0?'+':'')+p.pm],['hits',p.hits==null?'–':p.hits],['blk',p.blk==null?'–':p.blk],['toi',p.toi]].map(([k,v])=><td key={k} style={{padding:'7px 11px',textAlign:'center',fontFamily:k==='toi'?MONO:'inherit',fontWeight:k==='p'?700:400,color:k==='p'?T.ink:T.mut}}>{v}</td>)}</tr>))}</tbody></table></div>
@@ -521,7 +521,7 @@ function GameDetail({g,onBack,onTeam}){
     </div>}
     {box&&box.line&&box.line.away&&box.periods&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'12px 16px',...ML,borderBottom:`1px solid ${T.line}`}}>Scoring by period</div>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:360,borderCollapse:'collapse',fontSize:13}}>
+      <div className="ed-scrollx ed-stickcol" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:360,borderCollapse:'collapse',fontSize:13}}>
         <thead><tr style={ML}>{['Team',...box.periods,'Total'].map((h,i)=><th key={i} style={{padding:'9px 14px',textAlign:i?'center':'left',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
         <tbody>{[['away',g.a],['home',g.h]].map(([sd,ab])=>{const ln=box.line[sd];return <tr key={ab} style={{borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'9px 14px'}}><span style={{display:'inline-flex',alignItems:'center',gap:8}}><Badge ab={ab} size={20}/><span style={{fontWeight:600,color:T.ink}}>{ab}</span></span></td>
@@ -551,7 +551,7 @@ function GameDetail({g,onBack,onTeam}){
     </div>}
     {replays.length>0&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}><span>Goal replays</span><span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>tap to replay the puck path</span></div>
-      <div style={{display:'flex',gap:12,overflowX:'auto',padding:'14px 16px'}}>
+      <div style={{display:'flex',gap:12,overflowX:'auto',overflowY:'hidden',padding:'14px 16px'}}>
         {replays.map(go=>{const on=replayId===go.id;return <div key={go.id} onClick={()=>{setReplayId(go.id);setReplayKey(k=>k+1);}} style={{flexShrink:0,width:150,border:`1.5px solid ${on?col(go.team):T.line}`,borderRadius:11,overflow:'hidden',cursor:'pointer'}} className="ec">
           <div style={{height:84,background:`linear-gradient(135deg, ${col(go.team)}, ${col(go.team)}aa)`,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{width:0,height:0,borderLeft:'16px solid #fff',borderTop:'10px solid transparent',borderBottom:'10px solid transparent',marginLeft:4}}/></div>
           <div style={{padding:'9px 11px'}}><div style={{fontSize:12.5,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{go.scorer}</div><div style={{fontFamily:MONO,fontSize:10.5,color:T.mut}}>{go.per} {go.time} · {go.str}</div></div>
@@ -604,7 +604,7 @@ function GameDetail({g,onBack,onTeam}){
         </React.Fragment>))}
       </div>
     </div>
-    {(g.st!=='pre'||true)&&<div style={{...card,padding:'11px 18px',marginBottom:16,display:'flex',flexWrap:'wrap',gap:'8px 22px',fontFamily:MONO,fontSize:12,color:T.mut,alignItems:'center'}}>
+    {(g.st!=='pre'||true)&&<div className="ed-broadcast" style={{...card,padding:'11px 18px',marginBottom:16,display:'flex',flexWrap:'wrap',gap:'8px 22px',fontFamily:MONO,fontSize:12,color:T.mut,alignItems:'center'}}>
       <span style={{...ML}}>Broadcast</span>
       {(()=>{const tv=(g._tv&&g._tv.length)?g._tv:bx.tv;return tv.length>0&&<span>TV <span style={{color:T.ink}}>{tv.join(' · ')}</span></span>;})()}
       {bx.stream.length>0&&<span>Stream <span style={{color:T.ink}}>{bx.stream.join(' · ')}</span></span>}
@@ -613,7 +613,7 @@ function GameDetail({g,onBack,onTeam}){
       {bx.odds&&<span style={{marginLeft:'auto'}}>Odds <span style={{color:T.ink}}>{bx.odds}</span></span>}
     </div>}
     {tabs.length>1&&<div style={{display:'inline-flex',gap:4,padding:4,background:T.bg,border:`1px solid ${T.line}`,borderRadius:12,marginBottom:18}}>
-      {tabs.map(t=><button key={t} onClick={()=>setTab(t)} style={{fontFamily:MONO,fontSize:11.5,letterSpacing:'.04em',textTransform:'uppercase',padding:'7px 16px',borderRadius:9,border:'none',cursor:'pointer',background:tab===t?T.invBg:'transparent',color:tab===t?T.invFg:T.mut,display:'inline-flex',alignItems:'center',gap:7,transition:'background .15s'}}>{t===tabs[0]&&live&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:tab===t?T.invFg:T.red,display:'inline-block'}}/>}{t}</button>)}
+      {tabs.map(t=><button key={t} onClick={()=>setTab(t)} style={{fontFamily:MONO,fontSize:11.5,letterSpacing:'.04em',textTransform:'uppercase',whiteSpace:'nowrap',padding:'7px 16px',borderRadius:9,border:'none',cursor:'pointer',background:tab===t?T.invBg:'transparent',color:tab===t?T.invFg:T.mut,display:'inline-flex',alignItems:'center',gap:7,transition:'background .15s'}}>{t===tabs[0]&&live&&<span className="ed-pulse" style={{width:5,height:5,borderRadius:99,background:tab===t?T.invFg:T.red,display:'inline-block'}}/>}{t}</button>)}
     </div>}
     {pre?preView:(tab===tabs[0]?liveView:tab==='Lineups'?lineupsView:boxScore)}
     <style>{`@media(max-width:680px){.g2,.g3{grid-template-columns:1fr!important}}@media(max-width:680px){.g4{grid-template-columns:1fr 1fr!important}}`}</style>
@@ -632,7 +632,7 @@ function NationalTV(){
       <span style={ML}>On national TV</span>
       <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:T.faint}}>tonight</span>
     </div>
-    <div style={{display:'flex',gap:10,overflowX:'auto',padding:'12px 16px'}}>
+    <div style={{display:'flex',gap:10,overflowX:'auto',overflowY:'hidden',padding:'12px 16px'}}>
       {tv.map((g,i)=><div key={i} style={{flexShrink:0,minWidth:152,border:`1px solid ${T.line}`,borderRadius:10,padding:'10px 12px'}}>
         <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><Badge ab={g.away} size={20}/><span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>@</span><Badge ab={g.home} size={20}/></div>
         <div style={{fontFamily:MONO,fontSize:11,color:T.mut}}>{g.time}</div>

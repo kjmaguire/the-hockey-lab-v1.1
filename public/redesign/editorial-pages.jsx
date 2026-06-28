@@ -70,7 +70,7 @@ function PlayerAvatar({pos,team,size=42,name}){const cc=c2(team);const isG=pos==
     <span style={{position:'absolute',right:-4,bottom:-4,fontFamily:MONO,fontSize:Math.max(7,Math.round(size*0.2)),fontWeight:700,background:T.paper,color:cc,border:`1px solid ${cc}44`,borderRadius:5,padding:'0 3px',lineHeight:1.5}}>{pos||'·'}</span>
   </span>);}
 function Spark({data,color,w=54,h=16}){if(!data||!data.length)return null;const mx=Math.max(...data),mn=Math.min(...data);const p=data.map((v,i)=>`${(i/(data.length-1)*w).toFixed(1)},${(h-(v-mn)/Math.max(1,mx-mn)*h).toFixed(1)}`).join(' ');return <svg width={w} height={h}><polyline points={p} fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>;}
-function Pill({on,children,...p}){return <button {...p} style={{fontFamily:'inherit',padding:'6px 13px',borderRadius:999,border:`1px solid ${on?T.invBg:T.line2}`,background:on?T.invBg:T.paper,color:on?T.invFg:T.ink,fontWeight:600,fontSize:12.5,cursor:'pointer'}}>{children}</button>;}
+function Pill({on,children,...p}){return <button {...p} style={{fontFamily:'inherit',whiteSpace:'nowrap',padding:'6px 13px',borderRadius:999,border:`1px solid ${on?T.invBg:T.line2}`,background:on?T.invBg:T.paper,color:on?T.invFg:T.ink,fontWeight:600,fontSize:12.5,cursor:'pointer'}}>{children}</button>;}
 const ML={fontFamily:MONO,fontSize:10.5,letterSpacing:'.06em',textTransform:'uppercase',get color(){return T.faint;}};
 
 /* ---------- STANDINGS ---------- */
@@ -112,7 +112,7 @@ function StandingsPage({onTeam}){
   const WCRow=({t,seed,playoff})=>(<div onClick={()=>onTeam(t.ab)} className="er" style={{display:'grid',gridTemplateColumns:'30px 1fr auto auto',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${T.line}`,cursor:'pointer'}}>
     <span style={{fontFamily:MONO,fontSize:11.5,color:playoff?'#1a8a4f':T.faint,fontWeight:playoff?700:400}}>{seed}</span>
     <span style={{display:'inline-flex',alignItems:'center',gap:9,minWidth:0}}><Badge ab={t.ab} size={22}/><span style={{color:T.ink,fontWeight:600,fontSize:13.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct(t.ab)} {nk(t.ab)}</span>{playoff&&<Mark ab={t.ab}/>}</span>
-    <span style={{fontFamily:MONO,fontSize:11.5,color:T.mut}}>{t.w}-{t.l}-{t.otl}</span>
+    <span style={{fontFamily:MONO,fontSize:11.5,color:T.mut,whiteSpace:'nowrap'}}>{t.w}-{t.l}-{t.otl}</span>
     <span style={{fontWeight:700,fontSize:14,minWidth:28,textAlign:'right'}}>{t.pts}</span>
   </div>);
   const WCSection=({label,sub,children})=><div style={{...card,overflow:'hidden'}}>
@@ -133,7 +133,7 @@ function StandingsPage({onTeam}){
       </div>
     :<>
     <div style={{...card,overflow:'hidden'}}>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:740,borderCollapse:'collapse',fontSize:13.5}}>
+      <div className="ed-scrollx ed-stickcol2" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:740,borderCollapse:'collapse',fontSize:13.5}}>
         <thead><tr style={ML}>{[['#',null],['Team',null],['GP','gp'],['W','w'],['L','l'],['OT','otl'],['PTS','pts'],['GF','gf'],['GA','ga'],['DIFF','diff'],['L10','last10'],['STRK','strk'],['Trend',null]].map(([h,k],i)=><th key={h} onClick={k?()=>sortBy(k):undefined} style={{padding:'12px 10px',textAlign:i<2?'left':'center',fontWeight:600,...ML,cursor:k?'pointer':'default',color:sortK===k&&k?T.ink:undefined,whiteSpace:'nowrap'}}>{h}{sortK===k&&k?(sortDir==='desc'?' ↓':' ↑'):''}</th>)}</tr></thead>
         <tbody>{rows.map((t,i)=>(<React.Fragment key={t.ab}>
           <tr onClick={()=>onTeam(t.ab)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}>
@@ -174,7 +174,7 @@ function TeamsPage({onTeam}){
         <div style={{padding:16}}>
           <div style={{display:'flex',alignItems:'center',gap:11}}><Badge ab={t.ab} size={40}/><div><div style={{fontWeight:600,color:T.ink}}>{ct(t.ab)}</div><div style={{fontSize:13,color:T.mut}}>{nk(t.ab)}</div></div></div>
           <div style={{display:'flex',justifyContent:'space-between',marginTop:14,paddingTop:13,borderTop:`1px solid ${T.line}`,fontFamily:MONO,fontSize:11.5,color:T.mut}}>
-            <span>#{D.rankOf[t.ab]} · {t.div}</span><span style={{color:T.ink,fontWeight:500}}>{t.w}-{t.l}-{t.otl}</span></div>
+            <span>#{D.rankOf[t.ab]} · {t.div}</span><span style={{color:T.ink,fontWeight:500,whiteSpace:'nowrap'}}>{t.w}-{t.l}-{t.otl}</span></div>
         </div>
       </div>))}
     </div>
@@ -372,7 +372,7 @@ function TeamDetailPage({ab,onBack,onPlayer,onGame}){
             {[[g.a,g.as],[g.h,g.hs]].map(([tm,sc])=>(<div key={tm} style={{display:'flex',alignItems:'center',gap:10}}>
               <Badge ab={tm} size={26}/><span style={{flex:1,fontWeight:tm===ab?700:500,color:tm===ab?T.ink:T.mut,fontSize:14}}>{ct(tm)} {nk(tm)}</span>
               {final?<span style={{fontFamily:MONO,fontWeight:tm===winAb?700:400,fontSize:16,color:tm===winAb?T.ink:T.faint}}>{sc}</span>
-                :<span style={{fontFamily:MONO,fontSize:11,color:T.faint}}>{D.standBy(tm).w}-{D.standBy(tm).l}-{D.standBy(tm).otl}</span>}
+                :<span style={{fontFamily:MONO,fontSize:11,color:T.faint,whiteSpace:'nowrap'}}>{D.standBy(tm).w}-{D.standBy(tm).l}-{D.standBy(tm).otl}</span>}
             </div>))}
           </div>
         </div>);};
@@ -544,7 +544,7 @@ function PlayersPage({onPlayer}){
     </div>
     <div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.line}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}><span style={ML}>{rows.length} {isG?'goalies':'skaters'}{team!=='all'?` · ${ct(team)} ${nk(team)}`:''}</span><span style={{fontFamily:MONO,fontSize:10,color:T.faint}}>tap a column to sort · tap a row for detail</span></div>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:620,borderCollapse:'collapse',fontSize:13.5}}>
+      <div className="ed-scrollx ed-stickcol2" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:620,borderCollapse:'collapse',fontSize:13.5}}>
         <thead><tr><th style={{padding:'10px 10px',textAlign:'left',width:34,...ML}}>#</th>{cols.map(([h,k,al])=><th key={h} onClick={()=>sortBy(k)} style={{padding:'10px 10px',textAlign:al==='l'?'left':'center',fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',color:sortK===k?T.ink:undefined,...ML}}>{h}{sortK===k?(sortDir==='asc'?' ↑':' ↓'):''}</th>)}</tr></thead>
         <tbody>{shown.map((p,i)=><tr key={p.id||(p.name+i)} onClick={()=>onPlayer(p)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'9px 10px',fontFamily:MONO,fontSize:11,color:T.faint}}>{i+1}</td>
@@ -635,7 +635,7 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
     </div>
     {!isG&&egl.length>0&&<div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'13px 18px',...ML,borderBottom:`1px solid ${T.line}`}}>NHL Edge · by game</div>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:440,borderCollapse:'collapse',fontSize:13}}>
+      <div className="ed-scrollx ed-stickcol" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:440,borderCollapse:'collapse',fontSize:13}}>
         <thead><tr>{['Game','Top speed','Top shot','Distance','20+ bursts'].map((h,i)=><th key={h} style={{padding:'9px 14px',textAlign:i?'center':'left',...ML,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
         <tbody>{egl.map((g,i)=><tr key={i} style={{borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'8px 14px',whiteSpace:'nowrap'}}><span style={{color:T.faint,fontFamily:MONO,fontSize:11.5}}>{g.date}</span> <span style={{color:T.ink}}>{g.home?'vs':'@'} {g.opp}</span></td>
@@ -655,7 +655,7 @@ function PlayerDetailPage({p,onBack,onTeam,onPlayer}){
     </div>
     {ex.careerPO&&<Sec k="Career · playoffs"><div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>{(isG?[['GP',ex.careerPO.gp],['W',ex.careerPO.w],['L',ex.careerPO.l],['SO',ex.careerPO.so]]:[['GP',ex.careerPO.gp],['G',ex.careerPO.g],['A',ex.careerPO.a],['P',ex.careerPO.p]]).map(([l,v])=><div key={l} style={{padding:'14px',textAlign:'center'}}><div style={ML}>{l}</div><div style={{fontSize:22,fontWeight:600,marginTop:3}}>{v}</div></div>)}</div></Sec>}
     {/* season history */}
-    <Sec k="Season history"><div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:480,borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}>{(isG?['Season','Team','GP','W','L','SV%','GAA']:['Season','Team','GP','G','A','P','+/-']).map((h,i)=><th key={h} style={{padding:'9px 14px',textAlign:i<2?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead><tbody>{ex.history.map((s,i)=><tr key={i} style={{borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontFamily:MONO,fontSize:12}}>{s.s}</td><td style={{padding:'9px 14px'}}><Badge ab={s.team} size={18}/></td>{(isG?['gp','w','l','svp','gaa']:['gp','g','a','p','pm']).map(k=><td key={k} style={{textAlign:'center',color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{k==='pm'?(s[k]>=0?'+':'')+s[k]:s[k]}</td>)}</tr>)}</tbody></table></div></Sec>
+    <Sec k="Season history"><div className="ed-scrollx ed-stickcol" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:480,borderCollapse:'collapse',fontSize:13.5}}><thead><tr style={ML}>{(isG?['Season','Team','GP','W','L','SV%','GAA']:['Season','Team','GP','G','A','P','+/-']).map((h,i)=><th key={h} style={{padding:'9px 14px',textAlign:i<2?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead><tbody>{ex.history.map((s,i)=><tr key={i} style={{borderTop:`1px solid ${T.line}`}}><td style={{padding:'9px 14px',color:T.ink,fontFamily:MONO,fontSize:12}}>{s.s}</td><td style={{padding:'9px 14px'}}><Badge ab={s.team} size={18}/></td>{(isG?['gp','w','l','svp','gaa']:['gp','g','a','p','pm']).map(k=><td key={k} style={{textAlign:'center',color:k==='p'?T.ink:T.mut,fontWeight:k==='p'?700:400}}>{k==='pm'?(s[k]>=0?'+':'')+s[k]:s[k]}</td>)}</tr>)}</tbody></table></div></Sec>
     {/* awards */}
     {ex.awards.length>0&&<Sec k="Awards"><div style={{display:'flex',flexWrap:'wrap',gap:8,padding:'14px 18px'}}>{ex.awards.map((a,i)=><span key={i} style={{fontFamily:MONO,fontSize:12,padding:'5px 11px',borderRadius:999,background:'#fdf6e6',color:'#9a6b1a',border:'1px solid #f0e2c0'}}>{a.name} · {a.yr}</span>)}</div></Sec>}
     {/* teammates */}
@@ -711,7 +711,7 @@ function StatsTable({onPlayer}){
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search player" style={{fontFamily:'inherit',background:T.paper,border:`1px solid ${T.line2}`,borderRadius:8,padding:'7px 11px',color:T.ink,fontSize:13,outline:'none',marginLeft:'auto'}}/>
     </div>
     <div style={{...card,overflow:'hidden'}}>
-      <div style={{overflowX:'auto'}}>
+      <div className="ed-scrollx" style={{overflowX:'auto'}}>
         <table style={{width:'100%',minWidth:isG?620:780,borderCollapse:'collapse',fontSize:13.5}}>
           <thead><tr style={ML}>
             <th style={{padding:'11px 10px 11px 18px',textAlign:'left',fontWeight:600,...ML}}>#</th>
@@ -1092,7 +1092,7 @@ function GameBox({hiAb,loAb,hiW,loW,gameNo,onBack,onGame,onTeam}){
   const th=gd.team[hiAb],to=gd.team[loAb];const pp=t=>+(t.ppg/t.ppo*100).toFixed(1);
   const SkTable=({ab})=>(<div style={{...card,overflow:'hidden'}}>
     <div onClick={()=>onTeam(ab)} className="el" style={{display:'flex',alignItems:'center',gap:9,padding:'11px 15px',borderBottom:`1px solid ${T.line}`,cursor:'pointer'}}><Badge ab={ab} size={20}/><span style={{fontWeight:600,color:T.ink}}>{ct(ab)} {nk(ab)}</span></div>
-    <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:320,borderCollapse:'collapse',fontSize:12.5}}>
+    <div className="ed-scrollx ed-stickcol" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:320,borderCollapse:'collapse',fontSize:12.5}}>
       <thead><tr style={ML}>{['Skater','G','A','P','+/-','S','Hits','Blk','TOI'].map((h,i)=><th key={h} style={{padding:'7px 9px',textAlign:i?'center':'left',fontWeight:600,...ML,fontSize:9}}>{h}</th>)}</tr></thead>
       <tbody>{gd.skaters[ab].map((p,i)=><tr key={i} style={{borderTop:`1px solid ${T.line}`}}>
         <td style={{padding:'6px 9px',whiteSpace:'nowrap'}}>{p.name} <span style={{color:T.faint,fontFamily:MONO,fontSize:10}}>{p.pos}</span></td>
@@ -1113,7 +1113,7 @@ function GameBox({hiAb,loAb,hiW,loW,gameNo,onBack,onGame,onTeam}){
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:18}}>
         <TH ab={hiAb} score={gd.hs} win={hw}/><span style={{fontFamily:SERIF,fontStyle:'italic',fontSize:15,color:T.faint}}>vs</span><TH ab={loAb} score={gd.ls} win={!hw}/>
       </div>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:13}}>
+      <div className="ed-scrollx ed-stickcol" style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontFamily:MONO,fontSize:13}}>
         <thead><tr style={ML}>{['',...cols,'T','SOG'].map((h,i)=><th key={i} style={{padding:'7px 8px',textAlign:i?'center':'left',fontWeight:600,...ML,fontSize:9.5}}>{h}</th>)}</tr></thead>
         <tbody>{[hiAb,loAb].map(ab=>{const ln=gd.line[ab];const tot=ln.reduce((s,v)=>s+v,0);const sog=gd.shots[ab].reduce((s,v)=>s+v,0);return(<tr key={ab} style={{borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'8px',display:'flex',alignItems:'center',gap:7}}><Badge ab={ab} size={18}/>{ab}</td>
@@ -1193,7 +1193,7 @@ function SeriesDetail({hiAb,loAb,hiW,loW,onBack,onTeam}){
   const Sub=({children})=><div style={{...ML,fontSize:10,color:T.ink,marginTop:16,marginBottom:2,paddingTop:6}}>{children}</div>;
   const LCard=({ab})=>(<div style={{...card,overflow:'hidden'}}>
     <div onClick={()=>onTeam(ab)} className="el" style={{display:'flex',alignItems:'center',gap:9,padding:'12px 15px',borderBottom:`1px solid ${T.line}`,cursor:'pointer'}}><Badge ab={ab} size={22}/><span style={{fontWeight:600,color:T.ink}}>{ct(ab)} {nk(ab)}</span></div>
-    <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:330,borderCollapse:'collapse',fontSize:12.5}}>
+    <div className="ed-scrollx ed-stickcol" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:330,borderCollapse:'collapse',fontSize:12.5}}>
       <thead><tr style={ML}>{['Skater','G','A','P','+/-','S','S%','PIM','TOI'].map((h,i)=><th key={h} style={{padding:'8px 10px',textAlign:i?'center':'left',fontWeight:600,...ML,fontSize:9}}>{h}</th>)}</tr></thead>
       <tbody>{sd.skaters[ab].map((p,i)=><tr key={i} style={{borderTop:`1px solid ${T.line}`}}>
         <td style={{padding:'7px 10px',whiteSpace:'nowrap'}}><span style={{color:T.ink}}>{p.name}</span> <span style={{color:T.faint,fontFamily:MONO,fontSize:10}}>{p.pos}</span></td>
@@ -1252,7 +1252,7 @@ function SeriesDetail({hiAb,loAb,hiW,loW,onBack,onTeam}){
       <Cmp label="Save %" a={svp(th,to)} b={svp(to,th)} fmt={v=>v+'%'}/>
       <Cmp label="PDO" a={pdo(th,to)} b={pdo(to,th)} fmt={v=>v.toFixed(1)}/>
       <Sub>Goals by period</Sub>
-      <div style={{overflowX:'auto',marginTop:6}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,fontFamily:MONO}}>
+      <div className="ed-scrollx ed-stickcol" style={{overflowX:'auto',marginTop:6}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,fontFamily:MONO}}>
         <thead><tr style={ML}>{['','1st','2nd','3rd','OT','Total'].map((h,i)=><th key={h} style={{padding:'7px 8px',textAlign:i?'center':'left',fontWeight:600,...ML,fontSize:9.5}}>{h}</th>)}</tr></thead>
         <tbody>{[hiAb,loAb].map(ab=>{const pg=sd.periods[ab];const tot=pg.reduce((s,v)=>s+v,0);return(<tr key={ab} style={{borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'8px',display:'flex',alignItems:'center',gap:7}}><Badge ab={ab} size={18}/>{ab}</td>
@@ -1360,7 +1360,7 @@ function PlayoffsPage({onTeam}){
     const onMove=e=>{const d=dragRef.current;if(d.down)e.currentTarget.scrollLeft=d.sl-(e.clientX-d.x);};
     const onUp=e=>{dragRef.current.down=false;e.currentTarget.style.cursor='grab';};
     return(<div style={{width:'94vw',maxWidth:1380,position:'relative',left:'50%',transform:'translateX(-50%)',...card,padding:0,overflow:'hidden',marginBottom:18}}>
-      <div onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp} style={{overflowX:'auto',cursor:'grab',WebkitOverflowScrolling:'touch'}}>
+      <div onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp} style={{overflowX:'auto',overflowY:'hidden',cursor:'grab',WebkitOverflowScrolling:'touch'}}>
         <div style={{position:'relative',width:'100%',minWidth:1280,height:'min(660px,58vw)'}}>
           <svg viewBox="0 0 1140 640" preserveAspectRatio="none" style={{position:'absolute',inset:0,width:'100%',height:'100%'}}>
             <defs><linearGradient id="rkice" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={dark?'#141b27':'#f1f5fc'}/><stop offset="1" stopColor={dark?'#0f141d':'#e9f0f9'}/></linearGradient></defs>
@@ -1675,7 +1675,7 @@ function DraftPage({onTeam}){
         <span style={ML}>Central Scouting · prospect board</span>
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{['All','North American','International'].map(c=><Pill key={c} on={rankCat===c} onClick={()=>setRankCat(c)}>{c}</Pill>)}</div>
       </div>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:640,borderCollapse:'collapse',fontSize:13.5}}>
+      <div className="ed-scrollx" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:640,borderCollapse:'collapse',fontSize:13.5}}>
         <thead><tr style={ML}>{['#','Prospect','Pos','League','GP','Pts','Ht','Wt','Trend'].map((h,i)=><th key={h} style={{padding:'10px 12px',textAlign:i<2?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
         <tbody>{rankFiltered.map((p,i)=>(<tr key={p.rank+'-'+i} className="er" style={{borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'9px 12px',fontFamily:MONO,color:i<5?T.red:T.faint,fontWeight:i<5?700:400}}>{String(p.rank).padStart(2,'0')}</td>
@@ -1740,7 +1740,7 @@ function DraftPage({onTeam}){
         <span style={ML}>{doView==='result'?'First round · post-lottery order':'Projected order · pre-lottery (reverse standings)'}</span>
         <div style={{display:'flex',gap:6}}>{[['result','Lottery result'],['projected','Projected order']].map(([k,l])=><Pill key={k} on={doView===k} onClick={()=>setDoView(k)}>{l}</Pill>)}</div>
       </div>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:680,borderCollapse:'collapse',fontSize:13.5}}>
+      <div className="ed-scrollx" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:680,borderCollapse:'collapse',fontSize:13.5}}>
         <thead><tr style={ML}>{[doView==='result'?'Pick':'Proj','Team','Prospect','Pos','League',doView==='result'?'Exp':'Landed','Move'].map((h,i)=><th key={h} style={{padding:'11px 12px',textAlign:i===1||i===2?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
         <tbody>{[...picks].sort((a,b)=>doView==='result'?a.pick-b.pick:a.slot-b.slot).map(p=>{const up=p.moved>0,down=p.moved<0;const hot=doView==='result'?p.lotteryWin:p.slot===1;return(<tr key={p.pick} onClick={()=>onTeam(p.team)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'10px 12px',fontFamily:MONO,fontWeight:700,color:hot?'#1a8a4f':T.ink}}>{String(doView==='result'?p.pick:p.slot).padStart(2,'0')}</td>
@@ -1780,7 +1780,7 @@ function DraftPage({onTeam}){
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>{rl.map(n=><Pill key={n} on={round===n} onClick={()=>setRound(n)}>Round {n}</Pill>)}</div>
       <div style={{...card,overflow:'hidden'}}>
       <div style={{padding:'13px 16px',...ML,borderBottom:`1px solid ${T.line}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><span>{year} Draft · Round {round} · {list.length} picks</span><span style={{color:T.faint}}>{list.length?`picks ${list[0].pick}–${list[list.length-1].pick}`:''}</span></div>
-      <div style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:680,borderCollapse:'collapse',fontSize:13.5}}>
+      <div className="ed-scrollx" style={{overflowX:'auto'}}><table style={{width:'100%',minWidth:680,borderCollapse:'collapse',fontSize:13.5}}>
         <thead><tr style={ML}>{['#','Team','Player','Pos','League','Club'].map((h,i)=><th key={h} style={{padding:'11px 12px',textAlign:i===1||i===2||i===5?'left':'center',fontWeight:600,...ML}}>{h}</th>)}</tr></thead>
         <tbody>{list.map(p=>(<tr key={p.pick} onClick={()=>onTeam(p.team)} className="er" style={{cursor:'pointer',borderTop:`1px solid ${T.line}`}}>
           <td style={{padding:'10px 12px',fontFamily:MONO,fontWeight:700,color:p.pick<=3?T.red:T.ink}}>{String(p.pick).padStart(2,'0')}</td>
@@ -1881,7 +1881,7 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs,booting}){
     <PageHead k="The Lab" t="Tonight around the" serif="league"/>
     {spotlight&&spotlight.length>0&&<div style={{marginBottom:18}}>
       <div style={{...ML,marginBottom:10}}>League spotlight</div>
-      <div style={{display:'flex',gap:10,overflowX:'auto',paddingBottom:4,WebkitOverflowScrolling:'touch'}}>
+      <div style={{display:'flex',gap:10,overflowX:'auto',overflowY:'hidden',paddingBottom:4,WebkitOverflowScrolling:'touch'}}>
         {spotlight.slice(0,12).map(p=><div key={p.id} onClick={()=>onPlayer({id:p.id,name:p.name,team:p.team,pos:p.pos})} className="ec" style={{...card,flex:'0 0 auto',width:150,cursor:'pointer',overflow:'hidden'}}>
           <div style={{height:3,background:c2(p.team)}}/>
           <div style={{padding:'12px 13px'}}>
@@ -1912,8 +1912,8 @@ function HighlightsPage({onGame,onTeam,onPlayer,onGo,favs,booting}){
     {/* tonight rail */}
     <div style={{...card,overflow:'hidden',marginBottom:16}}>
       <div style={{padding:'11px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${T.line}`,gap:8,flexWrap:'wrap'}}>
-        <span style={ML}>{railView==='Tonight'?(today.length?`${today.length} games tonight`:'No games tonight'):railView}</span>
-        <div style={{display:'flex',gap:6}}>{['Recent','Tonight','Upcoming'].map(v=><Pill key={v} on={railView===v} onClick={()=>setRailView(v)}>{v}</Pill>)}</div>
+        <span style={{...ML,whiteSpace:'nowrap'}}>{railView==='Tonight'?(today.length?`${today.length} games tonight`:'No games tonight'):railView}</span>
+        <div style={{display:'flex',gap:6,flexShrink:0}}>{['Recent','Tonight','Upcoming'].map(v=><Pill key={v} on={railView===v} onClick={()=>setRailView(v)}>{v}</Pill>)}</div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(158px,1fr))',marginTop:-1,marginLeft:-1}}>
         {railGames.length?railGames.map((g,i)=>{const aw=g.st.startsWith('final')&&g.as>g.hs,hw=g.st.startsWith('final')&&g.hs>g.as;return(
