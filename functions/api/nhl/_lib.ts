@@ -87,6 +87,9 @@ export const SECURITY_HEADERS: Record<string, string> = {
   'referrer-policy': 'strict-origin-when-cross-origin',
   'x-frame-options': 'SAMEORIGIN',
   'permissions-policy': 'geolocation=(), microphone=(), camera=()',
+  // HSTS: pin HTTPS for 2 years incl. subdomains (preload-eligible). Harmless over http
+  // (ignored); Cloudflare always serves the zone over https.
+  'strict-transport-security': 'max-age=63072000; includeSubDomains; preload',
 };
 
 /** Cache-Control with stale-while-revalidate (serve stale instantly, refresh in bg)
@@ -124,6 +127,15 @@ export function sanitizeRest(rest: string): boolean {
   if (!rest || rest.length > 160) return false;
   if (rest.includes('..')) return false;
   return /^[A-Za-z0-9._~\-\/]+$/.test(rest);
+}
+
+/** Defense-in-depth for the NAMED proxy routes, which splice individual path segments
+ *  (tricodes, numeric ids, ISO dates, literal slugs like 'now'/'play-by-play') straight
+ *  into the fixed-host upstream URL. Every decoded segment must be bounded and limited to
+ *  an unmistakably-safe charset — rejecting traversal, percent-encoding tricks and junk
+ *  before it reaches api-web.nhle.com. (Generic passthroughs additionally run sanitizeRest.) */
+export function okSegments(segs: string[]): boolean {
+  return segs.every((s) => s.length > 0 && s.length <= 48 && /^[A-Za-z0-9._-]+$/.test(s));
 }
 
 /** Hotlink guard: if the request carries a browser Origin/Referer, its host must be allow-listed.

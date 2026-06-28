@@ -21,6 +21,7 @@ import {
   isRefererAllowed,
   rateLimit,
   sanitizeRest,
+  okSegments,
   setCacheDb,
   setCacheKv,
   setMetrics,
@@ -33,6 +34,9 @@ interface Env {
   RATE_LIMIT?: { get: (k: string) => Promise<string | null>; put: (k: string, v: string, o?: any) => Promise<void> };
   // Optional comma-separated extra browser hosts allowed to call /api/nhl/* (same-origin always allowed).
   ALLOWED_HOSTS?: string;
+  // Optional shared secret gating the internal diagnostic HTML pages (api-health / live-qa /
+  // dark-feeds / mappers-test). Unset → those pages 404 for everyone (safe default).
+  DIAG_TOKEN?: string;
   // Optional D1 database for the durable L2 cache of immutable endpoints (see wrangler.toml).
   DB?: any;
   // Optional globally-replicated KV namespace: a cross-colo warm cache + last-known-good
@@ -47,9 +51,15 @@ interface Env {
 // Content-Security-Policy for the HTML app. `strict` (Babel-free) is used when we
 // serve a precompiled *.prod.html; the build-free app.html needs 'unsafe-eval'
 // for in-browser Babel. cloudflareinsights.* is allowed for optional CF Web Analytics.
-function cspFor(strict: boolean): string {
+function cspFor(strict: boolean, nonce = ''): string {
+  // Strict (prod, Babel-free) build: a per-response nonce + 'strict-dynamic' so ONLY the
+  // nonce-stamped first-party scripts (and whatever they choose to load, e.g. an optional
+  // CF beacon) execute. When a nonce is present modern browsers IGNORE 'unsafe-inline'
+  // (kept only as a legacy-browser fallback) and 'strict-dynamic' supersedes the host
+  // allow-list. The runtime-Babel fallback (app.html) still needs 'unsafe-eval' +
+  // 'unsafe-inline' for in-browser transpilation, so it keeps the explicit host list.
   const script = strict
-    ? "script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com"
+    ? `script-src 'nonce-${nonce}' 'strict-dynamic' https: 'unsafe-inline'`
     : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://static.cloudflareinsights.com";
   return [
     "default-src 'self'",
@@ -66,11 +76,11 @@ function cspFor(strict: boolean): string {
 }
 
 /** Attach security headers to a static-asset response (CSP only on HTML; strict for prod builds). */
-function withAppHeaders(resp: Response, strict = false): Response {
+function withAppHeaders(resp: Response, strict = false, nonce = ''): Response {
   const h = new Headers(resp.headers);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) h.set(k, v);
   if ((h.get('content-type') || '').includes('text/html')) {
-    h.set('content-security-policy', cspFor(strict));
+    h.set('content-security-policy', cspFor(strict, nonce));
     // RFC 8288 agent-discovery hints: advertise the public read API catalog + the docs.
     h.set('link', '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", </learn>; rel="service-doc"');
     // 103 Early Hints: tell the browser to open connections to the cross-origin script + font
@@ -88,6 +98,16 @@ function withAppHeaders(resp: Response, strict = false): Response {
 async function sha256hex(s: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Per-response CSP nonce (128-bit, base64). Stamped onto every <script> of the strict prod
+// build via HTMLRewriter and echoed in the script-src nonce-source.
+function genNonce(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s);
 }
 
 // Agent skill: how to query the public, read-only NHL data API. Served as text/markdown and
@@ -127,6 +147,11 @@ async function handleNhl(url: URL): Promise<Response> {
   const segments = url.pathname.replace(/^\/api\/nhl\/?/, '').split('/').filter(Boolean);
   const q = (key: string, fallback?: string) => url.searchParams.get(key) ?? fallback;
   const [a, b, c] = segments;
+
+  // Defense-in-depth: every named-route segment is spliced into the fixed-host upstream
+  // URL, so reject traversal / percent-encoding tricks / junk before it leaves the edge.
+  // (Generic passthroughs additionally run sanitizeRest on the joined remainder.)
+  if (!okSegments(segments)) return errorJson('Invalid path.', 400);
 
   try {
     switch (a) {
@@ -466,6 +491,15 @@ export default {
       return new Response('Not found.', { status: 403, headers: { 'cache-control': 'no-store', ...SECURITY_HEADERS } });
     }
 
+    // Internal diagnostic pages (api-health / live-qa / dark-feeds / mappers-test) enumerate the
+    // whole API surface, so they're not public: gated behind a shared secret (?k=<DIAG_TOKEN>).
+    // With DIAG_TOKEN unset they 404 for everyone — a safe default that keeps them out of prod.
+    if (/^\/(api-health|live-qa|dark-feeds|mappers-test)(\.html)?$/.test(url.pathname)) {
+      if (!env.DIAG_TOKEN || url.searchParams.get('k') !== env.DIAG_TOKEN) {
+        return new Response('Not found.', { status: 404, headers: { 'cache-control': 'no-store', ...SECURITY_HEADERS } });
+      }
+    }
+
     // Real-time live updates → LiveHub Durable Object (WebSocket).
     // One DO instance per topic ("scores" / "draft") polls the NHL upstream ONCE on behalf
     // of every connected client and pushes a tiny "changed" signal the instant data moves —
@@ -514,7 +548,7 @@ export default {
       // Rate-limit the unauthenticated beacon so it can't be used to spam logs/metrics.
       const lip = request.headers.get('cf-connecting-ip') || '';
       if (!(await rateLimit(env.RATE_LIMIT, 'log:' + lip, 20))) return new Response(null, { status: 429 });
-      try { const t = await request.text(); console.error('[client-error]', t.slice(0, 1000)); } catch { /* ignore */ }
+      try { const t = (await request.text()).replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 1000); console.error('[client-error]', t); } catch { /* ignore */ }
       return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
     }
 
@@ -683,12 +717,14 @@ export default {
     // to the site root, consolidating the duplicates. Standalone pages (the /learn
     // guides) get a self-canonical with any .html stripped to the clean path. Origin-
     // derived, so there's no hard-coded host to drift.
+    let nonce = '';
     if ((resp.headers.get('content-type') || '').includes('text/html')) {
       const isApp = servedProd || url.pathname === '/' || url.pathname === '/index.html'
         || url.pathname === '/app' || url.pathname === '/app.html';
       const cleanPath = url.pathname.replace(/\/index\.html$/, '/').replace(/\.html$/, '');
       const canonical = isApp ? `${url.origin}/` : `${url.origin}${cleanPath}`;
-      resp = new HTMLRewriter()
+      nonce = genNonce();
+      let rw = new HTMLRewriter()
         .on('head', {
           element(e) {
             e.append(`<link rel="canonical" href="${canonical}"/>`, { html: true });
@@ -709,11 +745,15 @@ export default {
             const c = e.getAttribute('content');
             if (c && !/^https?:\/\//i.test(c)) e.setAttribute('content', `${url.origin}/${c.replace(/^\//, '')}`);
           },
-        })
-        .transform(resp);
+        });
+      // Strict (prod, Babel-free) build only: stamp the per-response nonce on every <script>
+      // so the nonce + 'strict-dynamic' CSP can drop effective 'unsafe-inline'. The runtime-
+      // Babel fallback (app.html) is left as-is (it needs unsafe-inline/eval to transpile).
+      if (servedProd) rw = rw.on('script', { element(e) { e.setAttribute('nonce', nonce); } });
+      resp = rw.transform(resp);
     }
 
-    return withAppHeaders(resp, servedProd);
+    return withAppHeaders(resp, servedProd, nonce);
   },
 
   // Cron warming (see [triggers] in wrangler.toml): pre-fetch the hot endpoints on a

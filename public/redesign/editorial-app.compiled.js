@@ -5047,6 +5047,7 @@ function App() {
       gap: 14
     }
   }, React.createElement("div", {
+    className: "ed-brand",
     onClick: () => go('highlights'),
     style: {
       display: 'flex',
@@ -5070,11 +5071,13 @@ function App() {
       flexShrink: 0
     }
   }, "H"), React.createElement("span", {
+    className: "ed-brandtext",
     style: {
       fontWeight: 700,
       whiteSpace: 'nowrap'
     }
   }, "The Hockey Lab")), React.createElement("button", {
+    className: "ed-homebtn",
     onClick: () => go('highlights'),
     title: "Lab home",
     "aria-label": "Lab home",

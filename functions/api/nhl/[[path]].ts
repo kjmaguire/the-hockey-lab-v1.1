@@ -19,6 +19,7 @@ import {
   isRefererAllowed,
   rateLimit,
   sanitizeRest,
+  okSegments,
   setCacheDb,
 } from './_lib';
 
@@ -45,6 +46,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   if (!(await rateLimit(env.RATE_LIMIT, ip, 120))) return errorJson('Too many requests.', 429);
 
   const [a, b, c] = segments;
+
+  // Defense-in-depth: reject traversal / percent-encoding tricks / junk in any segment
+  // before it's spliced into the fixed-host upstream URL (mirrors worker.ts).
+  if (!okSegments(segments)) return errorJson('Invalid path.', 400);
 
   try {
     switch (a) {
